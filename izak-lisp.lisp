@@ -135,21 +135,56 @@
     (print-to-stream obj str)
     (get-output-stream-string str)))
 
+(defun i-symbol? (x) (stringp x))
+
+(defun i-list? (x) (listp x))
+
+(defun i-list-empty? (x) (null x))
+
+(defun i-integer? (x) (integerp x))
+
+(defun symbol-lookup (sym env-plist)
+  (when (i-symbol? sym)
+    (first (member sym env-plist :key #'first :test #'string-equal))))
+
+(defun eval-ast (ast env)
+  (flet ((env-eval (x)
+            (i-eval x env)))
+    (cond ((i-symbol? ast)
+           (or (symbol-lookup ast env)
+               (error "no symbol named `~a' is present" ast)))
+          ((i-list? ast)
+           (mapcar #'env-eval ast))
+          (t
+            ast))))
+
+(defun eval-call (ast)
+  (apply (rest (first ast)) (rest ast)))
+
 (defun i-read (x)
   (read-str x))
 
-(defun i-eval (x)
-  x)
+(defun i-eval (ast env)
+  (if (i-list? ast)
+    (if (i-list-empty? ast)
+      ast
+      (eval-call (eval-ast ast env)))
+    (eval-ast ast env)))
 
 (defun i-print (x)
   (print-string x))
 
-(defun rep ()
-  (i-print (i-eval (i-read (read-line)))))
+(defun rep (env)
+  (i-print (i-eval (i-read (read-line))
+                   env)))
 
 (defun mainloop ()
-  (loop
-	(princ "user> ")
-	(princ (rep))
-	(terpri)))
+  (let ((repl-env (list `("+" . ,(lambda (x y) (+ x y)))
+                        `("-" . ,(lambda (x y) (- x y)))
+                        `("*" . ,(lambda (x y) (* x y)))
+                        `("/" . ,(lambda (x y) (/ x y))))))
+    (loop
+      (princ "user> ")
+      (princ (rep *repl-env*))
+      (terpri))))
 
