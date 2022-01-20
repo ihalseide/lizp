@@ -173,6 +173,8 @@
         :outer outer))
 
 (defun env-set (env key val)
+  (when (not (i-symbol? key))
+    (error "can only assign values to symbols, not `~s'" key))
   (let ((syms (getf env :symbols)))
     (if (assoc key syms)
       (rplacd (assoc key syms) val)
@@ -184,28 +186,53 @@
     (if (assoc key syms)
       (cons (rest (assoc key syms)) t)
       (if (getf env :outer)
-        (env-find (getf env :outer key))
+        (env-find (getf env :outer) key)
         '(nil)))))
 
 (defun env-get (env key) ; => value
   (let ((val&found (env-find env key)))
     (if (rest val&found)
       (first val&found)
-      (error "key not found: `~a'" key))))
+      (error "key not found: `~a'" key ))))
 
 (defun i-read (x)
   (read-str x))
 
 (defun i-eval (ast env)
   (cond ((not (i-list? ast))
+         ;; Atom
          (eval-ast ast env))
         ((i-list-empty? ast)
+         ;; Empty list
          ast)
         ((string-equal (symbol-name (first ast)) "def!")
+         ;; DEF! special form (def! <name> <expr>)
+         (when (/= 3 (length ast))
+           (error "`def!` form must have a length of 3"))
+         (when (not (i-symbol? (second ast)))
+           (error "second form of `def!` should be a symbol"))
          (env-set env
                   (second ast)
                   (i-eval (third ast) env)))
+        ((string-equal (symbol-name (first ast)) "let*")
+         ;; LET* special form (let* <pairs> <expr>)
+         (when (/= 3 (length ast))
+           (error "`let*` form must have a length of 3"))
+         (when (not (i-list? (second ast)))
+           (error "second form in `let*` should be a list"))
+         (when (not (= 0 (mod (length (second ast)) 2)))
+           (error "second form in `let*' should have an even length"))
+         (let ((let-env (make-environment env)))
+           ;; todo: evaluate the list bindings better (right now it's at least O(N^2))
+           (mapl #'(lambda (sublist)
+                     (when (= 0 (mod (length sublist) 2))
+                       (env-set let-env
+                                (first sublist)
+                                (i-eval (second sublist) let-env))))
+                     (second ast))
+           (i-eval (third ast) let-env)))
         (t
+          ;; Normal list form
           (eval-call (eval-ast ast env)))))
 
 (defun i-print (x)
