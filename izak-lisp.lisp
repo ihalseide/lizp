@@ -87,12 +87,18 @@
     (when token
       (first token))))
 
+(defun token->i-symbol (token)
+  (intern (coerce token 'string)))
+
+(defun token->i-integer (token)
+  (parse-integer (coerce token 'string)))
+
 (defun read-atom (reader) ; => form
   (let ((token (peek reader)))
     (when token
       (if (digit-char-p (first token))
-        (parse-integer (coerce (next reader) 'string))
-        (coerce (next reader) 'string)))))
+        (token->i-integer (next reader))
+        (token->i-symbol (next reader))))))
 
 (defun read-list (reader) ; => form
   (let ((opener (first (next reader))) ; consume the opening bracket
@@ -119,15 +125,23 @@
 	(read-form reader)))
 
 (defun print-to-stream (x stream)
-  (cond ((listp x)
+  (cond ((null x)
+         ;; Empty list
+         (princ "()" stream))
+        ((and (listp x)
+              (functionp (rest x)))
+         ;; Function/lambda
+         (format stream "<function `~a'>" (first x)))
+        ((listp x)
+         ;; Normal list
          (princ #\( stream)
-         (when x
-           (print-to-stream (first x) stream)
-           (dolist (item (rest x))
-             (princ #\space stream)
-             (print-to-stream item stream)))
+         (print-to-stream (first x) stream)
+         (dolist (item (rest x))
+           (princ #\space stream)
+           (print-to-stream item stream))
          (princ #\) stream))
         (t
+          ;; Symbol or number
           (princ x stream))))
 
 (defun print-string (obj)
@@ -135,7 +149,7 @@
     (print-to-stream obj str)
     (get-output-stream-string str)))
 
-(defun i-symbol? (x) (stringp x))
+(defun i-symbol? (x) (symbolp x))
 
 (defun i-list? (x) (listp x))
 
@@ -143,33 +157,56 @@
 
 (defun i-integer? (x) (integerp x))
 
-(defun symbol-lookup (sym env-plist)
-  (when (i-symbol? sym)
-    (first (member sym env-plist :key #'first :test #'string-equal))))
-
 (defun eval-ast (ast env)
-  (flet ((env-eval (x)
-            (i-eval x env)))
-    (cond ((i-symbol? ast)
-           (or (symbol-lookup ast env)
-               (error "no symbol named `~a' is present" ast)))
-          ((i-list? ast)
-           (mapcar #'env-eval ast))
-          (t
-            ast))))
+  (cond ((i-symbol? ast)
+         (env-get env ast))
+        ((i-list? ast)
+         (mapcar #'(lambda (x) (i-eval x env)) ast))
+        (t
+          ast)))
 
 (defun eval-call (ast)
-  (apply (rest (first ast)) (rest ast)))
+  (apply (first ast) (rest ast)))
+
+(defun make-environment (outer) ; => env
+  (list :symbols '()
+        :outer outer))
+
+(defun env-set (env key val)
+  (let ((syms (getf env :symbols)))
+    (if (assoc key syms)
+      (rplacd (assoc key syms) val)
+      (push (cons key val) (getf env :symbols))))
+  val)
+
+(defun env-find (env key) ; => (value . found?)
+  (let ((syms (getf env :symbols)))
+    (if (assoc key syms)
+      (cons (rest (assoc key syms)) t)
+      (if (getf env :outer)
+        (env-find (getf env :outer key))
+        '(nil)))))
+
+(defun env-get (env key) ; => value
+  (let ((val&found (env-find env key)))
+    (if (rest val&found)
+      (first val&found)
+      (error "key not found: `~a'" key))))
 
 (defun i-read (x)
   (read-str x))
 
 (defun i-eval (ast env)
-  (if (i-list? ast)
-    (if (i-list-empty? ast)
-      ast
-      (eval-call (eval-ast ast env)))
-    (eval-ast ast env)))
+  (cond ((not (i-list? ast))
+         (eval-ast ast env))
+        ((i-list-empty? ast)
+         ast)
+        ((string-equal (symbol-name (first ast)) "def!")
+         (env-set env
+                  (second ast)
+                  (i-eval (third ast) env)))
+        (t
+          (eval-call (eval-ast ast env)))))
 
 (defun i-print (x)
   (print-string x))
@@ -179,12 +216,13 @@
                    env)))
 
 (defun mainloop ()
-  (let ((repl-env (list `("+" . ,(lambda (x y) (+ x y)))
-                        `("-" . ,(lambda (x y) (- x y)))
-                        `("*" . ,(lambda (x y) (* x y)))
-                        `("/" . ,(lambda (x y) (/ x y))))))
+  (let ((repl-env (make-environment nil)))
+    (env-set repl-env '- (lambda (x y) (- x y)))
+    (env-set repl-env '+ (lambda (x y) (+ x y)))
+    (env-set repl-env '* (lambda (x y) (* x y)))
+    (env-set repl-env '/ (lambda (x y) (/ x y)))
     (loop
       (princ "user> ")
-      (princ (rep *repl-env*))
+      (princ (rep repl-env))
       (terpri))))
 
