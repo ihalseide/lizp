@@ -9,6 +9,15 @@
 
 (defun i-integer? (x) (integerp x))
 
+(defun i-bool? (x)
+  (or (eql x :i-true)
+      (eql x :i-false)))
+
+(defun ->i-bool (x)
+  (if x
+    :i-true
+    :i-false))
+
 (defun char-bracket? (c)
   (member c (list #\( #\) #\{ #\} #\[ #\]) :test #'char=))
 
@@ -293,10 +302,25 @@
     (i-eval (i-read (read-line))
             env)))
 
-(defun ->i-bool (x)
-  (if x
-    :i-true
-    :i-false))
+(defun i= (a b)
+  (cond ((and (null a)
+              (null b))
+         t)
+        ((and (symbolp a)
+              (symbolp b))
+         (string-equal (symbol-name a)
+                       (symbol-name b)))
+        ((and (listp a)
+              (listp b))
+         (and (i= (first a)
+                  (first b))
+              (i= (rest a)
+                  (rest b))))
+        ((and (numberp a)
+              (numberp b))
+         (= a b))
+        (t
+          nil)))
 
 (defun mainloop ()
   (let ((repl-env (make-environment nil)))
@@ -310,6 +334,8 @@
     (env-set repl-env 'list? (lambda (x) (->i-bool (listp x))))
     (env-set repl-env 'empty? (lambda (x) (->i-bool (null x))))
     (env-set repl-env 'quit (lambda () (return-from mainloop)))
+    (env-set repl-env 'count (lambda (x) (if (listp x) (list-length x) :i-nil)))
+    (env-set repl-env '= (lambda (a b) (->i-bool (i= a b))))
 
     (format t "~&repl-env = ~s~&" repl-env)
 
