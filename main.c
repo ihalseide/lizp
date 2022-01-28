@@ -114,8 +114,8 @@ bool string_validp (String *s)
 
 // returns a cell whose first = the interned string
 const Cell *string_create (String s) {
+	// Validate inputs
 	if (s.start == NULL || s.length <= 0) {
-		// Invalid args
 		return NULL;
 	}
 
@@ -131,10 +131,8 @@ const Cell *string_create (String s) {
 		*char_free++ = s.start[i];
 	}
 
-	// Add string terminator if the given string didn't already have one included
-	if (s.start[s.length - 1] != '\0') {
-		*char_free++ = '\0';
-	}
+	// Add string terminator for easy use with C
+	*char_free++ = '\0';
 
 	// Insert the new string cell into the string list and return it
 	Cell *x = cell_pair(cell_string((String){ .start = res, .length = s.length}),
@@ -316,12 +314,15 @@ const Cell *string_intern (String s)
 
 int read_symbol (String s, Cell **out)
 {
+	// Get how much of `s` is alphabetical chars
 	int i;
 	for (i = 0; (i < s.length) && isalpha(s.start[i]); i++)
 	{
 		continue;
 	}
-	*out = cell_symbol(string_intern((String){ .start = s.start, .length = i})->first->str);
+
+	const Cell *internal_string = string_intern((String){ .start = s.start, .length = i});
+	*out = cell_symbol(internal_string->first->str);
 	return i;
 }
 
@@ -623,6 +624,29 @@ int print_form (Cell *x, String out)
 	}
 }
 
+// DEBUG
+void print_intern_strings ()
+{
+	printf("Interned strings:\n---\n");
+	Cell *p = string_list;
+	do
+	{
+		Cell *s = p->first;
+		if (s->flag == T_STRING)
+		{
+			printf("%.*s\n", s->str.length, s->str.start);
+		}
+		else
+		{
+			printf("NOT A STRING\n");
+		}
+
+		p = p->rest;
+	}
+	while(p != string_list);
+	printf("---\n");
+}
+
 Cell *READ ()
 {
 	char buffer[1000];
@@ -630,7 +654,20 @@ Cell *READ ()
 	String in = (String) { .length = strlen(buffer), .start = buffer };
 
 	Cell *x;
-	read_form(in, &x);
+
+	if (*(in.start) == 'i')
+	{
+		print_intern_strings();
+		x = cell_pair(NULL, NULL);
+	}
+	else if (*(in.start) == 'q')
+	{
+		exit(1);
+	}
+	else
+	{
+		read_form(in, &x);
+	}
 
 	return x;
 }
