@@ -6,8 +6,6 @@
 #include <stdlib.h>
 #include <ctype.h>
 
-// TODO: add dotted pair support to list reading!
-
 enum Cell_kind
 {
 	T_INT,
@@ -401,6 +399,7 @@ int read_list (String s, Cell **out)
 		// consume the final character
 		string_step(&view, 1);
 		*out = cell_pair(NULL, NULL);
+		(*out)->variant = opener;
 		int len = s.length - view.length;
 		return len;
 	}
@@ -440,6 +439,7 @@ int read_list (String s, Cell **out)
 		// consume the final character
 		string_step(&view, 1);
 		*out = list;
+		(*out)->variant = opener;
 		int len = s.length - view.length;
 		return len;
 	}
@@ -516,9 +516,24 @@ int read_form (String s, Cell **out)
 	return (s.start + offset) - start;
 }
 
+int print_char (char c, String out)
+{
+	if (out.start && (out.length > 0))
+	{
+		*out.start = c;
+		return 1;
+	}
+	return 0;
+}
+
 // returns number of chars written
 int print_cstr (char *s, String out)
 {
+	if (!out.start)
+	{
+		return 0;
+	}
+
 	int i;
 	for (i = 0; s[i] && i < out.length; i++)
 	{
@@ -567,7 +582,11 @@ int print_pair (Cell *x, String out)
 {
 	String view = out;
 
-	string_step(&view, print_cstr("(", view));
+	// Remember the type of parens used to create the list (paren is default)
+	char opener = (x->variant)? x->variant : '(';
+	char closer = char_end(opener);
+
+	string_step(&view, print_char(opener, view));
 	while (x != NULL && x->first != NULL)
 	{
 		string_step(&view, print_form(x->first, view));
@@ -577,22 +596,25 @@ int print_pair (Cell *x, String out)
 			break;
 		}
 
-		string_step(&view, print_cstr(" ", view));
-
+		// See if the list continues with more pairs...
 		if (x->rest->flag == T_PAIR)
 		{
 			// Step into the 'rest' pair
+			if (x->rest->first != NULL)
+			{
+				string_step(&view, print_cstr(" ", view));
+			}
 			x = x->rest;
 		}
 		else
 		{
 			// Dotted list because the rest of this pair is not a pair
-			string_step(&view, print_cstr(". ", view));
+			string_step(&view, print_cstr(" . ", view));
 			string_step(&view, print_form(x->rest, view));
 			break;
 		}
 	}
-	string_step(&view, print_cstr(")", view));
+	string_step(&view, print_char(closer, view));
 
 	int len = out.length - view.length;
 	return len;
