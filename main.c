@@ -6,8 +6,13 @@
 #include <stdlib.h>
 #include <ctype.h>
 
+// TODO: work on handling nil, true, false, and empty lists
+
 enum Cell_kind
 {
+	T_NIL,
+	T_FALSE,
+	T_TRUE,
 	T_INT,
 	T_STRING,
 	T_SYMBOL,
@@ -52,6 +57,9 @@ Cell *string_list = NULL;
 // (forward declare)
 Cell *cell_string (String s);
 Cell *cell_pair (Cell *first, Cell *rest);
+
+// REPL environment (contains symbols and their values)
+Cell *repl_env;
 
 // How to set up the cell memory
 // SHOULD ONLY BE CALLED ONCE
@@ -107,7 +115,7 @@ bool string_validp (String *s)
 	return (s != NULL) && (s->start != NULL) && (s->length >= 0);
 }
 
-// returns a cell whose first = the interned string
+// returns a cell whose first cell = the interned string
 const Cell *string_create (String s) {
 	// Validate inputs
 	if (s.start == NULL || s.length <= 0) {
@@ -133,7 +141,7 @@ const Cell *string_create (String s) {
 	Cell *x = cell_pair(cell_string((String){ .start = res, .length = s.length}),
 				        string_list->rest);
 	string_list->rest = x;
-	return x;
+	return x->first;
 }
 
 // Removes a cell from the cell pool a.k.a. free list
@@ -169,20 +177,24 @@ Cell *cell_init (enum Cell_kind k)
 	Cell *x = cell_get();
 	if (x)
 	{
-		_Static_assert(_CELL_KIND_COUNT == 4, "exhaustive handling of all cell kinds");
-		switch (k)
+		if (T_NIL <= k && k < _CELL_KIND_COUNT)
 		{
-			case T_INT:
-			case T_SYMBOL:
-			case T_STRING:
-			case T_PAIR:
-				x->kind = k;
-				break;
-			default:
-				// error
-				fprintf(stderr, "cell_init: invalid cell kind\n");
-				exit(1);
-				break;
+			x->kind = k;
+
+			switch (k)
+			{
+				case T_NIL:
+					x->first = NULL;
+					x->rest = NULL;
+					break;
+				default:
+					break;
+			}
+		}
+		else
+		{
+			fprintf(stderr, "cell_init: invalid cell kind\n");
+			exit(1);
 		}
 	}
 	return x;
@@ -296,7 +308,7 @@ const Cell *string_intern (String s)
 		if (string_eq(p->first->str, s))
 		{
 			// Found an internal string, so return that
-			return p;
+			return p->first;
 		}
 
 		p = p->rest;
@@ -317,7 +329,7 @@ int read_symbol (String s, Cell **out)
 	}
 
 	const Cell *internal_string = string_intern((String){ .start = s.start, .length = i});
-	*out = cell_symbol(internal_string->first->str);
+	*out = cell_symbol(internal_string->str);
 	return i;
 }
 
@@ -622,12 +634,19 @@ int print_form (Cell *x, String out)
 {
 	if (x == NULL)
 	{
-		return print_cstr("NULL", out);
+		fprintf(stderr, "error: print_form: cell is NULL\n");
+		exit(1);
 	}
 
-	_Static_assert(_CELL_KIND_COUNT == 4, "exhaustive handling of all cell kinds");
+	_Static_assert(_CELL_KIND_COUNT == 7, "exhaustive handling of all cell kinds");
 	switch (x->kind)
 	{
+		case T_NIL:
+			return print_cstr("#nil", out);
+		case T_FALSE:
+			return print_cstr("#false", out);
+		case T_TRUE:
+			return print_cstr("#true", out);
 		case T_INT:
 			return print_int(x->num, out);
 		case T_STRING:
@@ -666,6 +685,8 @@ void print_intern_strings ()
 	printf("---\n");
 }
 
+void PRINT (Cell *x);
+
 Cell *READ ()
 {
 	char buffer[1000];
@@ -683,6 +704,13 @@ Cell *READ ()
 		print_intern_strings();
 		x = cell_pair(NULL, NULL);
 	}
+	else if (*(in.start) == 'e')
+	{
+		printf("environment:\n");
+		PRINT(repl_env);
+		x = cell_pair(NULL, NULL);
+		printf("---\n");
+	}
 	else if (*(in.start) == 'q')
 	{
 		exit(1);
@@ -695,14 +723,136 @@ Cell *READ ()
 	return x;
 }
 
-Cell *apply (Cell *expr)
+// An environment is a list starting with the outer environment,
+// and then the rest of the list is a list of pairs which represent
+// the defined symbols.
+// Each pair is of the form (symbol . value).
+Cell *env_create (Cell *env_outer)
 {
-
+	return cell_pair(
+			env_outer,
+			cell_pair(NULL, NULL));
 }
 
-Cell *EVAL (Cell *expr)
+// Search only the current env for the symbol
+Cell *env_get_self (Cell *env, const Cell *sym)
 {
-	return expr;
+	Cell *p = env->rest;
+	while (p != NULL && p->first != NULL)
+	{
+		Cell *slot = p->first;
+		if (string_eq(slot->first->str, sym->str))
+		{
+			return slot;
+		}
+		p = p->rest;
+	}
+	return NULL;
+}
+
+// Find the innermost env which contains symbol
+Cell *env_find (Cell *env, const Cell *sym)
+{
+	while (env)
+	{
+		Cell *slot = env_get_self(env, sym);
+		if (slot)
+		{
+			return env;
+		}
+
+		// Note: the first slot of an env
+		// is its outer env.
+		env = env->first;
+	}
+	return NULL;
+}
+
+// Get the innermost definition for the symbol
+Cell *env_get (Cell *env, Cell *sym)
+{
+	Cell *containing_env = env_find(env, sym);
+	if (containing_env != NULL)
+	{
+		Cell *slot = env_get_self(containing_env, sym);
+		return slot->rest;
+	}
+	return NULL;
+}
+
+void env_set (Cell *env, Cell *sym, Cell *val)
+{
+	Cell *slot = env_get_self(env, sym);
+	if (slot != NULL)
+	{
+		// Change the value of the already present slot
+		slot->rest = val;
+	}
+	else
+	{
+		// Push the new (symbol . value) pair to the env
+		env->rest = cell_pair(
+				cell_pair(sym, val),
+				env->rest);
+	}
+}
+
+// (forward declare)
+Cell *EVAL (Cell *x, Cell* env);
+
+// Evaluate each item of list x
+Cell *eval_list (Cell *x, Cell *env)
+{
+	Cell *y = cell_pair(NULL, NULL);
+	Cell *p_y = y;
+	Cell *p_x = x;
+
+	// Turn x into y by evaluating each item of x:
+
+	// eval the first element
+	p_y->first = EVAL(p_x->first, env);
+	p_x = p_x->rest;
+
+	// eval the rest of the elements
+	while (p_x && p_x->first)
+	{
+		p_y->rest = cell_pair(EVAL(p_x->first, env), NULL);
+
+		// next
+		p_x = p_x->rest;
+		p_y = p_y->rest;
+	}
+
+	return y;
+}
+
+Cell *EVAL (Cell *x, Cell *env)
+{
+	switch (x->kind)
+	{
+		case T_INT:
+		case T_STRING:
+			return x;
+		case T_SYMBOL:
+			return env_get(env, x);
+		case T_PAIR:
+			if (x->first == NULL)
+			{
+				// Empty list = itself
+				return x;
+			}
+			else
+			{
+				// List application
+				Cell *y = eval_list(x, env);
+				// TODO: call y[0] with args y[1...]
+				return y;
+			}
+		default:
+			// error
+			fprintf(stderr, "cell_init: invalid cell kind\n");
+			exit(1);
+	}
 }
 
 void PRINT (Cell *expr)
@@ -718,13 +868,18 @@ void PRINT (Cell *expr)
 void rep ()
 {
 	Cell * form = READ();
-	Cell * value = EVAL(form);
+	Cell * value = EVAL(form, repl_env);
 	PRINT(value);
 }
 
 int main (int argc, char **argv)
 {
+	// Initialize memories
 	pools_init(1024, 2048);
+
+	// Initialize the REPL environment
+	repl_env = env_create(NULL);
+	env_set(repl_env, string_intern(cstring("x")), cell_int(5));
 
 	while(1)
 	{
