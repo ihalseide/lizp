@@ -25,7 +25,7 @@ struct string
 typedef struct cell Cell;
 struct cell
 {
-	enum Cell_kind flag;
+	enum Cell_kind kind;
 	union
 	{
 		int num;
@@ -55,8 +55,7 @@ Cell *cell_pair (Cell *first, Cell *rest);
 
 // How to set up the cell memory
 // SHOULD ONLY BE CALLED ONCE
-// returns 0 on success
-int pools_init (int ncells, int nchars) {
+void pools_init (int ncells, int nchars) {
 	// Allocate the arrays
 	cell_pool = malloc(ncells * sizeof(*cell_pool));
 	char_pool = malloc(nchars);
@@ -65,7 +64,7 @@ int pools_init (int ncells, int nchars) {
 	// Check the malloc'd pointers
 	if (!cell_pool || !char_pool) {
 		fprintf(stderr, "pools_init: malloc failed\n");
-		return 1;
+		exit(1);
 	}
 
 	// Set the capacities
@@ -83,8 +82,6 @@ int pools_init (int ncells, int nchars) {
 	Cell *empty_s = cell_string((String) { .start = NULL, .length = 0 });
 	string_list = cell_pair(empty_s, NULL);
 	string_list->rest = string_list;
-
-	return 0;
 }
 
 void string_step (String *s, int n)
@@ -179,7 +176,7 @@ Cell *cell_init (enum Cell_kind k)
 			case T_SYMBOL:
 			case T_STRING:
 			case T_PAIR:
-				x->flag = k;
+				x->kind = k;
 				break;
 			default:
 				// error
@@ -597,7 +594,7 @@ int print_pair (Cell *x, String out)
 		}
 
 		// See if the list continues with more pairs...
-		if (x->rest->flag == T_PAIR)
+		if (x->rest->kind == T_PAIR)
 		{
 			// Step into the 'rest' pair
 			if (x->rest->first != NULL)
@@ -629,7 +626,7 @@ int print_form (Cell *x, String out)
 	}
 
 	_Static_assert(_CELL_KIND_COUNT == 4, "exhaustive handling of all cell kinds");
-	switch (x->flag)
+	switch (x->kind)
 	{
 		case T_INT:
 			return print_int(x->num, out);
@@ -654,7 +651,7 @@ void print_intern_strings ()
 	do
 	{
 		Cell *s = p->first;
-		if (s->flag == T_STRING)
+		if (s->kind == T_STRING)
 		{
 			printf("%.*s\n", s->str.length, s->str.start);
 		}
@@ -672,7 +669,11 @@ void print_intern_strings ()
 Cell *READ ()
 {
 	char buffer[1000];
-	fgets(buffer, sizeof(buffer), stdin);
+	if(!fgets(buffer, sizeof(buffer), stdin))
+	{
+		fprintf(stderr, "READ: fgets failed\n");
+		exit(1);
+	}
 	String in = (String) { .length = strlen(buffer), .start = buffer };
 
 	Cell *x;
@@ -694,6 +695,11 @@ Cell *READ ()
 	return x;
 }
 
+Cell *apply (Cell *expr)
+{
+
+}
+
 Cell *EVAL (Cell *expr)
 {
 	return expr;
@@ -711,7 +717,6 @@ void PRINT (Cell *expr)
 
 void rep ()
 {
-
 	Cell * form = READ();
 	Cell * value = EVAL(form);
 	PRINT(value);
