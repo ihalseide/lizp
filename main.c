@@ -7,7 +7,6 @@
 #include <ctype.h>
 
 #include "types.h"
-#include "main.h"
 
 // Cell memory:
 Cell *cell_pool = NULL;
@@ -23,6 +22,34 @@ Cell *string_list = NULL;
 Cell * c_nil;
 Cell * c_true;
 Cell * c_false;
+
+char isparen (char c)
+{
+	return ((c == '(')
+			|| (c == ')')
+			|| (c == '[')
+			|| (c == ']')
+			|| (c == '{')
+			|| (c == '}')
+			|| (c == '|'));
+}
+
+char char_end (char c)
+{
+	switch (c)
+	{
+		case '(': return ')';
+		case '[': return ']';
+		case '{': return '}';
+		case '|': return '|';
+		default: return 0;
+	}
+}
+
+int is_symbol_char (char c)
+{
+	return !isparen(c) && !isspace(c);
+}
 
 void string_step (String *s, int n)
 {
@@ -47,9 +74,372 @@ bool string_validp (String *s)
 	return (s != NULL) && (s->start != NULL) && (s->length >= 0);
 }
 
+// Can compare length encoded string and c-style strings
+int stream_eq (const char *s1, const char *s2, int len)
+{
+	// Validate arguments
+	if ((s1 == NULL) || (s2 == NULL) || (len < 0))
+	{
+		return 0;
+	}
+
+	if (len)
+	{
+		// Compare length strings
+		for (int i = 0; i < len; i++)
+		{
+			if (s1[i] != s2[i])
+			{
+				return 0;
+			}
+		}
+		return 1;
+	}
+	else
+	{
+		// Compare c-style string
+		while (*s1 && *s2 && *s1 == *s2)
+		{
+			s1++;
+			s2++;
+		}
+		return *s1 == *s2;
+	}
+}
+
 bool string_eq (String s1, String s2)
 {
 	return (s1.length == s2.length) && stream_eq(s1.start, s2.start, s1.length);
+}
+
+
+int string_find (const char *s, char x)
+{
+	const char *p = s;
+	while (*p != x)
+	{
+		p++;
+	}
+	return p - s;
+}
+
+String cstring (char *str)
+{
+	return (String)
+	{
+		.length = string_find(str, '\0'),
+		.start = str,
+	};
+}
+
+// Removes a cell from the cell pool a.k.a. free list
+Cell *cell_get ()
+{
+	if (!cell_pool)
+	{
+		return NULL;
+	}
+
+	Cell *x = cell_pool->rest;
+	if (x)
+	{
+		cell_pool->rest = x->rest;
+	}
+	return x;
+}
+
+Cell *cell_init (enum Cell_kind k)
+{
+	Cell *x = cell_get();
+	if (x)
+	{
+		_Static_assert(_CELL_KIND_COUNT == 5, "handle all cell kinds");
+		switch (k)
+		{
+			case T_INT:
+			case T_STRING:
+			case T_SYMBOL:
+			case T_C_FUNCTION:
+			case T_PAIR:
+				x->kind = k;
+				break;
+			default:
+				fprintf(stderr, "cell_init: invalid cell kind\n");
+				exit(1);
+		}
+	}
+	return x;
+}
+
+
+Cell *make_pair (Cell *first, Cell *rest)
+{
+	Cell *x = cell_init(T_PAIR);
+	if (x)
+	{
+		x->first = first;
+		x->rest = rest;
+	}
+	return x;
+}
+
+Cell *make_symbol (Cell *name)
+{
+	Cell *x = cell_init(T_SYMBOL);
+	if (x)
+	{
+		x->sym = name;
+	}
+	return x;
+}
+
+Cell *make_string (String s)
+{
+	Cell *x = cell_init(T_STRING);
+	if (x)
+	{
+		x->str.start = s.start;
+		x->str.length = s.length;
+	}
+	return x;
+}
+
+// only for use by string_intern
+Cell *string_create (String s)
+{
+	// Validate inputs
+	if (s.start == NULL || s.length <= 0)
+	{
+		return NULL;
+	}
+
+	// Check memory space
+	if ((char_free - char_pool) >= char_pool_cap)
+	{
+		fprintf(stderr, "string_create: out of string character memory\n");
+		exit(1);
+	}
+
+	// Copy string
+	char *res = char_free;
+	for (int i = 0; i < s.length; i++)
+	{
+		*char_free++ = s.start[i];
+	}
+
+	// Add string terminator for easy use with C
+	*char_free++ = '\0';
+
+	// Create a (string-cell . next) pair that is inside the string list
+	Cell *x = make_pair(make_string((String){ .start = res, .length = s.length}),
+				        string_list->rest);
+	string_list->rest = x;
+
+	// Return the string cell
+	return x->first;
+}
+
+// Inserts a cell back into the free list
+void cell_free (Cell *x)
+{
+	if (!x || !cell_pool)
+	{
+		return;
+	}
+
+	x->rest = cell_pool->rest;
+	cell_pool->rest = x;
+}
+
+Cell *make_int (int n)
+{
+	Cell *x = cell_init(T_INT);
+	if (x)
+	{
+		x->num = n;
+	}
+	return x;
+}
+
+Cell *make_cfunc (Cell *(*c_func)(Cell*))
+{
+	Cell *x = cell_init(T_C_FUNCTION);
+	if (x)
+	{
+		x ->c_func = c_func;
+	}
+	return x;
+}
+
+
+// Use this when creating new strings from short-lived char pointers
+// returns a string cell
+Cell *string_intern (String s)
+{
+	if (!s.start || s.length < 0)
+	{
+		return NULL;
+	}
+
+	// Linear search through the (circular) string list
+	Cell *p = string_list;
+	do
+	{
+		if (string_eq(p->first->str, s))
+		{
+			// Found an internal string, so return that
+			return p->first;
+		}
+
+		p = p->rest;
+	}
+	while (p != string_list);
+
+	// Did not find an internal string,
+	return string_create(s);
+}
+
+int read_symbol (String s, Cell **out)
+{
+	// Get how much of `s` is alphabetical chars
+	int i;
+	for (i = 0; (i < s.length) && is_symbol_char(s.start[i]); i++)
+	{
+		continue;
+	}
+
+	Cell *str = string_intern((String){ .start = s.start, .length = i});
+	Cell *sym = make_symbol(str);
+	*out = sym;
+
+	return i;
+}
+
+int read_int (String s, Cell **out)
+{
+	String view = s;
+
+	int sign = 1;
+	if (*view.start == '-')
+	{
+		sign = -sign;
+		string_step(&view, 1);
+	}
+
+	int n = 0;
+	while (isdigit(*view.start) && view.length)
+	{
+		n = (n * 10) + ((*view.start) - '0');
+		string_step(&view, 1);
+	}
+
+	int num_len = s.length - view.length;
+	*out = make_int(n * sign);
+	return num_len;
+}
+
+// Modifies the given list and returns the pointer to the new head
+void reverse_list (Cell **list)
+{
+	Cell *p = NULL; // previous
+	Cell *c = *list; // current
+	Cell *n = NULL; // next
+
+	while (c)
+	{
+		// Get the next node
+		n = c->rest;
+		// Set current node's next to the previous
+		c->rest = p;
+		// Advance down the list
+		p = c;
+		c = n;
+	}
+
+	// Update the reference to the start of the list
+	*list = p;
+}
+
+int read_form (String s, Cell **out);
+
+int read_list (String s, Cell **out)
+{
+	String view = s;
+
+	// Consume the opening character
+	char opener = view.start[0];
+	char closer = char_end(opener);
+	string_step(&view, 1);
+
+	Cell *e;
+	Cell *list, *p;
+
+	// Check if there are no elements
+	string_skip_white(&view);
+	if (*view.start == closer)
+	{
+		// empty list
+		// (empty list = pair where first = NULL)
+		// consume the final character
+		string_step(&view, 1);
+		*out = make_pair(NULL, c_nil);
+		(*out)->variant = opener;
+		int len = s.length - view.length;
+		return len;
+	}
+
+	// Read the first element
+	string_step(&view, read_form(view, &e));
+	string_skip_white(&view);
+
+	// Read the rest of the normal elements (don't handle the dot)
+	p = list = make_pair(e, c_nil);
+	while ((view.length >= 0) && (*view.start != closer) && (*view.start != '.'))
+	{
+		string_step(&view, read_form(view, &e));
+		p->rest = make_pair(e, c_nil);
+		p = p->rest;
+		string_skip_white(&view);
+	}
+
+	// Handle either the optionally dotted end of the list
+	bool has_dot = false;
+
+	if (*view.start == '.')
+	{
+		// Dotted end of the list:
+		has_dot = true;
+		// consume the '.' dot
+		string_step(&view, 1);
+		// read what should be the final element
+		string_step(&view, read_form(view, &e));
+		p->rest = e;
+		string_skip_white(&view);
+	}
+
+	if (*view.start == closer)
+	{
+		// The actual end of list:
+		// consume the final character
+		string_step(&view, 1);
+		*out = list;
+		(*out)->variant = opener;
+		int len = s.length - view.length;
+		return len;
+	}
+	else
+	{
+		// Unexpected end of list, or multiple items after the '.' dot
+		if (has_dot)
+		{
+			fprintf(stderr, "expected the form directly after the '.' (dot) to be the final form of the enclosing list\n");
+		}
+		else
+		{
+			fprintf(stderr, "unexpected end of list\n");
+		}
+		exit(1);
+	}
 }
 
 // An environment is a list starting with the outer environment,
@@ -147,393 +537,10 @@ void env_set_c (Cell *env, char *cstr, Cell *val)
 		return;
 	}
 
-	Cell *sym = make_symbol(string_intern(cstring(cstr))->str);
+	Cell *sym = make_symbol(string_intern(cstring(cstr)));
 	env_set(env, sym, val);
 }
 
-
-int string_find (const char *s, char x)
-{
-	const char *p = s;
-	while (*p != x)
-	{
-		p++;
-	}
-	return p - s;
-}
-
-String cstring (char *str)
-{
-	return (String)
-	{
-		.length = string_find(str, '\0'),
-		.start = str,
-	};
-}
-
-// How to set up the cell memory
-// SHOULD ONLY BE CALLED ONCE
-void pools_init (int ncells, int nchars)
-{
-	// Allocate the arrays
-	cell_pool = malloc(ncells * sizeof(*cell_pool));
-	char_pool = malloc(nchars);
-	char_free = char_pool;
-
-	// Check the malloc'd pointers
-	if (!cell_pool || !char_pool)
-	{
-		fprintf(stderr, "pools_init: malloc failed\n");
-		exit(1);
-	}
-
-	// Set the capacities
-	cell_pool_cap = ncells;
-	char_pool_cap = nchars;
-
-	// Link the free cells together in a circular list
-	for (int i = 0; i < (cell_pool_cap - 1); i++)
-	{
-		cell_pool[i].rest = &cell_pool[i + 1];
-	}
-	cell_pool[cell_pool_cap - 1].rest = cell_pool;
-
-	// Set up the internal string circular list with one item
-	Cell *empty_s = make_string((String) { .start = NULL, .length = 0 });
-	string_list = make_pair(empty_s, NULL);
-	string_list->rest = string_list;
-
-	// Create the constant symbols
-	c_nil = make_symbol(string_intern(cstring("#nil"))->str);
-	c_true = make_symbol(string_intern(cstring("#true"))->str);
-	c_false = make_symbol(string_intern(cstring("#false"))->str);
-}
-
-// only for use by string_intern
-Cell *string_create (String s)
-{
-	// Validate inputs
-	if (s.start == NULL || s.length <= 0)
-	{
-		return NULL;
-	}
-
-	// Check memory space
-	if ((char_free - char_pool) >= char_pool_cap)
-	{
-		fprintf(stderr, "string_create: out of string character memory\n");
-		exit(1);
-	}
-
-	// Copy string
-	char *res = char_free;
-	for (int i = 0; i < s.length; i++)
-	{
-		*char_free++ = s.start[i];
-	}
-
-	// Add string terminator for easy use with C
-	*char_free++ = '\0';
-
-	// Create a (string-cell . next) pair that is inside the string list
-	Cell *x = make_pair(make_string((String){ .start = res, .length = s.length}),
-				        string_list->rest);
-	string_list->rest = x;
-
-	// Return the string cell
-	return x->first;
-}
-
-// Inserts a cell back into the free list
-void cell_free (Cell *x)
-{
-	if (!x || !cell_pool)
-	{
-		return;
-	}
-
-	x->rest = cell_pool->rest;
-	cell_pool->rest = x;
-}
-
-Cell *make_int (int n)
-{
-	Cell *x = cell_init(T_INT);
-	if (x)
-	{
-		x->num = n;
-	}
-	return x;
-}
-
-Cell *make_cfunc (Cell *(*c_func)(Cell*))
-{
-	Cell *x = cell_init(T_C_FUNCTION);
-	if (x)
-	{
-		x ->c_func = c_func;
-	}
-	return x;
-}
-
-Cell *make_pair (Cell *first, Cell *rest)
-{
-	Cell *x = cell_init(T_PAIR);
-	if (x)
-	{
-		x->first = first;
-		x->rest = rest;
-	}
-	return x;
-}
-
-Cell *make_symbol (String s)
-{
-	Cell *x = cell_init(T_SYMBOL);
-	if (x)
-	{
-		x->str.start = s.start;
-		x->str.length = s.length;
-	}
-	return x;
-}
-
-Cell *make_string (String s)
-{
-	Cell *x = cell_init(T_STRING);
-	if (x)
-	{
-		x->str.start = s.start;
-		x->str.length = s.length;
-	}
-	return x;
-}
-
-// Can compare length encoded string and c-style strings
-int stream_eq (const char *s1, const char *s2, int len)
-{
-	// Validate arguments
-	if ((s1 == NULL) || (s2 == NULL) || (len < 0))
-	{
-		return 0;
-	}
-
-	if (len)
-	{
-		// Compare length strings
-		for (int i = 0; i < len; i++)
-		{
-			if (s1[i] != s2[i])
-			{
-				return 0;
-			}
-		}
-		return 1;
-	}
-	else
-	{
-		// Compare c-style string
-		while (*s1 && *s2 && *s1 == *s2)
-		{
-			s1++;
-			s2++;
-		}
-		return *s1 == *s2;
-	}
-}
-
-// Use this when creating new strings from short-lived char pointers
-// returns a string cell
-Cell *string_intern (String s)
-{
-	if (!s.start || s.length < 0)
-	{
-		return NULL;
-	}
-
-	// Linear search through the (circular) string list
-	Cell *p = string_list;
-	do
-	{
-		if (string_eq(p->first->str, s))
-		{
-			// Found an internal string, so return that
-			return p->first;
-		}
-
-		p = p->rest;
-	}
-	while (p != string_list);
-
-	// Did not find an internal string,
-	return string_create(s);
-}
-
-char isparen (char c)
-{
-	return ((c == '(')
-			|| (c == ')')
-			|| (c == '[')
-			|| (c == ']')
-			|| (c == '{')
-			|| (c == '}')
-			|| (c == '|'));
-}
-
-char char_end (char c)
-{
-	switch (c)
-	{
-		case '(': return ')';
-		case '[': return ']';
-		case '{': return '}';
-		case '|': return '|';
-		default: return 0;
-	}
-}
-
-int is_symbol_char (char c)
-{
-	return !isparen(c) && !isspace(c);
-}
-
-int read_symbol (String s, Cell **out)
-{
-	// Get how much of `s` is alphabetical chars
-	int i;
-	for (i = 0; (i < s.length) && is_symbol_char(s.start[i]); i++)
-	{
-		continue;
-	}
-
-	Cell *str = string_intern((String){ .start = s.start, .length = i});
-	return i;
-}
-
-int read_int (String s, Cell **out)
-{
-	String view = s;
-
-	int sign = 1;
-	if (*view.start == '-')
-	{
-		sign = -sign;
-		string_step(&view, 1);
-	}
-
-	int n = 0;
-	while (isdigit(*view.start) && view.length)
-	{
-		n = (n * 10) + ((*view.start) - '0');
-		string_step(&view, 1);
-	}
-
-	int num_len = s.length - view.length;
-	*out = make_int(n * sign);
-	return num_len;
-}
-
-// Modifies the given list and returns the pointer to the new head
-void reverse_list (Cell **list)
-{
-	Cell *p = NULL; // previous
-	Cell *c = *list; // current
-	Cell *n = NULL; // next
-
-	while (c)
-	{
-		// Get the next node
-		n = c->rest;
-		// Set current node's next to the previous
-		c->rest = p;
-		// Advance down the list
-		p = c;
-		c = n;
-	}
-
-	// Update the reference to the start of the list
-	*list = p;
-}
-
-int read_list (String s, Cell **out)
-{
-	String view = s;
-
-	// Consume the opening character
-	char opener = view.start[0];
-	char closer = char_end(opener);
-	string_step(&view, 1);
-
-	Cell *e;
-	Cell *list, *p;
-
-	// Check if there are no elements
-	string_skip_white(&view);
-	if (*view.start == closer)
-	{
-		// empty list
-		// (empty list = pair where first = NULL)
-		// consume the final character
-		string_step(&view, 1);
-		*out = make_pair(NULL, c_nil);
-		(*out)->variant = opener;
-		int len = s.length - view.length;
-		return len;
-	}
-
-	// Read the first element
-	string_step(&view, read_form(view, &e));
-	string_skip_white(&view);
-
-	// Read the rest of the normal elements (don't handle the dot)
-	p = list = make_pair(e, c_nil);
-	while ((view.length >= 0) && (*view.start != closer) && (*view.start != '.'))
-	{
-		string_step(&view, read_form(view, &e));
-		p->rest = make_pair(e, c_nil);
-		p = p->rest;
-		string_skip_white(&view);
-	}
-
-	// Handle either the optionally dotted end of the list
-	bool has_dot = false;
-
-	if (*view.start == '.')
-	{
-		// Dotted end of the list:
-		has_dot = true;
-		// consume the '.' dot
-		string_step(&view, 1);
-		// read what should be the final element
-		string_step(&view, read_form(view, &e));
-		p->rest = e;
-		string_skip_white(&view);
-	}
-
-	if (*view.start == closer)
-	{
-		// The actual end of list:
-		// consume the final character
-		string_step(&view, 1);
-		*out = list;
-		(*out)->variant = opener;
-		int len = s.length - view.length;
-		return len;
-	}
-	else
-	{
-		// Unexpected end of list, or multiple items after the '.' dot
-		if (has_dot)
-		{
-			fprintf(stderr, "expected the form directly after the '.' (dot) to be the final form of the enclosing list\n");
-		}
-		else
-		{
-			fprintf(stderr, "unexpected end of list\n");
-		}
-		exit(1);
-	}
-}
 
 int read_form (String s, Cell **out)
 {
@@ -646,6 +653,8 @@ int print_int (int n, String out)
 	return len;
 }
 
+int print_form (Cell *x, String out);
+
 int print_pair (Cell *x, String out)
 {
 	String view = out;
@@ -734,6 +743,8 @@ Cell *READ ()
 	return x;
 }
 
+Cell *EVAL (Cell *, Cell *env);
+
 // Evaluate each item of list x
 // does not modify x
 Cell *eval_list (Cell *x, Cell *env)
@@ -762,45 +773,6 @@ Cell *eval_list (Cell *x, Cell *env)
 	y->variant = x->variant;
 
 	return y;
-}
-
-// Removes a cell from the cell pool a.k.a. free list
-Cell *cell_get ()
-{
-	if (!cell_pool)
-	{
-		return NULL;
-	}
-
-	Cell *x = cell_pool->rest;
-	if (x)
-	{
-		cell_pool->rest = x->rest;
-	}
-	return x;
-}
-
-Cell *cell_init (enum Cell_kind k)
-{
-	Cell *x = cell_get();
-	if (x)
-	{
-		_Static_assert(_CELL_KIND_COUNT == 5, "handle all cell kinds");
-		switch (k)
-		{
-			case T_INT:
-			case T_STRING:
-			case T_SYMBOL:
-			case T_C_FUNCTION:
-			case T_PAIR:
-				x->kind = k;
-				break;
-			default:
-				fprintf(stderr, "cell_init: invalid cell kind\n");
-				exit(1);
-		}
-	}
-	return x;
 }
 
 
@@ -838,14 +810,14 @@ Cell *EVAL (Cell *x, Cell *env)
 {
 	if (is_self_evaluating(x))
 	{
-		printf("  is self-evaluating...");
+		printf("  is self-evaluating...\n");
 		return x;
 	}
 
 	switch (x->kind)
 	{
 		case T_SYMBOL:
-			printf("  lookup symbol...");
+			printf("  lookup symbol...\n");
 			return symbol_lookup(x, env);
 		case T_PAIR:
 			if (x->first == NULL)
@@ -915,6 +887,45 @@ Cell *bi_slash (Cell *args)
 	int b = args->rest->first->num;
 	return make_int(a / b);
 }
+
+// How to set up the cell memory
+// SHOULD ONLY BE CALLED ONCE
+void pools_init (int ncells, int nchars)
+{
+	// Allocate the arrays
+	cell_pool = malloc(ncells * sizeof(*cell_pool));
+	char_pool = malloc(nchars);
+	char_free = char_pool;
+
+	// Check the malloc'd pointers
+	if (!cell_pool || !char_pool)
+	{
+		fprintf(stderr, "pools_init: malloc failed\n");
+		exit(1);
+	}
+
+	// Set the capacities
+	cell_pool_cap = ncells;
+	char_pool_cap = nchars;
+
+	// Link the free cells together in a circular list
+	for (int i = 0; i < (cell_pool_cap - 1); i++)
+	{
+		cell_pool[i].rest = &cell_pool[i + 1];
+	}
+	cell_pool[cell_pool_cap - 1].rest = cell_pool;
+
+	// Set up the internal string circular list with one item
+	Cell *empty_s = make_string((String) { .start = NULL, .length = 0 });
+	string_list = make_pair(empty_s, NULL);
+	string_list->rest = string_list;
+
+	// Create the constant symbols
+	c_nil = make_symbol(string_intern(cstring("#nil")));
+	c_true = make_symbol(string_intern(cstring("#true")));
+	c_false = make_symbol(string_intern(cstring("#false")));
+}
+
 
 int main (int argc, char **argv)
 {
