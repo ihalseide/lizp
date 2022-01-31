@@ -1,10 +1,3 @@
-typedef struct string String;
-struct string
-{
-	int length;
-	char *start;
-};
-
 enum Cell_kind
 {
 	T_INT,
@@ -15,22 +8,32 @@ enum Cell_kind
 	_CELL_KIND_COUNT,
 };
 
+// Pairs & Lists:
+// Pair = (first . rest)
+// List = () = (NULL . NIL)
+//      | (cell . List)
+//      | (cell . NIL)
+
 typedef struct cell Cell;
 struct cell
 {
-	enum Cell_kind kind;
+	enum Cell_kind kind;         // Type of cell
 	union
 	{
-		int num;
-		Cell * sym;             // Symbol points to string cell
-		String str;             // String contains an actual string value
-		Cell *(*c_func)(Cell*); // C function
-		struct                  // Pair
+		int as_int;              // Integer value
+		Cell *(*as_func)(Cell*); // C function value
+		Cell * as_symbol;        // Symbol name value (pointer to string cell)
+		struct                   // String value
+		{
+			char *start;
+			int length;
+		} as_str;
+		struct                   // Pair/list value
 		{
 			Cell * first;
 			Cell * rest;
-			char variant;       // Type of parens used to write the list
-		};
+			char variant;        // Type of parens used to write the list
+		} as_pair;
 	};
 };
 
