@@ -116,7 +116,7 @@ Cell *cell_init (enum Cell_kind k)
 	Cell *x = cell_get();
 	if (x)
 	{
-		_Static_assert(_CELL_KIND_COUNT == 5, "handle all cell kinds");
+		_Static_assert(_CELL_KIND_COUNT == 6, "handle all cell kinds");
 		if ((T_INT <= k) && (k <= _CELL_KIND_COUNT))
 		{
 			x->kind = k;
@@ -126,6 +126,17 @@ Cell *cell_init (enum Cell_kind k)
 			fprintf(stderr, "cell_init: invalid cell kind\n");
 			exit(1);
 		}
+	}
+	return x;
+}
+
+Cell *make_fn (Cell *args, Cell *body)
+{
+	Cell *x = cell_init(T_FUNCTION);
+	if (x)
+	{
+		x->as_func.params = args;
+		x->as_func.body = body;
 	}
 	return x;
 }
@@ -143,7 +154,7 @@ Cell *make_pair (Cell *first, Cell *rest)
 
 Cell *make_empty_list ()
 {
-	return make_pair(NULL, c_nil);
+	return make_pair(NULL, NULL);
 }
 
 bool is_list (Cell *x)
@@ -293,7 +304,7 @@ Cell *make_cfunc (Cell *(*c_func)(Cell*))
 	Cell *x = cell_init(T_C_FUNCTION);
 	if (x)
 	{
-		x ->as_func = c_func;
+		x ->as_c_func = c_func;
 	}
 	return x;
 }
@@ -403,11 +414,11 @@ int read_list (const char *start, int length, Cell **out)
 
 	// Read the rest of the normal elements (don't handle the dot)
 	Cell *list, *p;
-	p = list = make_pair(e, c_nil);
+	p = list = make_pair(e, NULL);
 	while ((rem > 0) && (*view != closer) && (*view != '.'))
 	{
 		string_step(&view, &rem, read_form(view, rem, &e));
-		p->as_pair.rest = make_pair(e, c_nil);
+		p->as_pair.rest = make_pair(e, NULL);
 		p = p->as_pair.rest;
 		string_skip_white(&view, &rem);
 	}
@@ -717,34 +728,31 @@ int print_pair (Cell *x, char *out, int length)
 	char closer = char_end(opener);
 
 	string_step((const char**)&view, &rem, print_char(opener, view, rem));
-	if (x->as_pair.first != NULL)
+	while (!is_empty_list(x))
 	{
-		while (x != c_nil)
+		string_step((const char**)&view, &rem, print_form(x->as_pair.first, view, rem));
+
+		if (x->as_pair.rest == NULL)
 		{
-			string_step((const char**)&view, &rem, print_form(x->as_pair.first, view, rem));
+			break;
+		}
 
-			if (x->as_pair.rest == c_nil)
+		// See if the list continues with more pairs...
+		if (x->as_pair.rest->kind == T_PAIR)
+		{
+			// Step into the 'rest' pair
+			if (x->as_pair.rest->as_pair.first != NULL)
 			{
-				break;
+				string_step((const char**)&view, &rem, print_char(' ', view, rem));
 			}
-
-			// See if the list continues with more pairs...
-			if (x->as_pair.rest->kind == T_PAIR)
-			{
-				// Step into the 'rest' pair
-				if (x->as_pair.rest->as_pair.first != NULL)
-				{
-					string_step((const char**)&view, &rem, print_char(' ', view, rem));
-				}
-				x = x->as_pair.rest;
-			}
-			else
-			{
-				// Dotted list because the rest of this pair is not a pair
-				string_step((const char**)&view, &rem, print_cstr(" . ", view, rem));
-				string_step((const char**)&view, &rem, print_form(x->as_pair.rest, view, rem));
-				break;
-			}
+			x = x->as_pair.rest;
+		}
+		else
+		{
+			// Dotted list because the rest of this pair is not a pair
+			string_step((const char**)&view, &rem, print_cstr(" . ", view, rem));
+			string_step((const char**)&view, &rem, print_form(x->as_pair.rest, view, rem));
+			break;
 		}
 	}
 	string_step((const char**)&view, &rem, print_char(closer, view, rem));
@@ -761,7 +769,7 @@ int print_form (Cell *x, char *out, int length)
 		return 0;
 	}
 
-	_Static_assert(_CELL_KIND_COUNT == 5, "exhaustive handling of all cell kinds");
+	_Static_assert(_CELL_KIND_COUNT == 6, "exhaustive handling of all cell kinds");
 	switch (x->kind)
 	{
 		case T_INT:
@@ -771,6 +779,8 @@ int print_form (Cell *x, char *out, int length)
 		case T_SYMBOL:
 			// Recurse by printing the symbol's string name
 			return print_form(x->as_symbol, out, length);
+		case T_FUNCTION:
+			return print_cstr("#<fn>", out, length);
 		case T_C_FUNCTION:
 			return print_cstr("#<code>", out, length);
 		case T_PAIR:
@@ -817,9 +827,9 @@ Cell *eval_each (Cell *env, Cell *x)
 	p_x = p_x->as_pair.rest;
 
 	// eval the rest of the elements
-	while (p_x != c_nil && p_x->as_pair.first)
+	while ((p_x != NULL) && (p_x->as_pair.first != NULL))
 	{
-		p_y->as_pair.rest = make_pair(EVAL(p_x->as_pair.first, env), c_nil);
+		p_y->as_pair.rest = make_pair(EVAL(p_x->as_pair.first, env), NULL);
 
 		// next
 		p_x = p_x->as_pair.rest;
@@ -852,7 +862,7 @@ int list_length (Cell *list)
 	}
 
 	int i;
-	for (i = 0; list != c_nil; i++)
+	for (i = 0; (list != NULL) && !is_empty_list(list); i++)
 	{
 		list = list->as_pair.rest;
 	}
@@ -910,7 +920,7 @@ Cell *eval_list (Cell *env, Cell *list)
 			{
 				return string_intern_cstring("let* : error : second argument must have even length");
 			}
-			while (pairs != c_nil)
+			while ((pairs != NULL))
 			{
 				Cell *sym = pairs->as_pair.first;
 				Cell *val = EVAL(pairs->as_pair.rest->as_pair.first, let_env);
@@ -934,7 +944,7 @@ Cell *eval_list (Cell *env, Cell *list)
 			Cell *p = list->as_pair.rest;
 
 			// eval the rest of the elements
-			while ((p != c_nil) && (p->as_pair.rest != c_nil))
+			while ((p != NULL) && (p->as_pair.rest != NULL))
 			{
 				EVAL(p->as_pair.first, env);
 
@@ -947,7 +957,22 @@ Cell *eval_list (Cell *env, Cell *list)
 		else if (name == i_fn_star)
 		{
 			// (fn* (args...) expr)
-			return string_intern_cstring("fn* : error : not implemented yet");
+			// NOTE: not a closure, uses dynamic binding instead
+
+			if (list_length(list) != 3)
+			{
+				return string_intern_cstring("fn* : error : requires 2 operands");
+			}
+
+			if (list->as_pair.rest->as_pair.first->kind != T_PAIR)
+			{
+				return string_intern_cstring("fn* : error : 1st operand must be a list");
+			}
+
+			Cell *args = list->as_pair.rest->as_pair.first;
+			Cell *body = list->as_pair.rest->as_pair.rest->as_pair.first;
+			Cell *fn = make_fn(args, body);
+			return fn;
 		}
 	}
 
@@ -960,24 +985,49 @@ Cell *eval_list (Cell *env, Cell *list)
 
 	// Validate
 	assert(fn != NULL);
-	assert(args != NULL);
 
 	if (fn->kind == T_C_FUNCTION)
 	{
 		// Run C function with args
-		Cell *(*c_func)(Cell*) = fn->as_func;
+		Cell *(*c_func)(Cell*) = fn->as_c_func;
 		Cell *result = c_func(args);
 		return result;
 	}
-	else if (fn->kind == T_PAIR)
+	else if (fn->kind == T_FUNCTION)
 	{
-		// Error
-		return string_intern_cstring("error: unknown function");
+		// Run lisp function with args (created by fn* )
+		int n_params = list_length(fn->as_func.params);
+		int n_args = list_length(args);
+		if (n_params != n_args)
+		{
+			printf("n_params = %d\n", n_params);
+			PRINT(fn->as_func.params);
+			printf("n_args = %d\n", n_args);
+			return string_intern_cstring("error : the number of arguments does not match the number of formal arguments for a function");
+		}
+
+		Cell *fn_env = env_create(env);
+		// Bind the arguments
+		Cell *p_param = fn->as_func.params;;
+		Cell *p_arg = args;
+		while ((p_arg != NULL) && (p_param != NULL))
+		{
+			// Bind 1
+			env_set(fn_env, p_param->as_pair.first, p_arg->as_pair.first);
+			// next args
+			p_param = p_param->as_pair.rest;
+			p_arg = p_arg->as_pair.rest;
+		}
+
+		// Evaluate the body
+		Cell *result = EVAL(fn->as_func.body, fn_env);
+		// FIXME: discard the environment
+		return result;
 	}
 	else
 	{
 		// Error
-		return string_intern_cstring("error: not a function");
+		return string_intern_cstring("error : 1st item of expression is not a function");
 	}
 }
 
@@ -1067,12 +1117,6 @@ Cell *bi_slash (Cell *args)
 	return make_int(a / b);
 }
 
-Cell *bi_len (Cell *args)
-{
-	int n = list_length(args);
-	return make_int(n);
-}
-
 // How to set up the cell memory
 // SHOULD ONLY BE CALLED ONCE
 void init (int ncells, int nchars)
@@ -1127,7 +1171,6 @@ int main (int argc, char **argv)
 	env_set_c(repl_env, "-", make_cfunc(bi_minus));
 	env_set_c(repl_env, "*", make_cfunc(bi_star));
 	env_set_c(repl_env, "/", make_cfunc(bi_slash));
-	env_set_c(repl_env, "len", make_cfunc(bi_len));
 
 	// Initialize certain interned strings for special forms
 	i_def_bang = string_intern_cstring("def!");
