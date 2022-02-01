@@ -227,6 +227,12 @@ Cell *string_intern (const char *start, int length)
 		return NULL;
 	}
 
+	// Length 0 => empty string
+	if (length == 0)
+	{
+		return string_list->as_pair.first;
+	}
+
 	// Linear search through the (circular) string list
 	Cell *p = string_list;
 	do
@@ -717,21 +723,36 @@ int print_cstr (char *s, char *out, int length)
 
 // Print out a string cell
 // returns number of chars written
-int print_string (const char *start, int ilength, char *out, int length)
+int print_string (const char *start, int ilength, char *out, int length, bool quoted)
 {
 	// Validate inputs
-	if ((start == NULL) || (out == NULL) || (ilength <= 0) || (length <= 0))
+	if ((start == NULL) || (out == NULL) || (ilength < 0) || (length < 0))
 	{
 		return 0;
 	}
 
-	int i;
-	for (i = 0; (i < ilength) && (i < length); i++)
+	char *p_out = out;
+
+	// Opening quote
+	if (quoted)
 	{
-		out[i] = start[i];
+		*p_out++ = '"';
 	}
 
-	return i;
+	// String contents
+	for (int i = 0; (i < ilength) && (i < length); i++)
+	{
+		*p_out++ = *start++;
+	}
+
+	// Closing quote
+	if (quoted)
+	{
+		*p_out++ = '"';
+	}
+
+	// Return length, including quotes that were written
+	return p_out - out;
 }
 
 // returns number of chars written
@@ -823,10 +844,12 @@ int print_form (Cell *x, char *out, int length)
 		case T_INT:
 			return print_int(x->as_int, out, length);
 		case T_STRING:
-			return print_string(x->as_str.start, x->as_str.length, out, length);
+			return print_string(x->as_str.start, x->as_str.length, out, length, true);
 		case T_SYMBOL:
-			// Recurse by printing the symbol's string name
-			return print_form(x->as_symbol, out, length);
+			{
+				Cell *name = x->as_symbol;
+				return print_string(name->as_str.start, name->as_str.length, out, length, false);
+			}
 		case T_FUNCTION:
 			return print_cstr("#<fn>", out, length);
 		case T_C_FUNCTION:
@@ -1203,7 +1226,7 @@ void init (int ncells, int nchars)
 	cell_pool[cell_pool_cap - 1].as_pair.rest = cell_pool;
 
 	// Set up the internal string circular list with one item
-	Cell *empty_s = make_string(NULL, 0);
+	Cell *empty_s = make_string("", 0);
 	string_list = make_pair(empty_s, NULL);
 	string_list->as_pair.rest = string_list;
 
