@@ -27,6 +27,7 @@ Cell * c_false;
 Cell *i_def_bang;
 Cell *i_let_star;
 Cell *i_do;
+Cell *i_fn_star;
 
 char char_end (char c)
 {
@@ -878,6 +879,16 @@ Cell *eval_list (Cell *env, Cell *list)
 				return string_intern_cstring("def! : error : requires 2 operands");
 			}
 			Cell *symbol = list->as_pair.rest->as_pair.first;
+			if (symbol->kind != T_SYMBOL)
+			{
+				return string_intern_cstring("def! : error : 1st operand must be a symbol");
+			}
+			if ((symbol->as_symbol == c_nil->as_symbol)
+					|| (symbol->as_symbol == c_true->as_symbol)
+					|| (symbol->as_symbol == c_false->as_symbol))
+			{
+				return string_intern_cstring("def! : error : cannot define nil, true, or false");
+			}
 			Cell *value = EVAL(list->as_pair.rest->as_pair.rest->as_pair.first, env);
 			env_set(env, symbol, value);
 			return value;
@@ -932,6 +943,11 @@ Cell *eval_list (Cell *env, Cell *list)
 			}
 
 			return EVAL(p->as_pair.first, env);
+		}
+		else if (name == i_fn_star)
+		{
+			// (fn* (args...) expr)
+			return string_intern_cstring("fn* : error : not implemented yet");
 		}
 	}
 
@@ -1117,6 +1133,7 @@ int main (int argc, char **argv)
 	i_def_bang = string_intern_cstring("def!");
 	i_let_star = string_intern_cstring("let*");
 	i_do = string_intern_cstring("do");
+	i_fn_star = string_intern_cstring("fn*");
 
 	// Print out the environment for debugging
 	printf("env:\n");
