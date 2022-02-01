@@ -206,6 +206,14 @@ bool is_empty_list (Cell *x)
 	return is_list(x) && (x->as_pair.first == NULL);
 }
 
+// Define what cell values count as True or False
+bool truthy (Cell *x)
+{
+	return ((x != NULL)
+			&& (x != c_nil)
+			&& (x != c_false));
+}
+
 Cell *make_symbol (Cell *name)
 {
 	Cell *x = cell_init(T_SYMBOL);
@@ -991,6 +999,7 @@ int list_length (Cell *list)
 Cell *i_def_bang = NULL;
 Cell *i_let_star = NULL;
 Cell *i_do = NULL;
+Cell *i_if = NULL;
 Cell *i_fn_star = NULL;
 
 Cell *eval_list (Cell *env, Cell *list)
@@ -1062,6 +1071,36 @@ Cell *eval_list (Cell *env, Cell *list)
 			//cell_free_all(let_env);
 
 			return result;
+		}
+		else if (name == i_if)
+		{
+			// (if <cond-expr> <true-expr> <false-expr?>)
+
+			// Validate arguments
+			int len = list_length(list);
+			if ((len < 3) || (len > 4))
+			{
+				return string_intern_cstring("if : error : requires 2 or 3 expressions");
+			}
+
+			Cell *cond = list->as_pair.rest->as_pair.first;
+			if (truthy(EVAL(cond, env)))
+			{
+				// Return true-expr
+				return EVAL(list->as_pair.rest->as_pair.rest->as_pair.first, env);
+			}
+			else
+			{
+				// Return false-expr, default = NIL
+				if (len == 4)
+				{
+					return EVAL(list->as_pair.rest->as_pair.rest->as_pair.rest->as_pair.first, env);
+				}
+				else
+				{
+					return c_nil;
+				}
+			}
 		}
 		else if (name == i_do)
 		{
@@ -1451,6 +1490,7 @@ void init (int ncells, int nchars)
 	i_def_bang = string_intern_cstring("def!");
 	i_let_star = string_intern_cstring("let*");
 	i_do = string_intern_cstring("do");
+	i_if = string_intern_cstring("if");
 	i_fn_star = string_intern_cstring("fn*");
 }
 
@@ -1479,15 +1519,18 @@ int main (int argc, char **argv)
 	env_set_c(repl_env, "<=", make_cfunc(bi_less_than_equal));
 	env_set_c(repl_env, ">=", make_cfunc(bi_more_than_equal));
 
-	// Print out the environment for debugging
-	printf("env:\n");
+	// (DEBUG) Print out the environment
+	/*
+	printf("---\nenv:\n");
 	PRINT(repl_env);
-	printf("----------\n");
+	printf("---\n");
+	*/
 
 	while(1)
 	{
 		printf("user> ");
 		rep(repl_env);
 	}
+
 	return 0;
 }
