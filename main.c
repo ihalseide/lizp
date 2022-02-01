@@ -780,7 +780,7 @@ Cell *EVAL (Cell *, Cell *env);
 
 // Evaluate each item of list x
 // does not modify x
-Cell *eval_list (Cell *env, Cell *x)
+Cell *eval_each (Cell *env, Cell *x)
 {
 	Cell *y = make_pair(NULL, c_nil);
 	Cell *p_y = y;
@@ -820,15 +820,31 @@ Cell *symbol_lookup (Cell *env, Cell *x)
 	return val;
 }
 
-Cell *eval_apply (Cell *env, Cell *list)
+Cell *i_def_bang;
+
+Cell *eval_list (Cell *env, Cell *list)
 {
 	if (env == NULL || list == NULL)
 	{
 		return NULL;
 	}
 
+	if (list->as_pair.first->kind == T_SYMBOL)
+	{
+		// Special forms
+		Cell *head = list->as_pair.first;
+		if (head->as_symbol == i_def_bang)
+		{
+			// (def! <symbol> value)
+			Cell *symbol = list->as_pair.rest->as_pair.first;
+			Cell *value = EVAL(list->as_pair.rest->as_pair.rest->as_pair.first, env);
+			env_set(env, symbol, value);
+			return value;
+		}
+	}
+
 	// Eval each item in list
-	Cell *y = eval_list(env, list);
+	Cell *y = eval_each(env, list);
 
 	// List application
 	Cell *fn = y->as_pair.first;
@@ -889,7 +905,7 @@ Cell *EVAL (Cell *x, Cell *env)
 		case T_SYMBOL:
 			return symbol_lookup(env, x);
 		case T_PAIR:
-			return eval_apply(env, x);
+			return eval_list(env, x);
 		default:
 			// error
 			fprintf(stderr, "cell_init: invalid cell kind\n");
@@ -995,6 +1011,9 @@ int main (int argc, char **argv)
 	env_set_c(repl_env, "-", make_cfunc(bi_minus));
 	env_set_c(repl_env, "*", make_cfunc(bi_star));
 	env_set_c(repl_env, "/", make_cfunc(bi_slash));
+
+	// Initialize certain interned strings for special forms
+	i_def_bang = string_intern_cstring("def!");
 
 	// Print out the environment for debugging
 	printf("env:\n");
