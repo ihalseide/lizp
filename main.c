@@ -26,7 +26,6 @@ enum Cell_kind
 typedef struct cell Cell;
 struct cell
 {
-	int free;
 	enum Cell_kind kind;           // Type of cell
 	union
 	{
@@ -300,9 +299,11 @@ Cell *string_intern (const char *start, int length)
 	return string_create(start, length);
 }
 
-Cell *string_intern_cstring (char *str)
+// For interning literal constant C-strings in this source code
+Cell *string_intern_cstring (const char *str)
 {
-	return string_intern(str, strlen(str));
+	assert(str != NULL);
+	return string_create(str, strlen(str));
 }
 
 // Inserts a cell back into the free list
@@ -312,8 +313,6 @@ void cell_free (Cell *x)
 	{
 		return;
 	}
-
-	x->free = 1;
 
 	x->as_pair.rest = cell_pool->as_pair.rest;
 	cell_pool->as_pair.rest = x;
@@ -1435,7 +1434,6 @@ void init (int ncells, int nchars)
 	for (int i = 0; i < (cell_pool_cap - 1); i++)
 	{
 		cell_pool[i].as_pair.rest = &cell_pool[i + 1];
-		cell_pool[i].free = 0;
 	}
 	cell_pool[cell_pool_cap - 1].as_pair.rest = cell_pool;
 
