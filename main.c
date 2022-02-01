@@ -23,12 +23,6 @@ Cell * c_nil = NULL;
 Cell * c_true = NULL;
 Cell * c_false = NULL;
 
-// Special form interned strings
-Cell *i_def_bang = NULL;
-Cell *i_let_star = NULL;
-Cell *i_do = NULL;
-Cell *i_fn_star = NULL;
-
 char char_end (char c)
 {
 	switch (c)
@@ -369,19 +363,26 @@ int read_string(const char *start, int length, Cell **out)
 		return 0;
 	}
 
-	// Consume first quote
-	string_step(&start, &length, 1);
-
-	// Read chars until next quote
 	const char *p = start;
 	int rem = length;
+
+	// Consume first quote
+	string_step(&p, &rem, 1);
+
+	// Read chars until next quote
 	while ((rem > 0) && (*p != '"'))
+	{
+		string_step(&p, &rem, 1);
+	}
+	// Consume the last quote
+	if (*p == '"')
 	{
 		string_step(&p, &rem, 1);
 	}
 
 	int len = length - rem;
-	*out = string_intern(start, len);
+	// Don't include the quotes
+	*out = string_intern(start + 1, len - 2);
 	return len;
 }
 
@@ -917,6 +918,12 @@ int list_length (Cell *list)
 	return i;
 }
 
+// Special form interned strings
+Cell *i_def_bang = NULL;
+Cell *i_let_star = NULL;
+Cell *i_do = NULL;
+Cell *i_fn_star = NULL;
+
 Cell *eval_list (Cell *env, Cell *list)
 {
 	if (env == NULL || list == NULL)
@@ -931,8 +938,10 @@ Cell *eval_list (Cell *env, Cell *list)
 		if (name == i_def_bang)
 		{
 			// (def! <symbol> value)
-			if (list_length(list) != 3)
+			int l;
+			if ((l =list_length(list)) != 3)
 			{
+				printf("(given length: %d)", l);
 				return string_intern_cstring("def! : error : requires 2 operands");
 			}
 			Cell *symbol = list->as_pair.rest->as_pair.first;
