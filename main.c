@@ -1,3 +1,5 @@
+// TODO line 880
+
 #include <stdio.h>
 #include <string.h>
 #include <stddef.h>
@@ -22,6 +24,10 @@ Cell *string_list = NULL;
 Cell * c_nil;
 Cell * c_true;
 Cell * c_false;
+
+// Special form interned strings
+Cell *i_def_bang;
+Cell *i_let_star;
 
 char char_end (char c)
 {
@@ -820,7 +826,21 @@ Cell *symbol_lookup (Cell *env, Cell *x)
 	return val;
 }
 
-Cell *i_def_bang;
+int list_length (Cell *list)
+{
+	if ((list == NULL) || (list->kind != T_PAIR))
+	{
+		return 0;
+	}
+
+	int i;
+	for (i = 0; list != c_nil; i++)
+	{
+		list = list->as_pair.rest;
+	}
+
+	return i;
+}
 
 Cell *eval_list (Cell *env, Cell *list)
 {
@@ -832,14 +852,36 @@ Cell *eval_list (Cell *env, Cell *list)
 	if (list->as_pair.first->kind == T_SYMBOL)
 	{
 		// Special forms
-		Cell *head = list->as_pair.first;
-		if (head->as_symbol == i_def_bang)
+		Cell *name = list->as_pair.first->as_symbol;
+		if (name == i_def_bang)
 		{
 			// (def! <symbol> value)
+			if (list_length(list) != 3)
+			{
+				return string_intern_cstring("error: special form \"def!\" requires 2 operands");
+			}
 			Cell *symbol = list->as_pair.rest->as_pair.first;
 			Cell *value = EVAL(list->as_pair.rest->as_pair.rest->as_pair.first, env);
 			env_set(env, symbol, value);
 			return value;
+		}
+		else if (name == i_let_star)
+		{
+			// (let* <pairs> expr)
+			if (list_length(list) != 3)
+			{
+				return string_intern_cstring("error: special form \"let*\" requires 2 operands");
+			}
+
+			Cell *let_env = env_create(env);
+			Cell *pairs = list->as_pair.rest->as_pair.first;
+			Cell *expr = EVAL(list->as_pair.rest->as_pair.rest->as_pair.first, let_env);
+
+			// Bind each (symbol value) pair within <pairs>
+			// TODO
+
+			// Get rid of the temporary environment
+			cell_free(let_env);
 		}
 	}
 
@@ -959,6 +1001,12 @@ Cell *bi_slash (Cell *args)
 	return make_int(a / b);
 }
 
+Cell *bi_len (Cell *args)
+{
+	int n = list_length(args);
+	return make_int(n);
+}
+
 // How to set up the cell memory
 // SHOULD ONLY BE CALLED ONCE
 void pools_init (int ncells, int nchars)
@@ -1011,9 +1059,11 @@ int main (int argc, char **argv)
 	env_set_c(repl_env, "-", make_cfunc(bi_minus));
 	env_set_c(repl_env, "*", make_cfunc(bi_star));
 	env_set_c(repl_env, "/", make_cfunc(bi_slash));
+	env_set_c(repl_env, "len", make_cfunc(bi_len));
 
 	// Initialize certain interned strings for special forms
 	i_def_bang = string_intern_cstring("def!");
+	i_let_star = string_intern_cstring("let*");
 
 	// Print out the environment for debugging
 	printf("env:\n");
