@@ -988,11 +988,13 @@ int main (int argc, char **argv)
 
 	// Initialize the REPL environment
 	Cell *repl_env = env_create(c_nil);
+	env_set_c(repl_env, "nil", c_nil);
+	env_set_c(repl_env, "true", c_true);
+	env_set_c(repl_env, "false", c_false);
 	env_set_c(repl_env, "+", make_cfunc(bi_plus));
 	env_set_c(repl_env, "-", make_cfunc(bi_minus));
 	env_set_c(repl_env, "*", make_cfunc(bi_star));
 	env_set_c(repl_env, "/", make_cfunc(bi_slash));
-	env_set_c(repl_env, "one", make_int(1));
 
 	// Print out the environment for debugging
 	printf("env:\n");
