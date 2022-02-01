@@ -251,7 +251,7 @@ Cell *string_create (const char *start, int length)
 		*char_free++ = start[i];
 	}
 
-	// Add string terminator for easy use with C 
+	// Add string terminator for easy use with C
 	// (Even though every string is length encoded,
 	//  it's a hassle to add a null terminator if it isn't already there)
 	*char_free++ = '\0';
@@ -1214,7 +1214,7 @@ void rep (Cell *env)
 }
 
 // Built-in functions:
-
+// ---
 Cell *bi_plus (Cell *args)
 {
 	int a = args->as_pair.first->as_int;
@@ -1242,6 +1242,173 @@ Cell *bi_slash (Cell *args)
 	int b = args->as_pair.rest->as_pair.first->as_int;
 	return make_int(a / b);
 }
+
+Cell *bi_list (Cell *args)
+{
+	if (args == NULL)
+	{
+		return make_empty_list();
+	}
+	return args;
+}
+
+Cell *bi_list_p (Cell *args)
+{
+	if (list_length(args) != 1)
+	{
+		return string_intern_cstring("list? : error : requires 1 argument");
+	}
+	return (args->as_pair.first->kind == T_PAIR)? c_true : c_false;
+}
+
+Cell *bi_empty_p (Cell *args)
+{
+	if (list_length(args) != 1)
+	{
+		return string_intern_cstring("empty? : error : requires 1 argument");
+	}
+	if (args->as_pair.first->kind != T_PAIR)
+	{
+		return string_intern_cstring("empty? : error : requires list argument");
+	}
+	return (args->as_pair.first->as_pair.first == NULL)? c_true : c_false;
+}
+
+Cell *bi_count (Cell *args)
+{
+	if (list_length(args) != 1)
+	{
+		return string_intern_cstring("count : error : requires 1 argument");
+	}
+	if (args->as_pair.first->kind != T_PAIR)
+	{
+		return string_intern_cstring("count : error : requires list argument");
+	}
+	return make_int(list_length(args->as_pair.first));
+}
+
+bool cell_equal (Cell *x, Cell *y)
+{
+	if ((x == NULL) || (y == NULL))
+	{
+		return x == y;
+	}
+	if (x == y)
+	{
+		return true;
+	}
+	if (x->kind != y->kind)
+	{
+		return false;
+	}
+	_Static_assert(_CELL_KIND_COUNT == 6, "handle all cell kinds");
+	switch (x->kind)
+	{
+		case T_INT:
+			return x->as_int == y->as_int;
+		case T_SYMBOL:
+			return x->as_symbol == y->as_symbol;
+		case T_C_FUNCTION:
+			return x->as_c_func == y->as_c_func;
+		case T_PAIR:
+			return (cell_equal(x->as_pair.first, y->as_pair.first)
+					&& cell_equal(x->as_pair.rest, y->as_pair.rest));
+		case T_FUNCTION:
+		case T_STRING:
+			// TODO: Not implemetned, default false
+			return false;
+		default:
+			assert(0);
+	}
+}
+
+Cell *bi_equal (Cell *args)
+{
+	if (list_length(args) != 2)
+	{
+		return string_intern_cstring("= : error : requires 2 argument");
+	}
+	return (cell_equal(args->as_pair.first, args->as_pair.rest->as_pair.first))? c_true : c_false;
+}
+
+Cell *bi_less_than (Cell *args)
+{
+	if (list_length(args) != 2)
+	{
+		return string_intern_cstring("= : error : requires 2 argument");
+	}
+	Cell *a = args->as_pair.first;
+	Cell *b = args->as_pair.rest->as_pair.first;
+	if (a->kind != T_INT)
+	{
+		return string_intern_cstring("= : error : 1st argument must be an integer");
+	}
+	if (b->kind != T_INT)
+	{
+		return string_intern_cstring("= : error : 2nd argument must be an integer");
+	}
+	return (a->as_int < b->as_int)? c_true : c_false;
+}
+
+Cell *bi_more_than (Cell *args)
+{
+	if (list_length(args) != 2)
+	{
+		return string_intern_cstring("> : error : requires 2 argument");
+	}
+	Cell *a = args->as_pair.first;
+	Cell *b = args->as_pair.rest->as_pair.first;
+	if (a->kind != T_INT)
+	{
+		return string_intern_cstring("> : error : 1st argument must be an integer");
+	}
+	if (b->kind != T_INT)
+	{
+		return string_intern_cstring("> : error : 2nd argument must be an integer");
+	}
+	return (a->as_int > b->as_int)? c_true : c_false;
+}
+
+Cell *bi_less_than_equal (Cell *args)
+{
+	if (list_length(args) != 2)
+	{
+		return string_intern_cstring("<= : error : requires 2 argument");
+	}
+	Cell *a = args->as_pair.first;
+	Cell *b = args->as_pair.rest->as_pair.first;
+	if (a->kind != T_INT)
+	{
+		return string_intern_cstring("<= : error : 1st argument must be an integer");
+	}
+	if (b->kind != T_INT)
+	{
+		return string_intern_cstring("<= : error : 2nd argument must be an integer");
+	}
+	return (a->as_int <= b->as_int)? c_true : c_false;
+}
+
+Cell *bi_more_than_equal (Cell *args)
+{
+	if (list_length(args) != 2)
+	{
+		return string_intern_cstring(">= : error : requires 2 argument");
+	}
+	Cell *a = args->as_pair.first;
+	Cell *b = args->as_pair.rest->as_pair.first;
+	if (a->kind != T_INT)
+	{
+		return string_intern_cstring(">= : error : 1st argument must be an integer");
+	}
+	if (b->kind != T_INT)
+	{
+		return string_intern_cstring(">= : error : 2nd argument must be an integer");
+	}
+	return (a->as_int >= b->as_int)? c_true : c_false;
+}
+
+
+// --- end of built-in functions
 
 // How to set up the cell memory
 // SHOULD ONLY BE CALLED ONCE
@@ -1303,6 +1470,16 @@ int main (int argc, char **argv)
 	env_set_c(repl_env, "-", make_cfunc(bi_minus));
 	env_set_c(repl_env, "*", make_cfunc(bi_star));
 	env_set_c(repl_env, "/", make_cfunc(bi_slash));
+	env_set_c(repl_env, "prn", make_cfunc(bi_list));//todo
+	env_set_c(repl_env, "list", make_cfunc(bi_list));
+	env_set_c(repl_env, "list?", make_cfunc(bi_list_p));
+	env_set_c(repl_env, "empty?", make_cfunc(bi_empty_p));
+	env_set_c(repl_env, "count", make_cfunc(bi_count));
+	env_set_c(repl_env, "=", make_cfunc(bi_equal));
+	env_set_c(repl_env, "<", make_cfunc(bi_less_than));
+	env_set_c(repl_env, ">", make_cfunc(bi_more_than));
+	env_set_c(repl_env, "<=", make_cfunc(bi_less_than_equal));
+	env_set_c(repl_env, ">=", make_cfunc(bi_more_than_equal));
 
 	// Print out the environment for debugging
 	printf("env:\n");
