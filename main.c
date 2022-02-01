@@ -19,15 +19,15 @@ int char_pool_cap = 0;
 Cell *string_list = NULL;
 
 // Constant symbols
-Cell * c_nil;
-Cell * c_true;
-Cell * c_false;
+Cell * c_nil = NULL;
+Cell * c_true = NULL;
+Cell * c_false = NULL;
 
 // Special form interned strings
-Cell *i_def_bang;
-Cell *i_let_star;
-Cell *i_do;
-Cell *i_fn_star;
+Cell *i_def_bang = NULL;
+Cell *i_let_star = NULL;
+Cell *i_do = NULL;
+Cell *i_fn_star = NULL;
 
 char char_end (char c)
 {
@@ -177,7 +177,7 @@ Cell *make_symbol (Cell *name)
 	return x;
 }
 
-Cell *make_string (char *start, int length)
+Cell *make_string (const char *start, int length)
 {
 	Cell *x = cell_init(T_STRING);
 	if (x)
@@ -309,6 +309,25 @@ Cell *make_cfunc (Cell *(*c_func)(Cell*))
 	return x;
 }
 
+void string_skip_white(const char **stream, int *length)
+{
+	const char *view = *stream;
+	int rem = *length;
+	while (isspace(*view) && (rem > 0))
+	{
+		view++;
+		rem--;
+	}
+	*stream = view;
+	*length = rem;
+}
+
+void string_step (const char **stream, int *length, int n)
+{
+	*stream += n;
+	*length -= n;
+}
+
 bool symbol_eq (const Cell *s1, const Cell *s2)
 {
 	// Validate inputs
@@ -324,6 +343,12 @@ bool symbol_eq (const Cell *s1, const Cell *s2)
 
 int read_symbol (const char *start, int length, Cell **out)
 {
+	// Validate inputs
+	if ((start == NULL) || out == NULL)
+	{
+		return 0;
+	}
+
 	// Get how much of `s` is alphabetical chars
 	int i;
 	for (i = 0; (i < length) && char_is_symbol(start[i]); i++)
@@ -335,8 +360,39 @@ int read_symbol (const char *start, int length, Cell **out)
 	return i;
 }
 
+// Read a quoted string
+int read_string(const char *start, int length, Cell **out)
+{
+	// Validate inputs
+	if ((start == NULL) || out == NULL)
+	{
+		return 0;
+	}
+
+	// Consume first quote
+	string_step(&start, &length, 1);
+
+	// Read chars until next quote
+	const char *p = start;
+	int rem = length;
+	while ((rem > 0) && (*p != '"'))
+	{
+		string_step(&p, &rem, 1);
+	}
+
+	int len = length - rem;
+	*out = string_intern(start, len);
+	return len;
+}
+
 int read_int (const char *start, int length, Cell **out)
 {
+	// Validate inputs
+	if ((start == NULL) || out == NULL)
+	{
+		return 0;
+	}
+
 	int start_length = length;
 
 	int sign = 1;
@@ -360,29 +416,16 @@ int read_int (const char *start, int length, Cell **out)
 	return num_len;
 }
 
-void string_skip_white(const char **stream, int *length)
-{
-	const char *view = *stream;
-	int rem = *length;
-	while (isspace(*view) && (rem > 0))
-	{
-		view++;
-		rem--;
-	}
-	*stream = view;
-	*length = rem;
-}
-
-void string_step (const char **stream, int *length, int n)
-{
-	*stream += n;
-	*length -= n;
-}
-
 int read_form (const char *start, int length, Cell **out);
 
 int read_list (const char *start, int length, Cell **out)
 {
+	// Validate inputs
+	if ((start == NULL) || out == NULL)
+	{
+		return 0;
+	}
+
 	const char *view = start;
 	int rem = length;
 
@@ -602,6 +645,10 @@ int read_form (const char *start, int length, Cell **out)
 
 	switch (*view)
 	{
+		case '"':
+			// Read quoted string
+			string_step(&view, &rem, read_string(view, rem, out));
+			break;
 		case '(':
 		case '{':
 		case '[':
@@ -1155,6 +1202,12 @@ void init (int ncells, int nchars)
 	c_nil = make_symbol(string_intern_cstring("nil"));
 	c_true = make_symbol(string_intern_cstring("true"));
 	c_false = make_symbol(string_intern_cstring("false"));
+
+	// Initialize certain interned strings for special forms
+	i_def_bang = string_intern_cstring("def!");
+	i_let_star = string_intern_cstring("let*");
+	i_do = string_intern_cstring("do");
+	i_fn_star = string_intern_cstring("fn*");
 }
 
 int main (int argc, char **argv)
@@ -1171,12 +1224,6 @@ int main (int argc, char **argv)
 	env_set_c(repl_env, "-", make_cfunc(bi_minus));
 	env_set_c(repl_env, "*", make_cfunc(bi_star));
 	env_set_c(repl_env, "/", make_cfunc(bi_slash));
-
-	// Initialize certain interned strings for special forms
-	i_def_bang = string_intern_cstring("def!");
-	i_let_star = string_intern_cstring("let*");
-	i_do = string_intern_cstring("do");
-	i_fn_star = string_intern_cstring("fn*");
 
 	// Print out the environment for debugging
 	printf("env:\n");
