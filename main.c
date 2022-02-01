@@ -117,7 +117,7 @@ Cell *cell_init (enum Cell_kind k)
 		}
 		else
 		{
-			fprintf(stderr, "cell_init: invalid cell kind\n");
+			fprintf(stderr, "cell_init : error : invalid cell kind\n");
 			exit(1);
 		}
 	}
@@ -503,11 +503,13 @@ int read_list (const char *start, int length, Cell **out)
 		// Unexpected end of list, or multiple items after the '.' dot
 		if (has_dot)
 		{
-			fprintf(stderr, "expected the form directly after the '.' (dot) to be the final form of the enclosing list\n");
+			*out = string_intern_cstring("read_list : error : expected the form directly after the '.' (dot) to be the final form of the enclosing list");
+			return (*out)->as_str.length;
 		}
 		else
 		{
-			fprintf(stderr, "unexpected end of list\n");
+			*out = string_intern_cstring("read_list : error : unexpected end of list");
+			return (*out)->as_str.length;
 		}
 		exit(1);
 	}
@@ -667,20 +669,20 @@ int read_form (const char *start, int length, Cell **out)
 		case '}':
 		case ']':
 			// Closing paren, shouldn't appear in valid text with matched parens
-			fprintf(stderr, "read_form: unmatched closing '%c' character\n", *view);
-			exit(1);
+			*out = string_intern_cstring("read_form : error : unmatched list closing character");
+			return (*out)->as_str.length;
 		case '.':
 			// Should only be inside when reading a list
-			fprintf(stderr, "read_form: unexpected '.' (dot) character\n");
-			exit(1);
+			*out = string_intern_cstring("read_form : error : unexpected '.' (dot) character");
+			return (*out)->as_str.length;
+		case '\0':
+			// Null terminator for strings
+			*out = string_intern_cstring("read_form : error : unexpected end of input string");
+			return (*out)->as_str.length;
 		case '-':
 			// Number
 			string_step(&view, &rem, read_int(view, rem, out));
 			break;
-		case '\0':
-			// Null terminator for strings
-			fprintf(stderr, "read_form: unexpected end of string");
-			exit(1);
 		default:
 			if (isdigit(*view))
 			{
@@ -858,9 +860,8 @@ int print_form (Cell *x, char *out, int length)
 			return print_pair(x, out, length);
 		default:
 			// error
-			fprintf(stderr, "cell_print: invalid cell kind\n");
-			exit(1);
-			break;
+			fprintf(stderr, "cell_print : error : invalid cell kind\n");
+			return 0;
 	}
 }
 
