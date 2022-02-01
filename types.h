@@ -27,7 +27,7 @@ struct cell
 		Cell * as_symbol;          // Symbol name value (pointer to string cell)
 		struct                     // String value
 		{
-			char *start;
+			const char *start;
 			int length;
 		} as_str;
 		struct
