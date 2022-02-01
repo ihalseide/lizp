@@ -26,6 +26,7 @@ Cell * c_false;
 // Special form interned strings
 Cell *i_def_bang;
 Cell *i_let_star;
+Cell *i_do;
 
 char char_end (char c)
 {
@@ -804,7 +805,7 @@ Cell *EVAL (Cell *, Cell *env);
 // does not modify x
 Cell *eval_each (Cell *env, Cell *x)
 {
-	Cell *y = make_pair(NULL, c_nil);
+	Cell *y = make_empty_list();
 	Cell *p_y = y;
 	Cell *p_x = x;
 
@@ -911,10 +912,26 @@ Cell *eval_list (Cell *env, Cell *list)
 
 			Cell* result = EVAL(expr, let_env);
 
-			// discard the temporary environment
+			// FIXME: discard the temporary environment
 			//cell_free_all(let_env);
 
 			return result;
+		}
+		else if (name == i_do)
+		{
+			// (do <exprs...>)
+			Cell *p = list->as_pair.rest;
+
+			// eval the rest of the elements
+			while ((p != c_nil) && (p->as_pair.rest != c_nil))
+			{
+				EVAL(p->as_pair.first, env);
+
+				// next
+				p = p->as_pair.rest;
+			}
+
+			return EVAL(p->as_pair.first, env);
 		}
 	}
 
@@ -1099,6 +1116,7 @@ int main (int argc, char **argv)
 	// Initialize certain interned strings for special forms
 	i_def_bang = string_intern_cstring("def!");
 	i_let_star = string_intern_cstring("let*");
+	i_do = string_intern_cstring("do");
 
 	// Print out the environment for debugging
 	printf("env:\n");
