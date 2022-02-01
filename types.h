@@ -17,6 +17,7 @@ enum Cell_kind
 typedef struct cell Cell;
 struct cell
 {
+	int free;
 	enum Cell_kind kind;         // Type of cell
 	union
 	{

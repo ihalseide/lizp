@@ -1,5 +1,3 @@
-// TODO line 880
-
 #include <stdio.h>
 #include <string.h>
 #include <stddef.h>
@@ -251,13 +249,31 @@ Cell *string_intern_cstring (char *str)
 // Inserts a cell back into the free list
 void cell_free (Cell *x)
 {
-	if (!x || !cell_pool)
+	if ((x == NULL) || (cell_pool == NULL))
 	{
 		return;
 	}
 
+	x->free = 1;
+
 	x->as_pair.rest = cell_pool->as_pair.rest;
 	cell_pool->as_pair.rest = x;
+}
+
+void cell_free_all (Cell *x)
+{
+	if ((x == NULL))
+	{
+		return;
+	}
+
+	if (x->kind == T_PAIR)
+	{
+		cell_free_all(x->as_pair.first);
+		cell_free_all(x->as_pair.rest);
+	}
+
+	cell_free(x);
 }
 
 Cell *make_int (int n)
@@ -858,7 +874,7 @@ Cell *eval_list (Cell *env, Cell *list)
 			// (def! <symbol> value)
 			if (list_length(list) != 3)
 			{
-				return string_intern_cstring("error: special form \"def!\" requires 2 operands");
+				return string_intern_cstring("def! : error : requires 2 operands");
 			}
 			Cell *symbol = list->as_pair.rest->as_pair.first;
 			Cell *value = EVAL(list->as_pair.rest->as_pair.rest->as_pair.first, env);
@@ -870,18 +886,35 @@ Cell *eval_list (Cell *env, Cell *list)
 			// (let* <pairs> expr)
 			if (list_length(list) != 3)
 			{
-				return string_intern_cstring("error: special form \"let*\" requires 2 operands");
+				return string_intern_cstring("let* : error : requires 2 operands");
 			}
 
 			Cell *let_env = env_create(env);
 			Cell *pairs = list->as_pair.rest->as_pair.first;
-			Cell *expr = EVAL(list->as_pair.rest->as_pair.rest->as_pair.first, let_env);
+			Cell *expr = list->as_pair.rest->as_pair.rest->as_pair.first;
 
 			// Bind each (symbol value) pair within <pairs>
-			// TODO
+			if (list_length(pairs) % 2 != 0)
+			{
+				return string_intern_cstring("let* : error : second argument must have even length");
+			}
+			while (pairs != c_nil)
+			{
+				Cell *sym = pairs->as_pair.first;
+				Cell *val = EVAL(pairs->as_pair.rest->as_pair.first, let_env);
 
-			// Get rid of the temporary environment
-			cell_free(let_env);
+				env_set(let_env, sym, val);
+
+				// Next pair
+				pairs = pairs->as_pair.rest->as_pair.rest;
+			}
+
+			Cell* result = EVAL(expr, let_env);
+
+			// discard the temporary environment
+			//cell_free_all(let_env);
+
+			return result;
 		}
 	}
 
@@ -1009,7 +1042,7 @@ Cell *bi_len (Cell *args)
 
 // How to set up the cell memory
 // SHOULD ONLY BE CALLED ONCE
-void pools_init (int ncells, int nchars)
+void init (int ncells, int nchars)
 {
 	// Allocate the arrays
 	cell_pool = malloc(ncells * sizeof(*cell_pool));
@@ -1028,9 +1061,11 @@ void pools_init (int ncells, int nchars)
 	char_pool_cap = nchars;
 
 	// Link the free cells together in a circular list
+	// DEBUG: (set cell.free to 0)
 	for (int i = 0; i < (cell_pool_cap - 1); i++)
 	{
 		cell_pool[i].as_pair.rest = &cell_pool[i + 1];
+		cell_pool[i].free = 0;
 	}
 	cell_pool[cell_pool_cap - 1].as_pair.rest = cell_pool;
 
@@ -1048,7 +1083,7 @@ void pools_init (int ncells, int nchars)
 int main (int argc, char **argv)
 {
 	// Initialize memories
-	pools_init(1024, 2048);
+	init(1024, 2048);
 
 	// Initialize the REPL environment
 	Cell *repl_env = env_create(c_nil);
