@@ -6,6 +6,9 @@
 #include <stdlib.h>
 #include <ctype.h>
 
+// TODO: fix symbol lookup
+// TODO: fix make_symbol or something so that copies arent made
+
 enum Cell_kind
 {
 	T_INT,
@@ -15,6 +18,16 @@ enum Cell_kind
 	T_C_FUNCTION,
 	T_PAIR,
 	_CELL_KIND_COUNT,
+};
+
+enum Special_form
+{
+	SF_DEF_BANG,
+	SF_LET_STAR,
+	SF_IF,
+	SF_DO,
+	SF_FN_STAR,
+	_SPECIAL_FORM_COUNT,
 };
 
 // Pairs & Lists:
@@ -37,8 +50,8 @@ struct cell
 			const char *start;
 			int length;
 		} as_str;
-		struct
-		{
+		struct                     // Very similar to pair, could be combined,
+		{                          // but it adds clarity.
 			Cell *params;
 			Cell *body;
 		} as_func;
@@ -62,10 +75,17 @@ char *char_free = NULL;
 int char_pool_cap = 0;
 Cell *string_list = NULL;
 
-// Constant symbols
-Cell * c_nil = NULL;
-Cell * c_true = NULL;
-Cell * c_false = NULL;
+// Cell constant values (symbols)
+Cell c_nil;
+Cell c_true;
+Cell c_false;
+
+// Special form constant cells (symbols)
+Cell c_sf_def_bang;
+Cell c_sf_let_star;
+Cell c_sf_fn_star_bang;
+Cell c_sf_do;
+Cell c_sf_if;
 
 char char_end (char c)
 {
@@ -97,10 +117,15 @@ int char_is_symbol (char c)
 // If len == 0, then this is equivalent to strcmp(s1,s2) == 0
 // Otherwise, this only returns true if s1 and s2 are equal up to
 // the `len`th character.
-bool stream_eq (const char *s1, const char *s2, int len)
+bool stream_eq (const char *s1, int len1, const char *s2, int len2)
 {
 	// Validate arguments
-	if ((s1 == NULL) || (s2 == NULL) || (len < 0))
+	if ((s1 == NULL) || (s2 == NULL) || (len1 < 0) || (len2 < 0))
+	{
+		return false;
+	}
+
+	if (len1 != len2)
 	{
 		return false;
 	}
@@ -110,28 +135,16 @@ bool stream_eq (const char *s1, const char *s2, int len)
 		return true;
 	}
 
-	if (len)
+	// Compare length strings
+	for (int i = 0; i < len1; i++)
 	{
-		// Compare length strings
-		for (int i = 0; i < len; i++)
+		if (s1[i] != s2[i])
 		{
-			if (s1[i] != s2[i])
-			{
-				return false;
-			}
+			return false;
 		}
-		return true;
 	}
-	else
-	{
-		// Compare c-style string
-		while (*s1 && *s2 && *s1 == *s2)
-		{
-			s1++;
-			s2++;
-		}
-		return *s1 == *s2;
-	}
+
+	return true;
 }
 
 // Removes a cell from the cell pool a.k.a. free list
@@ -156,14 +169,19 @@ Cell *cell_init (enum Cell_kind k)
 	if (x)
 	{
 		_Static_assert(_CELL_KIND_COUNT == 6, "handle all cell kinds");
-		if ((T_INT <= k) && (k <= _CELL_KIND_COUNT))
+		switch (k)
 		{
-			x->kind = k;
-		}
-		else
-		{
-			fprintf(stderr, "cell_init : error : invalid cell kind\n");
-			exit(1);
+			case T_INT:
+			case T_STRING:
+			case T_SYMBOL:
+			case T_FUNCTION:
+			case T_C_FUNCTION:
+			case T_PAIR:
+				x->kind = k;
+				break;
+			default:
+				fprintf(stderr, "cell_init : error : invalid cell kind\n");
+				exit(1);
 		}
 	}
 	return x;
@@ -191,9 +209,10 @@ Cell *make_pair (Cell *first, Cell *rest)
 	return x;
 }
 
+// The only time NULL should ever appear is in the first slot of an empty list!
 Cell *make_empty_list ()
 {
-	return make_pair(NULL, NULL);
+	return make_pair(NULL, &c_nil);
 }
 
 bool is_list (Cell *x)
@@ -226,8 +245,8 @@ int list_length (Cell *list)
 bool truthy (Cell *x)
 {
 	return ((x != NULL)
-			&& (x != c_nil)
-			&& (x != c_false));
+			&& (x != &c_nil)
+			&& (x != &c_false));
 }
 
 Cell *make_symbol (Cell *name)
@@ -307,8 +326,7 @@ Cell *string_intern (const char *start, int length)
 	do
 	{
 		Cell *s = p->as_pair.first;
-		if ((s->as_str.length == length)
-				&& stream_eq(s->as_str.start, start, length))
+		if (stream_eq(s->as_str.start, s->as_str.length, start, length))
 		{
 			// Found an internal string, so return that
 			return p->as_pair.first;
@@ -425,7 +443,25 @@ int read_symbol (const char *start, int length, Cell **out)
 		continue;
 	}
 	Cell *name = string_intern(start, i);
-	*out = make_symbol(name);
+
+	// Don't create new copies of the constant symbols
+	if (name == c_nil.as_symbol)
+	{
+		*out = &c_nil;
+	}
+	else if (name == c_true.as_symbol)
+	{
+		*out = &c_true;
+	}
+	else if (name == c_false.as_symbol)
+	{
+		*out = &c_false;
+	}
+	else
+	{
+		*out = make_symbol(name);
+	}
+
 	return i;
 }
 
@@ -533,11 +569,11 @@ int read_list (const char *start, int length, Cell **out)
 
 	// Read the rest of the normal elements (don't handle the dot)
 	Cell *list, *p;
-	p = list = make_pair(e, NULL);
+	p = list = make_pair(e, &c_nil);
 	while ((rem > 0) && (*view != closer) && (*view != '.'))
 	{
 		string_step(&view, &rem, read_str(view, rem, &e));
-		p->as_pair.rest = make_pair(e, NULL);
+		p->as_pair.rest = make_pair(e, &c_nil);
 		p = p->as_pair.rest;
 		string_skip_white(&view, &rem);
 	}
@@ -599,38 +635,50 @@ Cell *env_create (Cell *env_outer)
 // Search only the current env for the symbol
 // Returns:
 //   when found -> the (symbol . value) "slot"
-//   not found -> NULL!
+//   not found -> nil
 Cell *env_get_self (Cell *env, const Cell *sym)
 {
-	// Search through the (symbol . value) list in the environment
+	// Validate inputs
+	if ((env == NULL) || (env == &c_nil) || (env->kind != T_PAIR)
+			|| (sym == NULL) || (sym == &c_nil) || (env->kind != T_SYMBOL))
+	{
+		return &c_nil;
+	}
+
+	// Search through the slots list, aka (symbol . value) list in the environment
 	Cell *slots = env->as_pair.rest;
-	while (slots->as_pair.first != NULL)
+	while (slots != &c_nil)
 	{
 		if (symbol_eq(slots->as_pair.first->as_pair.first, sym))
 		{
+			// Found a symbol, return the slot
 			return slots->as_pair.first;
 		}
 
+		// Next
 		slots = slots->as_pair.rest;
 	}
-	return NULL;
+	return &c_nil;
 }
 
 // Find the innermost env which contains symbol
-// Returns: environment Cell or NULL!
+// Returns:
+//   if found -> environment Cell 
+//   not found -> nil
 Cell *env_find (Cell *env, const Cell *sym)
 {
 	// Validate inputs
-	if ((env == NULL) || (sym == NULL))
+	if ((env == NULL) || (env == &c_nil) || (env->kind != T_PAIR)
+			|| (sym == NULL) || (sym->kind != T_SYMBOL))
 	{
-		return NULL;
+		return &c_nil;
 	}
 
 	// Search up the environment hierarchy
 	while (is_list(env) && !is_empty_list(env))
 	{
 		Cell *slot = env_get_self(env, sym);
-		if (slot != NULL)
+		if (slot != &c_nil)
 		{
 			return env;
 		}
@@ -640,23 +688,27 @@ Cell *env_find (Cell *env, const Cell *sym)
 	}
 
 	// Not found
-	return NULL;
+	return &c_nil;
 }
 
-// Get the innermost definition for the symbol
+// Get the innermost definition for the symbol.
+// NOTE: can return NULL in order to distinguish between
+//   a symbol with a value of nil and that a symbol is not defined.
 // Returns:
 //   when found -> the value of the symbol
-//   when not found -> NULL!
+//   when not found -> NULL
 Cell *env_get (Cell *env, Cell *sym)
 {
-	assert(env != NULL);
-	assert(sym != NULL);
-	assert(sym->kind == T_SYMBOL);
-	assert(env->kind == T_PAIR);
+	// Validate inputs
+	if ((env == NULL) || (env == &c_nil) || (env->kind != T_PAIR)
+			|| (sym == NULL) || (sym == &c_nil) || (env->kind != T_SYMBOL))
+	{
+		return NULL;
+	}
 
 	// Find the environment which contains the symbol
 	Cell *containing_env = env_find(env, sym);
-	if (containing_env == NULL)
+	if (containing_env == &c_nil)
 	{
 		// Symbol not found
 		return NULL;
@@ -671,31 +723,29 @@ Cell *env_get (Cell *env, Cell *sym)
 
 void env_set (Cell *env, Cell *sym, Cell *val)
 {
-	// Validate inputs. Val is allowed to be null to "undefine" things.
-	assert(env != NULL);
-	assert(sym != NULL);
-	assert(sym->kind == T_SYMBOL);
-	assert(env->kind == T_PAIR);
-
-	// Debug
-	if (val == NULL)
+	// Validate inputs.
+	// Val can be nil and of any type.
+	if ((env == NULL) || (env == &c_nil) || (env->kind != T_PAIR)
+			|| (sym == NULL) || (sym == &c_nil) || (env->kind != T_SYMBOL)
+			|| (val == NULL))
 	{
-		printf("  note: undefining a symbol\n");
+		return;
 	}
-
 
 	// If there is already a symbol defined, change the value,
 	// otherwise add the new symbol with the value.
 	Cell *slot = env_get_self(env, sym);
-	if (slot == NULL)
+	if (slot == &c_nil)
 	{
+		// Symbol undefined.
 		// Push the new (symbol . value) pair to the env
 		slot = make_pair(sym, val);
 		env->as_pair.rest = make_pair(slot, env->as_pair.rest);
 	}
 	else
 	{
-		// Change the value of the already present slot
+		// Symbol already defined.
+		// Change the value of the already present slot.
 		slot->as_pair.rest = val;
 	}
 }
@@ -749,8 +799,17 @@ int read_str (const char *start, int length, Cell **out)
 			*out = string_intern_cstring("read_str : error : unexpected end of input string");
 			return (*out)->as_str.length;
 		case '-':
-			// Number
-			string_step(&view, &rem, read_int(view, rem, out));
+			// Symbol or Number?
+			if ((rem > 0) && isdigit(*(view + 1)))
+			{
+				// Read number because next char is a digit
+				string_step(&view, &rem, read_int(view, rem, out));
+			}
+			else
+			{
+				// Otherwise read it as a symbol
+				string_step(&view, &rem, read_symbol(view, rem, out));
+			}
 			break;
 		default:
 			if (isdigit(*view))
@@ -858,7 +917,7 @@ int print_int (int n, char *out, int length)
 
 int pr_str (Cell *x, char *out, int length);
 
-int print_pair (Cell *x, char *out, int length)
+int print_list (Cell *x, char *out, int length)
 {
 	char *view = out;
 	int rem = length;
@@ -867,24 +926,23 @@ int print_pair (Cell *x, char *out, int length)
 	char opener = (x->as_pair.variant)? x->as_pair.variant : '(';
 	char closer = char_end(opener);
 
+	// Print opening char
 	string_step((const char**)&view, &rem, print_char(opener, view, rem));
-	while (!is_empty_list(x))
+
+	// Print contents
+	while (rem > 0)
 	{
 		string_step((const char**)&view, &rem, pr_str(x->as_pair.first, view, rem));
 
-		if (x->as_pair.rest == NULL)
+		// See if the list continues with more pairs...
+		if (x->as_pair.rest == &c_nil)
 		{
 			break;
 		}
-
-		// See if the list continues with more pairs...
-		if (x->as_pair.rest->kind == T_PAIR)
+		else if (x->as_pair.rest->kind == T_PAIR)
 		{
-			// Step into the 'rest' pair
-			if (x->as_pair.rest->as_pair.first != NULL)
-			{
-				string_step((const char**)&view, &rem, print_char(' ', view, rem));
-			}
+			// Next pair in the list
+			string_step((const char**)&view, &rem, print_char(' ', view, rem));
 			x = x->as_pair.rest;
 		}
 		else
@@ -895,6 +953,8 @@ int print_pair (Cell *x, char *out, int length)
 			break;
 		}
 	}
+
+	// Print closing char
 	string_step((const char**)&view, &rem, print_char(closer, view, rem));
 
 	int len = length - rem;
@@ -934,7 +994,7 @@ int pr_str (Cell *x, char *out, int length)
 		case T_C_FUNCTION:
 			return print_cstr("#<code>", out, length);
 		case T_PAIR:
-			return print_pair(x, out, length);
+			return print_list(x, out, length);
 		default:
 			// Error: invalid cell kind
 			return 0;
@@ -972,7 +1032,7 @@ Cell *eval_each (Cell *env, Cell *x)
 	p_x = p_x->as_pair.rest;
 
 	// eval the rest of the elements
-	while ((p_x != NULL) && (p_x->as_pair.first != NULL))
+	while ((p_x != &c_nil) && (p_x->as_pair.first != NULL))
 	{
 		p_y->as_pair.rest = make_pair(EVAL(p_x->as_pair.first, env), NULL);
 
@@ -1016,7 +1076,7 @@ Cell *apply (Cell *func, Cell *u_args, Cell *env)
 				{
 					return make_pair(string_intern_cstring("error : apply : arguments do not match formal parameters"),
 							make_pair(make_int(n_args),
-								make_pair(make_int(n_params), c_nil)));
+								make_pair(make_int(n_params), &c_nil)));
 				}
 
 				// Bind the arguments to a temporary environment
@@ -1038,6 +1098,23 @@ Cell *apply (Cell *func, Cell *u_args, Cell *env)
 				// TODO: discard the environment
 				return result;
 			}
+		case T_INT:
+			// Integer N just returns the Nth argument in the rest of the list
+			{
+				Cell *p = args;
+				for (int n = func->as_int; n > 0; n--)
+				{
+					if ((p == &c_nil) || (p->kind != T_PAIR))
+					{
+						return string_intern_cstring("error : apply : integer index out of range");
+					}
+
+					// Next
+					n--;
+					p = p->as_pair.rest;
+				}
+				return p;
+			}
 		default:
 			// Error
 			return string_intern_cstring("error : apply : 1st item of expression is not a function");
@@ -1053,21 +1130,16 @@ Cell *symbol_lookup (Cell *env, Cell *sym)
 	assert(env->kind == T_PAIR);
 
 	Cell *val = env_get(env, sym);
+
 	if (val == NULL)
 	{
+		// Symbol undefined.
 		// TODO: raise better error
 		val = string_intern_cstring("error: undefined symbol");
 	}
 
 	return val;
 }
-
-// Special form interned strings
-Cell *i_def_bang = NULL;
-Cell *i_let_star = NULL;
-Cell *i_do = NULL;
-Cell *i_if = NULL;
-Cell *i_fn_star = NULL;
 
 Cell *eval_ast (Cell *ast, Cell *env)
 {
@@ -1099,6 +1171,11 @@ Cell *EVAL (Cell *x, Cell *env)
 	assert(env != NULL);
 	assert(env->kind == T_PAIR);
 
+	if ((x == &c_nil) || (x == &c_true) || (x == &c_false))
+	{
+		return x;
+	}
+
 	if (!is_list(x))
 	{
 		return eval_ast(x, env);
@@ -1113,136 +1190,17 @@ Cell *EVAL (Cell *x, Cell *env)
 	Cell *head = x->as_pair.first;
 	Cell *args = x->as_pair.rest;
 
-	if (head == i_def_bang)
+	if (head == &c_sf_def_bang)
 	{
-		// (def! <symbol> value)
-		int l;
-		if ((l = list_length(args)) != 2)
-		{
-			printf("(given length: %d)", l);
-			return string_intern_cstring("def! : error : requires 2 operands");
-		}
-		Cell *symbol = args->as_pair.first;
-		if (symbol->kind != T_SYMBOL)
-		{
-			return string_intern_cstring("def! : error : 1st operand must be a symbol");
-		}
-		if ((symbol->as_symbol == c_nil->as_symbol)
-				|| (symbol->as_symbol == c_true->as_symbol)
-				|| (symbol->as_symbol == c_false->as_symbol))
-		{
-			return string_intern_cstring("def! : error : cannot define nil, true, or false");
-		}
-		Cell *value = EVAL(args->as_pair.rest->as_pair.first, env);
-		env_set(env, symbol, value);
-		return value;
-	}
-	else if (head == i_let_star)
-	{
-		// (let* <pairs> expr)
-		if (list_length(args) != 2)
-		{
-			return string_intern_cstring("let* : error : requires 2 operands");
-		}
-
-		Cell *let_env = env_create(env);
-		Cell *pairs = args->as_pair.first;
-		Cell *expr = args->as_pair.rest->as_pair.first;
-
-		// Bind each (symbol value) pair within <pairs>
-		if (list_length(pairs) % 2 != 0)
-		{
-			return string_intern_cstring("let* : error : second argument must have even length");
-		}
-		while ((pairs != NULL))
-		{
-			Cell *sym = pairs->as_pair.first;
-			Cell *val = EVAL(pairs->as_pair.rest->as_pair.first, let_env);
-
-			env_set(let_env, sym, val);
-
-			// Next pair
-			pairs = pairs->as_pair.rest->as_pair.rest;
-		}
-
-		Cell* result = EVAL(expr, let_env);
-
-		// FIXME: discard the temporary environment
-		//cell_free_all(let_env);
-
-		return result;
-	}
-	else if (head == i_if)
-	{
-		// (if <cond-expr> <true-expr> <false-expr?>)
-
-		// Validate arguments
-		int len = list_length(args);
-		if ((len < 2) || (len > 3))
-		{
-			return string_intern_cstring("if : error : requires 2 or 3 expressions");
-		}
-
-		Cell *cond = args->as_pair.first;
-		if (truthy(EVAL(cond, env)))
-		{
-			// Return true-expr
-			return EVAL(args->as_pair.rest->as_pair.first, env);
-		}
-		else
-		{
-			// Return false-expr, default = NIL
-			if (len == 3)
-			{
-				return EVAL(args->as_pair.rest->as_pair.rest->as_pair.first, env);
-			}
-			else
-			{
-				return c_nil;
-			}
-		}
-	}
-	else if (head == i_do)
-	{
-		// (do <exprs...>)
-		Cell *p = args;
-
-		// eval the rest of the elements
-		while ((p != NULL) && (p->as_pair.rest != NULL))
-		{
-			EVAL(p->as_pair.first, env);
-
-			// next
-			p = p->as_pair.rest;
-		}
-
-		return EVAL(p->as_pair.first, env);
-	}
-	else if (head == i_fn_star)
-	{
-		// (fn* (args...) expr)
-		// NOTE: not a closure, uses dynamic binding instead
-
-		if (list_length(args) != 2)
-		{
-			return string_intern_cstring("fn* : error : requires 2 operands");
-		}
-
-		if (args->as_pair.first->kind != T_PAIR)
-		{
-			return string_intern_cstring("fn* : error : 1st operand must be a list");
-		}
-
-		Cell *fn_args = args->as_pair.first;
-		Cell *body = args->as_pair.rest->as_pair.first;
-		Cell *fn = make_fn(fn_args, body);
-		return fn;
+		// (def! <symbol> <expr>)
+		return &c_nil;
 	}
 	else
 	{
-		// Normal function application
-		Cell *y = eval_ast(x, env);
-		return apply(y->as_pair.first, y->as_pair.rest, env);
+		// (normal) Function application
+		head = eval_ast(head, env);
+		args = eval_ast(args, env);
+		return apply(head, args, env);
 	}
 }
 
@@ -1308,7 +1266,7 @@ Cell *bi_list_p (Cell *args)
 	{
 		return string_intern_cstring("list? : error : requires 1 argument");
 	}
-	return (args->as_pair.first->kind == T_PAIR)? c_true : c_false;
+	return (args->as_pair.first->kind == T_PAIR)? &c_true : &c_false;
 }
 
 Cell *bi_empty_p (Cell *args)
@@ -1321,7 +1279,7 @@ Cell *bi_empty_p (Cell *args)
 	{
 		return string_intern_cstring("empty? : error : requires list argument");
 	}
-	return (args->as_pair.first->as_pair.first == NULL)? c_true : c_false;
+	return (args->as_pair.first->as_pair.first == NULL)? &c_true : &c_false;
 }
 
 Cell *bi_count (Cell *args)
@@ -1378,7 +1336,7 @@ Cell *bi_equal (Cell *args)
 	{
 		return string_intern_cstring("= : error : requires 2 argument");
 	}
-	return (cell_equal(args->as_pair.first, args->as_pair.rest->as_pair.first))? c_true : c_false;
+	return (cell_equal(args->as_pair.first, args->as_pair.rest->as_pair.first))? &c_true : &c_false;
 }
 
 Cell *bi_less_than (Cell *args)
@@ -1397,7 +1355,7 @@ Cell *bi_less_than (Cell *args)
 	{
 		return string_intern_cstring("= : error : 2nd argument must be an integer");
 	}
-	return (a->as_int < b->as_int)? c_true : c_false;
+	return (a->as_int < b->as_int)? &c_true : &c_false;
 }
 
 Cell *bi_more_than (Cell *args)
@@ -1416,7 +1374,7 @@ Cell *bi_more_than (Cell *args)
 	{
 		return string_intern_cstring("> : error : 2nd argument must be an integer");
 	}
-	return (a->as_int > b->as_int)? c_true : c_false;
+	return (a->as_int > b->as_int)? &c_true : &c_false;
 }
 
 Cell *bi_less_than_equal (Cell *args)
@@ -1435,7 +1393,7 @@ Cell *bi_less_than_equal (Cell *args)
 	{
 		return string_intern_cstring("<= : error : 2nd argument must be an integer");
 	}
-	return (a->as_int <= b->as_int)? c_true : c_false;
+	return (a->as_int <= b->as_int)? &c_true : &c_false;
 }
 
 Cell *bi_more_than_equal (Cell *args)
@@ -1454,11 +1412,23 @@ Cell *bi_more_than_equal (Cell *args)
 	{
 		return string_intern_cstring(">= : error : 2nd argument must be an integer");
 	}
-	return (a->as_int >= b->as_int)? c_true : c_false;
+	return (a->as_int >= b->as_int)? &c_true : &c_false;
 }
 
+Cell *bi_prn (Cell *args)
+{
+	assert(0 && "not implemented");
+	return &c_nil;
+}
 
 // --- end of built-in functions
+
+void init_cell_const (Cell *x, char *name)
+{
+	assert(x != NULL);
+	x->kind = T_SYMBOL;
+	x->as_symbol = string_intern_cstring(name);
+}
 
 // How to set up the cell memory
 // SHOULD ONLY BE CALLED ONCE
@@ -1493,17 +1463,17 @@ int init (int ncells, int nchars)
 	string_list = make_pair(empty_s, NULL);
 	string_list->as_pair.rest = string_list;
 
-	// Create the constant symbols
-	c_nil = make_symbol(string_intern_cstring("nil"));
-	c_true = make_symbol(string_intern_cstring("true"));
-	c_false = make_symbol(string_intern_cstring("false"));
+	// Set up the constant cell values
+	init_cell_const(&c_nil, "nil");
+	init_cell_const(&c_true, "true");
+	init_cell_const(&c_false, "false");
 
-	// Initialize certain interned strings for special forms
-	i_def_bang = string_intern_cstring("def!");
-	i_let_star = string_intern_cstring("let*");
-	i_do = string_intern_cstring("do");
-	i_if = string_intern_cstring("if");
-	i_fn_star = string_intern_cstring("fn*");
+	// Set up the constant cell special forms
+	init_cell_const(&c_sf_def_bang, "def!");
+	init_cell_const(&c_sf_let_star, "let*");
+	init_cell_const(&c_sf_fn_star_bang, "fn*");
+	init_cell_const(&c_sf_do, "do");
+	init_cell_const(&c_sf_if, "if");
 
 	return 0;
 }
@@ -1517,15 +1487,11 @@ int main (int argc, char **argv)
 	}
 
 	// Initialize the REPL environment symbols
-	Cell *repl_env = env_create(c_nil);
-	env_set_c(repl_env, "nil", c_nil);
-	env_set_c(repl_env, "true", c_true);
-	env_set_c(repl_env, "false", c_false);
+	Cell *repl_env = env_create(&c_nil);
 	env_set_c(repl_env, "+", make_cfunc(bi_plus));
 	env_set_c(repl_env, "-", make_cfunc(bi_minus));
 	env_set_c(repl_env, "*", make_cfunc(bi_star));
 	env_set_c(repl_env, "/", make_cfunc(bi_slash));
-	env_set_c(repl_env, "prn", make_cfunc(bi_list));//todo
 	env_set_c(repl_env, "list", make_cfunc(bi_list));
 	env_set_c(repl_env, "list?", make_cfunc(bi_list_p));
 	env_set_c(repl_env, "empty?", make_cfunc(bi_empty_p));
@@ -1535,13 +1501,7 @@ int main (int argc, char **argv)
 	env_set_c(repl_env, ">", make_cfunc(bi_more_than));
 	env_set_c(repl_env, "<=", make_cfunc(bi_less_than_equal));
 	env_set_c(repl_env, ">=", make_cfunc(bi_more_than_equal));
-
-	// (DEBUG) Print out the environment
-	/*
-	printf("---\nenv:\n");
-	PRINT(repl_env);
-	printf("---\n");
-	*/
+	env_set_c(repl_env, "prn", make_cfunc(bi_prn));
 
 	// REPL
 	char buffer[1024];
@@ -1554,7 +1514,7 @@ int main (int argc, char **argv)
 		}
 		rep(buffer, strlen(buffer), repl_env);
 	}
-	// Always add a newline for nice command-line usage
+	// Always add a newline at the end for nice command-line usage
 	putchar('\n');
 
 	return 0;
