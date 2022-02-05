@@ -65,15 +65,20 @@ struct cell
 };
 
 
-// Cell memory:
+// Cell memory (holds the actual cell values):
 Cell *cell_pool = NULL;
 int cell_pool_cap = 0;
 
-// String memory:
+// String memory (holds the actual characters):
 char *char_pool = NULL;
 char *char_free = NULL;
 int char_pool_cap = 0;
+
+// Strings interned
 Cell *string_list = NULL;
+
+// Symbols interned
+Cell *symbol_list = NULL;
 
 // Cell constant values (symbols)
 Cell c_nil;
@@ -321,21 +326,20 @@ Cell *string_intern (const char *start, int length)
 		return string_list->as_pair.first;
 	}
 
-	// Linear search through the (circular) string list
+	// Linear search through the string list
 	Cell *p = string_list;
-	do
+	while (p != &c_nil)
 	{
 		Cell *s = p->as_pair.first;
 		if (stream_eq(s->as_str.start, s->as_str.length, start, length))
 		{
 			// Found an internal string, so return that
-			return p->as_pair.first;
+			return s;
 		}
 
-		// Next item in string list
+		// Next
 		p = p->as_pair.rest;
 	}
-	while (p != string_list);
 
 	// Did not find an internal string, so make new one
 	return string_create(start, length);
@@ -346,6 +350,30 @@ Cell *string_intern_cstring (const char *str)
 {
 	assert(str != NULL);
 	return string_create(str, strlen(str));
+}
+
+// Get a canonical symbol with a given name
+// Name should be an canonical interned string!
+Cell *symbol_intern (Cell *name)
+{
+	assert(name->kind == T_STRING);
+	
+	// Search through the circular symbol list
+	Cell *p = symbol_list;
+	while (p != &c_nil)
+	{
+		if (p->as_pair.first->as_symbol == name)
+		{
+			// Found an internal string, so return that
+			return p->as_pair.first;
+		}
+
+		// Next
+		p = p->as_pair.rest;
+	}
+
+	// Not found internally, so create new symbol
+	return make_symbol(name);
 }
 
 // Inserts a cell back into the free list
@@ -398,6 +426,11 @@ Cell *make_cfunc (Cell *(*c_func)(Cell*))
 
 void string_skip_white(const char **stream, int *length)
 {
+	if (!stream)
+	{
+		return;
+	}
+
 	const char *view = *stream;
 	int rem = *length;
 	while (isspace(*view) && (rem > 0))
@@ -442,26 +475,8 @@ int read_symbol (const char *start, int length, Cell **out)
 	{
 		continue;
 	}
-	Cell *name = string_intern(start, i);
 
-	// Don't create new copies of the constant symbols
-	if (name == c_nil.as_symbol)
-	{
-		*out = &c_nil;
-	}
-	else if (name == c_true.as_symbol)
-	{
-		*out = &c_true;
-	}
-	else if (name == c_false.as_symbol)
-	{
-		*out = &c_false;
-	}
-	else
-	{
-		*out = make_symbol(name);
-	}
-
+	*out = symbol_intern(string_intern(start, i));
 	return i;
 }
 
@@ -616,7 +631,6 @@ int read_list (const char *start, int length, Cell **out)
 			*out = string_intern_cstring("read_list : error : unexpected end of list");
 			return (*out)->as_str.length;
 		}
-		exit(1);
 	}
 }
 
@@ -647,9 +661,9 @@ Cell *env_get_self (Cell *env, const Cell *sym)
 
 	// Search through the slots list, aka (symbol . value) list in the environment
 	Cell *slots = env->as_pair.rest;
-	while (slots != &c_nil)
+	while (!is_empty_list(slots) && (slots != &c_nil))
 	{
-		if (symbol_eq(slots->as_pair.first->as_pair.first, sym))
+		if (slots->as_pair.first->as_pair.first == sym)
 		{
 			// Found a symbol, return the slot
 			return slots->as_pair.first;
@@ -700,8 +714,8 @@ Cell *env_find (Cell *env, const Cell *sym)
 Cell *env_get (Cell *env, Cell *sym)
 {
 	// Validate inputs
-	if ((env == NULL) || (env == &c_nil) || (env->kind != T_PAIR)
-			|| (sym == NULL) || (sym == &c_nil) || (env->kind != T_SYMBOL))
+	if (!env || (env == &c_nil) || (env->kind != T_PAIR)
+			|| !sym || (sym == &c_nil) || (env->kind != T_SYMBOL))
 	{
 		return NULL;
 	}
@@ -1034,7 +1048,7 @@ Cell *eval_each (Cell *env, Cell *x)
 	// eval the rest of the elements
 	while ((p_x != &c_nil) && (p_x->as_pair.first != NULL))
 	{
-		p_y->as_pair.rest = make_pair(EVAL(p_x->as_pair.first, env), NULL);
+		p_y->as_pair.rest = make_pair(EVAL(p_x->as_pair.first, env), &c_nil);
 
 		// next
 		p_x = p_x->as_pair.rest;
@@ -1450,18 +1464,34 @@ int init (int ncells, int nchars)
 	cell_pool_cap = ncells;
 	char_pool_cap = nchars;
 
-	// Link the free cells together in a circular list
+	// Link the free cells together in a list
 	// DEBUG: (set cell.free to 0)
 	for (int i = 0; i < (cell_pool_cap - 1); i++)
 	{
 		cell_pool[i].as_pair.rest = &cell_pool[i + 1];
 	}
-	cell_pool[cell_pool_cap - 1].as_pair.rest = cell_pool;
+	cell_pool[cell_pool_cap - 1].as_pair.rest = &c_nil;
 
-	// Set up the internal string circular list with one item
-	Cell *empty_s = make_string("", 0);
-	string_list = make_pair(empty_s, NULL);
-	string_list->as_pair.rest = string_list;
+	// Set up the internal string list with one item,
+	// the empty string.
+	string_list = make_pair(make_string("", 0), &c_nil);
+
+	// Set up the internal symbol list
+	Cell *to_add[] = {
+		&c_nil,
+		&c_true,
+		&c_false,
+		&c_sf_def_bang,
+		&c_sf_let_star,
+		&c_sf_fn_star_bang,
+		&c_sf_do,
+		&c_sf_if,
+	};
+	symbol_list = &c_nil;
+	for (int i = 0; i < sizeof(to_add); i++)
+	{
+		symbol_list = make_pair(to_add[i], symbol_list);
+	}
 
 	// Set up the constant cell values
 	init_cell_const(&c_nil, "nil");
