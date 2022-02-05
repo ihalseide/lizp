@@ -1,5 +1,7 @@
 # Izak Lisp
 
+IDEA: remove all error checking and do error checking in the lisp standard library!
+
 This is my own (work-in-progress) implementation of a Lisp programming language. I am loosely following the "Make a Lisp" project found at https://github.com/kanaka/mal.
 
 ## Built-in functions

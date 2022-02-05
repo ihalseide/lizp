@@ -33,6 +33,13 @@
 ;;;;    (do <exprs...>)
 ;;;;    (let* <even list> <expr>)
 
+;;; Add error checking to +
+(def! old+ +)
+(def! + (fn* (a b)
+			 (if (number? a)
+			   (if (number? b)
+				 (old+ a b)))))
+
 ;;; Convert x to an exact boolean
 (def! bool (fn* |x|
 				(if x
