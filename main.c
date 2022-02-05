@@ -92,7 +92,7 @@ Cell c_false;
 // Special form constant cells (symbols)
 Cell c_sf_def_bang;
 Cell c_sf_let_star;
-Cell c_sf_fn_star_bang;
+Cell c_sf_fn_star;
 Cell c_sf_do;
 Cell c_sf_if;
 
@@ -229,7 +229,7 @@ Cell *make_empty_list ()
 
 bool is_list (Cell *x)
 {
-	return (x != NULL) && (x->kind == T_PAIR);
+	return x && (x->kind == T_PAIR);
 }
 
 bool is_empty_list (Cell *x)
@@ -722,18 +722,16 @@ Cell *env_find (Cell *env, const Cell *sym)
 }
 
 // Get the innermost definition for the symbol.
-// NOTE: can return NULL in order to distinguish between
-//   a symbol with a value of nil and that a symbol is not defined.
 // Returns:
-//   when found -> the value of the symbol
-//   when not found -> NULL
+//   when found -> the slot containing (symbol . value)
+//   when not found -> nil
 Cell *env_get (Cell *env, Cell *sym)
 {
 	// Validate inputs
 	if (!env || (env == &c_nil) || (env->kind != T_PAIR)
-			|| !sym || (sym == &c_nil) || (sym->kind != T_SYMBOL))
+			|| !sym || (sym->kind != T_SYMBOL))
 	{
-		return NULL;
+		return &c_nil;
 	}
 
 	// Find the environment which contains the symbol
@@ -741,13 +739,12 @@ Cell *env_get (Cell *env, Cell *sym)
 	if (containing_env == &c_nil)
 	{
 		// Symbol not found
-		return NULL;
+		return &c_nil;
 	}
 	else
 	{
 		// Fetch the symbol from the environment it's in
-		Cell *slot = env_get_self(containing_env, sym);
-		return slot->as_pair.rest;
+		return env_get_self(containing_env, sym);
 	}
 }
 
@@ -1168,16 +1165,17 @@ Cell *symbol_lookup (Cell *env, Cell *sym)
 	assert(sym->kind == T_SYMBOL);
 	assert(env->kind == T_PAIR);
 
-	Cell *val = env_get(env, sym);
+	Cell *slot = env_get(env, sym);
 
-	if (val == NULL)
+	if (slot == &c_nil)
 	{
 		// Symbol undefined.
 		// TODO: raise better error
-		val = string_intern_cstring("error: undefined symbol");
+		return string_intern_cstring("error: undefined symbol");
 	}
 
-	return val;
+	// Return the slot's value
+	return slot->as_pair.rest;
 }
 
 Cell *eval_ast (Cell *ast, Cell *env)
@@ -1242,13 +1240,15 @@ Cell *EVAL (Cell *x, Cell *env)
 			return string_intern_cstring("def! : error : requires 2 operands");
 		}
 		Cell *sym = args->as_pair.first;
-		if (sym == &c_nil || sym == &c_false || sym == &c_true)
+		// note that there is no need to check for trying to define nil and other special
+		// symbols because EVAL always evaluates those to themselves
+		if (sym->kind != T_SYMBOL)
 		{
-			return string_intern_cstring("def! : error : cannot define true, false, or nil");
+			return string_intern_cstring("def! : error : 1st argument must be a symbol");
 		}
 		Cell *val = EVAL(args->as_pair.rest->as_pair.first, env);
 		env_set(env, sym, val);
-		return val;
+		return symbol_lookup(env, sym);
 	}
 	else if (head == &c_sf_let_star)
 	{
@@ -1267,7 +1267,14 @@ Cell *EVAL (Cell *x, Cell *env)
 		Cell *p = args->as_pair.first;
 		while (is_list(p))
 		{
-			env_set(let_env, p->as_pair.first, EVAL(p->as_pair.rest->as_pair.first, let_env));
+			Cell *sym = p->as_pair.first;
+			// note that there is no need to check for trying to define nil and other special
+			// symbols because EVAL always evaluates those to themselves
+			if (sym->kind != T_SYMBOL)
+			{
+				return string_intern_cstring("let* : error : every other item within 1st operand must be a symbol");
+			}
+			env_set(let_env, sym, EVAL(p->as_pair.rest->as_pair.first, let_env));
 			p = p->as_pair.rest->as_pair.rest;
 		}
 
@@ -1277,6 +1284,28 @@ Cell *EVAL (Cell *x, Cell *env)
 		// TODO: discard let_env
 
 		return result;
+	}
+	else if (head == &c_sf_fn_star)
+	{
+		if (list_length(args) != 2)
+		{
+			return string_intern_cstring("fn* : error : requires 2 operands");
+		}
+		if (args->as_pair.first->kind != T_PAIR)
+		{
+			return string_intern_cstring("fn* : error : 1st operand not a list");
+		}
+		Cell *p = args->as_pair.first;
+		while (is_list(p) && !is_empty_list(p))
+		{
+			if (p->as_pair.first->kind != T_SYMBOL)
+			{
+				return string_intern_cstring("fn* : error : 1st operand must be a list of symbols");
+			}
+			p = p->as_pair.rest;
+		}
+
+		return make_fn(args->as_pair.first, args->as_pair.rest->as_pair.first);
 	}
 	/*
 	else if (head == &c_sf_XXX)
@@ -1290,6 +1319,10 @@ Cell *EVAL (Cell *x, Cell *env)
 		Cell *e_list = eval_ast(x, env);
 		head = e_list->as_pair.first;
 		args = e_list->as_pair.rest;
+		if (args == &c_nil)
+		{
+			args = make_empty_list();
+		}
 		return apply(head, args, env);
 	}
 }
@@ -1618,7 +1651,7 @@ int init_symbols (void)
 		&c_false,
 		&c_sf_def_bang,
 		&c_sf_let_star,
-		&c_sf_fn_star_bang,
+		&c_sf_fn_star,
 		&c_sf_do,
 		&c_sf_if,
 		&c_nil,
@@ -1637,7 +1670,7 @@ int init_symbols (void)
 	// Set up the constant cell special forms
 	init_cell_const(&c_sf_def_bang, "def!");
 	init_cell_const(&c_sf_let_star, "let*");
-	init_cell_const(&c_sf_fn_star_bang, "fn*");
+	init_cell_const(&c_sf_fn_star, "fn*");
 	init_cell_const(&c_sf_do, "do");
 	init_cell_const(&c_sf_if, "if");
 
@@ -1658,6 +1691,13 @@ Cell *init_env (void)
 	Cell *env = env_create(&c_nil);
 	if (env)
 	{
+		// Define these just because they might somehow be looked up
+		// with out eval'ing them
+		env_set_c(env, "nil", &c_nil);
+		env_set_c(env, "true", &c_true);
+		env_set_c(env, "false", &c_false);
+
+		// Built-in Functions
 		env_set_c(env, "+", make_cfunc(bi_plus));
 		env_set_c(env, "-", make_cfunc(bi_minus));
 		env_set_c(env, "*", make_cfunc(bi_star));
