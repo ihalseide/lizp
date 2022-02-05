@@ -1250,6 +1250,40 @@ Cell *EVAL (Cell *x, Cell *env)
 		env_set(env, sym, val);
 		return val;
 	}
+	else if (head == &c_sf_let_star)
+	{
+		// (let* (symbol1 value1 symbol2 value2 ...) expr)
+		if (list_length(args) != 2)
+		{
+			return string_intern_cstring("let* : error : requires 2 operands");
+		}
+		if ((args->as_pair.first->kind != T_PAIR) || (list_length(args->as_pair.first) % 2 != 0))
+		{
+			return string_intern_cstring("let* : error : 1st operand not a list with an even count");
+		}
+
+		// Create env from 1st arg
+		Cell *let_env = env_create(env);
+		Cell *p = args->as_pair.first;
+		while (is_list(p))
+		{
+			env_set(let_env, p->as_pair.first, EVAL(p->as_pair.rest->as_pair.first, let_env));
+			p = p->as_pair.rest->as_pair.rest;
+		}
+
+		// Eval 2nd arg with env
+		Cell *result = EVAL(args->as_pair.rest->as_pair.first, let_env);
+
+		// TODO: discard let_env
+
+		return result;
+	}
+	/*
+	else if (head == &c_sf_XXX)
+	{
+
+	}
+	*/
 	else
 	{
 		// Normal function application
