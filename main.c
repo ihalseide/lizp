@@ -244,18 +244,16 @@ const char *string_intern (const char *start, int length)
 	char *p = char_pool;
 	while (p < char_free)
 	{
-		if (strncmp(p, start, length) == 0)
+		int p_len = strlen(p);
+
+		if (p_len == length && strncmp(p, start, p_len) == 0)
 		{
 			// Found an internal string, so return that
 			return p;
 		}
 
 		// Next string
-		while (p < char_free && *p)
-		{
-			p++;
-		}
-		p++;
+		p += p_len + 1;
 	}
 
 	// Did not find an internal string, so make new one
@@ -1006,7 +1004,39 @@ Cell *EVAL (Cell *x, Cell *env)
 				Cell *val = EVAL(args->p_rest->p_first, env);
 				env_set(env, args->p_first, val);
 				return NULL;
-			case SO_LET_STAR:
+			case SO_LET_STAR: // (let* <list of symbols and values> expr)
+				{
+					if (!args || !args->p_first || !args->p_rest)
+					{
+						// Error: invalid args
+						printf("let* : error : invalid args");
+						return NULL;
+					}
+					Cell *let_env = env_create(env);
+					Cell *p = args->p_first; // pointer to bindings list
+					while (p)
+					{
+						if (!p->p_rest)
+						{
+							// Error: odd amount of arguments in first list
+							printf("let* : error : odd amount of arguments in first list\n");
+							return NULL;
+						}
+						if (!p->p_first || p->p_first->kind != T_SYMBOL)
+						{
+							// Error: even element in bindings list not a symbol
+							printf("let* : error : even element in bindings list not a symbol\n");
+							return NULL;
+						}
+
+						env_set(let_env, p->p_first, EVAL(p->p_rest->p_first, let_env));
+
+						// Next-next
+						p = p->p_rest->p_rest;
+					}
+					// TODO: discard env?
+					return EVAL(args->p_rest->p_first, let_env);
+				}
 			case SO_IF:
 			case SO_FN_STAR:
 			case SO_DO:
