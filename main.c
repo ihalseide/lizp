@@ -3,11 +3,7 @@
 #include <stdlib.h>
 #include <ctype.h>
 
-// Pairs & Lists:
-// Pair = (first . rest)
-// Empty list = () = (NULL . nil)
-// List = (cell . List)
-//      | (cell . nil)
+// TODO: step 4 of MAL process (tail call optimization in EVAL)
 
 enum Cell_kind
 {
@@ -22,20 +18,11 @@ enum Cell_kind
 
 enum Native_func
 {
-	NF_ADD,
-	NF_SUB,
-	NF_MUL,
-	NF_DIV,
-	NF_COUNT,
-	NF_LIST,
-	NF_LIST_P,
-	NF_EMPTY_P,
-	NF_PRN,
-	NF_EQ,
-	NF_LT,
-	NF_GT,
-	NF_LTE,
-	NF_GTE,
+	NF_ADD,    NF_SUB,     NF_MUL,
+	NF_DIV,    NF_COUNT,   NF_LIST,
+	NF_LIST_P, NF_EMPTY_P, NF_PRN,
+	NF_EQ,     NF_LT,      NF_GT,
+	NF_LTE,    NF_GTE,
 };
 
 enum Special_op
@@ -82,12 +69,8 @@ Cell *string_list = NULL;
 
 int char_is_symbol (char c)
 {
-	return c
-		&& !isspace(c)
-		&& (c != '.')
-		&& (c != '[') && (c != ']')
-		&& (c != '(') && (c != ')')
-		&& (c != '{') && (c != '}');
+	return c && !isspace(c) && (c != '.') && (c != '[') && (c != ']')
+		&& (c != '(') && (c != ')') && (c != '{') && (c != '}');
 }
 
 // Get a new cell
@@ -95,16 +78,13 @@ int char_is_symbol (char c)
 Cell *cell_get ()
 {
 	if (!cell_pool)
-	{
 		return NULL;
-	}
 
 	Cell *x = cell_pool->p_rest;
+
+	// Remove the cell from the free list
 	if (x)
-	{
-		// Remove the cell from the free list
 		cell_pool->p_rest = x->p_rest;
-	}
 
 	return x;
 }
@@ -113,9 +93,8 @@ Cell *cell_init (enum Cell_kind k)
 {
 	Cell *x = cell_get();
 	if (x)
-	{
 		x->kind = k;
-	}
+
 	return x;
 }
 
@@ -123,9 +102,7 @@ Cell *make_int (int n)
 {
 	Cell *x = cell_init(T_INT);
 	if (x)
-	{
 		x->integer = n;
-	}
 	return x;
 }
 
@@ -149,9 +126,8 @@ Cell *make_spec (enum Special_op id)
 {
 	Cell *x = cell_init(T_SPECIAL_FORM);
 	if (x)
-	{
 		x->spec = id;
-	}
+
 	return x;
 }
 
@@ -159,9 +135,7 @@ Cell *make_native_fn (enum Native_func id)
 {
 	Cell *x = cell_init(T_NATIVE_FUNC);
 	if (x)
-	{
 		x->func = id;
-	}
 	return x;
 }
 
@@ -185,9 +159,7 @@ Cell *make_symbol (const char *str)
 {
 	Cell *x = cell_init(T_SYMBOL);
 	if (x)
-	{
 		x->s_ptr = str;
-	}
 	return x;
 }
 
@@ -195,9 +167,7 @@ Cell *make_string (const char *str)
 {
 	Cell *x = cell_init(T_STRING);
 	if (x)
-	{
 		x->s_ptr = str;
-	}
 	return x;
 }
 
@@ -215,9 +185,7 @@ int list_length (Cell *list)
 {
 	int i;
 	for (i = 0; list && is_list(list) && !is_empty_list(list); i++)
-	{
 		list = list->p_rest;
-	}
 	return i;
 }
 
@@ -227,9 +195,7 @@ const char *string_create (const char *start, int length)
 {
 	// Validate inputs
 	if (start == NULL || length < 0)
-	{
 		return NULL;
-	}
 
 	// Check memory space
 	if ((char_free - char_pool) >= char_pool_cap)
@@ -251,9 +217,7 @@ const char *string_create (const char *start, int length)
 const char *string_intern (const char *start, int length)
 {
 	if ((start == NULL) || (length < 0))
-	{
 		return NULL;
-	}
 
 	// Linear search through the string list
 	char *p = char_pool;
@@ -261,11 +225,9 @@ const char *string_intern (const char *start, int length)
 	{
 		int p_len = strlen(p);
 
+		// Comapre with an internal string, (so return that)
 		if (p_len == length && strncmp(p, start, p_len) == 0)
-		{
-			// Found an internal string, so return that
 			return p;
-		}
 
 		// Next string
 		p += p_len + 1;
@@ -281,28 +243,23 @@ const char *string_intern_c (const char *start)
 	return string_intern(start, strlen(start));
 }
 
-void string_skip_white(const char **stream, int *length)
-{
-	if (!stream)
-	{
-		return;
-	}
-
-	const char *view = *stream;
-	int rem = *length;
-	while (isspace(*view) && (rem > 0))
-	{
-		view++;
-		rem--;
-	}
-	*stream = view;
-	*length = rem;
-}
-
 void string_step (const char **stream, int *length, int n)
 {
 	*stream += n;
 	*length -= n;
+}
+
+void string_skip_white(const char **stream, int *length)
+{
+	if (!stream)
+		return;
+
+	const char *view = *stream;
+	int rem = *length;
+	while (isspace(*view) && (rem > 0))
+		string_step(&view, &rem, 1);
+	*stream = view;
+	*length = rem;
 }
 
 int symbol_eq (const Cell *s1, const Cell *s2)
@@ -1038,142 +995,148 @@ Cell *apply (Cell *head, Cell *args, Cell *env)
 
 Cell *EVAL (Cell *x, Cell *env)
 {
-	// C NULL -> Lisp nil
-	if (!x)
-		return x;
-
-	// Atom is passed to eval_ast
-	if (!is_list(x))
-		return eval_ast(x, env);
-
-	// Empty list evals to itself
-	if (is_empty_list(x))
-		return x;
-
-	Cell *head = eval_ast(x->p_first, env);
-	Cell *args = x->p_rest;
-	if (!args)
+	while (1)
 	{
-		args = make_empty_list();
-	}
+		// C NULL -> Lisp nil
+		if (!x)
+			return x;
 
-	if (!head)
-	{
-		// Error: invalid head
-		printf("EVAL : error : invalid first element of list\n");
-		return NULL;
-	}
-	if (head->kind == T_SPECIAL_FORM)
-	{
-		// Special forms
-		switch (head->spec)
+		// Atom is passed to eval_ast
+		if (!is_list(x))
+			return eval_ast(x, env);
+
+		// Empty list evals to itself
+		if (is_empty_list(x))
+			return x;
+
+		Cell *head = eval_ast(x->p_first, env);
+		Cell *args = x->p_rest;
+		if (!args)
 		{
-			case SO_DEF_BANG: // (def! <symbol> value)
-				if (!args || !args->p_first || !args->p_rest
-						|| args->p_first->kind != T_SYMBOL)
-				{
-					// Error: invalid args
-					printf("def! : error : invalid args");
+			args = make_empty_list();
+		}
+
+		if (!head)
+		{
+			// Error: invalid head
+			printf("EVAL : error : invalid first element of list\n");
+			return NULL;
+		}
+		if (head->kind == T_SPECIAL_FORM)
+		{
+			// Special forms
+			switch (head->spec)
+			{
+				case SO_DEF_BANG: // (def! <symbol> value)
+					if (!args || !args->p_first || !args->p_rest
+							|| args->p_first->kind != T_SYMBOL)
+					{
+						// Error: invalid args
+						printf("def! : error : invalid args");
+						return NULL;
+					}
+					Cell *val = EVAL(args->p_rest->p_first, env);
+					env_set(env, args->p_first, val);
 					return NULL;
-				}
-				Cell *val = EVAL(args->p_rest->p_first, env);
-				env_set(env, args->p_first, val);
-				return NULL;
-			case SO_LET_STAR: // (let* <list of symbols and values> expr)
-				{
+				case SO_LET_STAR: // (let* <list of symbols and values> expr)
+					{
+						if (!args || !args->p_first || !args->p_rest)
+						{
+							// Error: invalid args
+							printf("let* : error : invalid args");
+							return NULL;
+						}
+						Cell *let_env = env_create(env);
+						// Go through the bindings list and add the
+						// bindings to the environment
+						Cell *p = args->p_first; // pointer to bindings list
+						while (p)
+						{
+							if (!p->p_rest)
+							{
+								// Error: odd amount of arguments in first list
+								printf("let* : error : odd amount of arguments in first list\n");
+								return NULL;
+							}
+							if (!p->p_first || p->p_first->kind != T_SYMBOL)
+							{
+								// Error: even element in bindings list not a symbol
+								printf("let* : error : even element in bindings list not a symbol\n");
+								return NULL;
+							}
+
+							env_set(let_env, p->p_first, EVAL(p->p_rest->p_first, let_env));
+
+							// Next-next
+							p = p->p_rest->p_rest;
+						}
+
+						// TODO: discard env?
+						env = let_env;
+						x = args->p_rest->p_first;
+						continue;
+					}
+				case SO_FN_STAR: // (fn* (symbol1 symbol2 ...) expr)
 					if (!args || !args->p_first || !args->p_rest)
 					{
 						// Error: invalid args
-						printf("let* : error : invalid args");
+						printf("fn* : error : invalid args");
 						return NULL;
 					}
-					Cell *let_env = env_create(env);
-					// Go through the bindings list and add the
-					// bindings to the environment
-					Cell *p = args->p_first; // pointer to bindings list
-					while (p)
+					// Check that the parameter list is all symbols
+					Cell *p = args->p_first;
+					while (p && p->p_first)
 					{
-						if (!p->p_rest)
+						if (p->p_first->kind != T_SYMBOL)
 						{
-							// Error: odd amount of arguments in first list
-							printf("let* : error : odd amount of arguments in first list\n");
+							// Error: parameter list must be all symbols
+							printf("fn* : error : parameter list must be all symbols\n");
 							return NULL;
 						}
-						if (!p->p_first || p->p_first->kind != T_SYMBOL)
+						p = p->p_rest;
+					}
+					return make_fn(args->p_first, args->p_rest->p_first);
+				case SO_IF: // (if expr true {optional false?})
+					{
+						if (!args || !args->p_first || !args->p_rest || (args->p_rest->p_rest && args->p_rest->p_rest->p_rest))
 						{
-							// Error: even element in bindings list not a symbol
-							printf("let* : error : even element in bindings list not a symbol\n");
+							// Error: too few or too many arguments
+							printf("if : error : too few or too many arguments\n");
 							return NULL;
 						}
-
-						env_set(let_env, p->p_first, EVAL(p->p_rest->p_first, let_env));
-
-						// Next-next
-						p = p->p_rest->p_rest;
-					}
-					// TODO: discard env?
-					return EVAL(args->p_rest->p_first, let_env);
-				}
-			case SO_FN_STAR: // (fn* (symbol1 symbol2 ...) expr)
-				if (!args || !args->p_first || !args->p_rest)
-				{
-					// Error: invalid args
-					printf("fn* : error : invalid args");
-					return NULL;
-				}
-				// Check that the parameter list is all symbols
-				Cell *p = args->p_first;
-				while (p && p->p_first)
-				{
-					if (p->p_first->kind != T_SYMBOL)
-					{
-						// Error: parameter list must be all symbols
-						printf("fn* : error : parameter list must be all symbols\n");
-						return NULL;
-					}
-					p = p->p_rest;
-				}
-				return make_fn(args->p_first, args->p_rest->p_first);
-			case SO_IF: // (if expr true {optional false?})
-				{
-					if (!args || !args->p_first || !args->p_rest || (args->p_rest->p_rest && args->p_rest->p_rest->p_rest))
-					{
-						// Error: too few or too many arguments
-						printf("if : error : too few or too many arguments\n");
-						return NULL;
-					}
-					Cell *cond = EVAL(args->p_first, env);
-					if (cond)
-					{
-						return EVAL(args->p_rest->p_first, env);
-					}
-					else
-					{
-						if (args->p_rest->p_rest)
+						Cell *cond = EVAL(args->p_first, env);
+						if (cond)
 						{
-							return EVAL(args->p_rest->p_rest->p_first, env);
+							return EVAL(args->p_rest->p_first, env);
 						}
-						return NULL;
+						else
+						{
+							if (args->p_rest->p_rest)
+							{
+								return EVAL(args->p_rest->p_rest->p_first, env);
+							}
+							return NULL;
+						}
 					}
-				}
-			case SO_DO:
-				{
-					Cell *latest = NULL;
-					while (args && !is_empty_list(args))
+				case SO_DO:
 					{
-						latest = EVAL(args->p_first, env);
-						args = args->p_rest;
+						Cell *latest = NULL;
+						while (args && !is_empty_list(args))
+						{
+							latest = EVAL(args->p_first, env);
+							args = args->p_rest;
+						}
+						return latest;
 					}
-					return latest;
-				}
+			}
+			return NULL;
 		}
-		return NULL;
-	}
-	else
-	{
-		// Normal function application
-		args = eval_ast(args, env);
-		return apply(head, args, env);
+		else
+		{
+			// Normal function application
+			args = eval_ast(args, env);
+			return apply(head, args, env);
+		}
 	}
 }
 
