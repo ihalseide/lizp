@@ -58,6 +58,9 @@ struct cell
 	};
 };
 
+// Debug forward declare for everything
+void PRINT (Cell *expr);
+
 // Cell memory (holds the actual cell values):
 Cell *cell_pool = NULL;
 int cell_pool_cap = 0;
@@ -119,12 +122,17 @@ Cell *make_int (int n)
 	return x;
 }
 
-Cell *make_fn (Cell *args, Cell *body)
+Cell *make_fn (Cell *params, Cell *body)
 {
+	// debug
+	printf("make_fn : note : params = ");
+	PRINT(params);
+	printf("\n");
+
 	Cell *x = cell_init(T_FUNC);
 	if (x)
 	{
-		x->p_first = args;
+		x->p_first = params;
 		x->p_rest = body;
 	}
 	return x;
@@ -199,7 +207,7 @@ int is_empty_list (Cell *x)
 int list_length (Cell *list)
 {
 	int i;
-	for (i = 0; is_list(list) && !is_empty_list(list); i++)
+	for (i = 0; list && is_list(list) && !is_empty_list(list); i++)
 	{
 		list = list->p_rest;
 	}
@@ -767,11 +775,10 @@ int pr_str (Cell *x, char *out, int length)
 			return print_cstr("#<code>", out, length);
 		case T_SPECIAL_FORM:
 			return print_cstr("#<special>", out, length);
-		default:
-			// Error: invalid cell kind
-			printf("pr_str : error : invalid cell kind\n");
-			return 0;
 	}
+	// Error: invalid cell kind
+	printf("pr_str : error : invalid cell kind\n");
+	return 0;
 }
 
 Cell *READ (const char *start, int length)
@@ -923,13 +930,7 @@ Cell *apply (Cell *head, Cell *args, Cell *env)
 							printf("apply : error: invalid args\n");
 							return NULL;
 						}
-						args = args->p_first;
-						int i;
-						for (i = 0; args; i++)
-						{
-							args = args->p_rest;
-						}
-						return make_int(i);
+						return make_int(list_length(args->p_first));
 					}
 			}
 		case T_FUNC:
@@ -982,6 +983,11 @@ Cell *EVAL (Cell *x, Cell *env)
 
 	Cell *head = eval_ast(x->p_first, env);
 	Cell *args = x->p_rest;
+	if (!args)
+	{
+		args = make_empty_list();
+	}
+
 	if (!head)
 	{
 		// Error: invalid head
@@ -1013,6 +1019,8 @@ Cell *EVAL (Cell *x, Cell *env)
 						return NULL;
 					}
 					Cell *let_env = env_create(env);
+					// Go through the bindings list and add the
+					// bindings to the environment
 					Cell *p = args->p_first; // pointer to bindings list
 					while (p)
 					{
@@ -1037,10 +1045,58 @@ Cell *EVAL (Cell *x, Cell *env)
 					// TODO: discard env?
 					return EVAL(args->p_rest->p_first, let_env);
 				}
-			case SO_IF:
-			case SO_FN_STAR:
+			case SO_FN_STAR: // (fn* (symbol1 symbol2 ...) expr)
+				if (!args || !args->p_first || !args->p_rest)
+				{
+					// Error: invalid args
+					printf("fn* : error : invalid args");
+					return NULL;
+				}
+				// Check that the parameter list is all symbols
+				Cell *p = args->p_first;
+				while (p && p->p_first)
+				{
+					if (p->p_first->kind != T_SYMBOL)
+					{
+						// Error: parameter list must be all symbols
+						printf("fn* : error : parameter list must be all symbols\n");
+						return NULL;
+					}
+					p = p->p_rest;
+				}
+				return make_fn(args->p_first, args->p_rest->p_first);
+			case SO_IF: // (if expr true {optional false?})
+				{
+					if (!args || !args->p_first || !args->p_rest || (args->p_rest->p_rest && args->p_rest->p_rest->p_rest))
+					{
+						// Error: too few or too many arguments
+						printf("if : error : too few or too many arguments\n");
+						return NULL;
+					}
+					Cell *cond = EVAL(args->p_first, env);
+					if (cond)
+					{
+						return EVAL(args->p_rest->p_first, env);
+					}
+					else
+					{
+						if (args->p_rest->p_rest)
+						{
+							return EVAL(args->p_rest->p_rest->p_first, env);
+						}
+						return NULL;
+					}
+				}
 			case SO_DO:
-				printf("EVAL : error : not implemented yet\n");
+				{
+					Cell *latest = NULL;
+					while (args && !is_empty_list(args))
+					{
+						latest = EVAL(args->p_first, env);
+						args = args->p_rest;
+					}
+					return latest;
+				}
 		}
 		return NULL;
 	}
@@ -1120,6 +1176,7 @@ Cell *init (int ncells, int nchars)
 	env_set(env, make_symbol(string_intern_c("fn*")), make_spec(SO_FN_STAR));
 	env_set(env, make_symbol(string_intern_c("let*")), make_spec(SO_LET_STAR));
 	env_set(env, make_symbol(string_intern_c("do")), make_spec(SO_DO));
+	env_set(env, make_symbol(string_intern_c("if")), make_spec(SO_IF));
 	return env;
 }
 
