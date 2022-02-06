@@ -16,6 +16,7 @@ enum Cell_kind
 	T_SYMBOL,
 	T_FUNC,
 	T_NATIVE_FUNC,
+	T_SPECIAL_FORM,
 	T_PAIR,
 };
 
@@ -25,6 +26,9 @@ enum Native_func
 	NF_SUB,
 	NF_MUL,
 	NF_DIV,
+	NF_COUNT,
+	NF_LIST,
+	NF_LIST_P,
 };
 
 enum Special_op
@@ -128,7 +132,7 @@ Cell *make_fn (Cell *args, Cell *body)
 
 Cell *make_spec (enum Special_op id)
 {
-	Cell *x = cell_init(T_SYMBOL);
+	Cell *x = cell_init(T_SPECIAL_FORM);
 	if (x)
 	{
 		x->spec = id;
@@ -392,7 +396,7 @@ void env_set (Cell *env, Cell *sym, Cell *val)
 	Cell *slot = alist_assoc(sym, env->p_first);
 	if (slot == NULL)
 	{
-		// Symbol undefined. (or error)
+		// Symbol undefined.
 		// Push the new (symbol . value) pair to the env
 		slot = make_pair(sym, val);
 		if (is_empty_list(env->p_first))
@@ -459,7 +463,8 @@ int read_atom (const char *start, int length, Cell **out)
 		if (*p != '"')
 		{
 			// Error: unexpected end of string
-			exit(99);
+			printf("read_atom : error : unexpected end of string\n");
+			return 0;
 		}
 
 		// Intern string, remove quotes
@@ -549,6 +554,7 @@ int read_list (const char *start, int length, Cell **out)
 	{
 		// Error: unexpected end of input
 		*out = NULL;
+		printf("read_list: error : unexpected end of input\n");
 	}
 
 	return view - start;
@@ -567,16 +573,19 @@ int read_str (const char *start, int length, Cell **out)
 		case '\0':
 			// Null terminator for strings
 			// ERROR: unexpected end of input
+			printf("read_str : error : unexpected end of input\n");
 			*out = NULL;
 			return 0;
 		case ']':
 		case ')':
 		case '}':
 			// Error, unmatched closing paren
+			printf("read_str : error : unmatched closing paren\n");
 			*out = NULL;
 			return 0;
 		case '.':
 			// Error, dot should only be inside a list
+			printf("read_str : error : dot should only be inside a list\n");
 			*out = NULL;
 			return 0;
 		case '[':
@@ -758,8 +767,11 @@ int pr_str (Cell *x, char *out, int length)
 			return print_cstr("#<fn>", out, length);
 		case T_NATIVE_FUNC:
 			return print_cstr("#<code>", out, length);
+		case T_SPECIAL_FORM:
+			return print_cstr("#<special>", out, length);
 		default:
 			// Error: invalid cell kind
+			printf("pr_str : error : invalid cell kind\n");
 			return 0;
 	}
 }
@@ -817,6 +829,7 @@ Cell *symbol_lookup (Cell *env, Cell *sym)
 	if (!slot)
 	{
 		// Error: Symbol undefined.
+		printf("symbol_lookup : error : symbol undefined\n");
 		return NULL;
 	}
 
@@ -845,42 +858,81 @@ Cell *apply (Cell *head, Cell *args, Cell *env)
 	if (!head)
 	{
 		// Error: not a function
+		printf("apply : error : not a function\n");
 		return NULL;
 	}
+
+	if (!args)
+		args = make_empty_list();
 
 	switch (head->kind)
 	{
 		case T_NATIVE_FUNC:
+			//printf("apply : note : native function call %d\n", head->func);
 			switch (head->func)
 			{
 				case NF_ADD:
-					if (!args || !args->p_first || !args->p_rest || !args->p_rest->p_first)
+					if (!args || is_empty_list(args) || !args->p_first || !args->p_rest || !args->p_rest->p_first)
 					{
 						// Error: invalid args
+						printf("apply : error: invalid args\n");
 						return NULL;
 					}
 					return make_int(args->p_first->integer + args->p_rest->p_first->integer);
 				case NF_SUB:
-					if (!args || !args->p_first || !args->p_rest || !args->p_rest->p_first)
+					if (!args || is_empty_list(args) || !args->p_first || !args->p_rest || !args->p_rest->p_first)
 					{
 						// Error: invalid args
+						printf("apply : error: invalid args\n");
 						return NULL;
 					}
 					return make_int(args->p_first->integer - args->p_rest->p_first->integer);
 				case NF_MUL:
-					if (!args || !args->p_first || !args->p_rest || !args->p_rest->p_first)
+					if (!args || is_empty_list(args) || !args->p_first || !args->p_rest || !args->p_rest->p_first)
 					{
 						// Error: invalid args
+						printf("apply : error: invalid args\n");
 						return NULL;
 					}
 					return make_int(args->p_first->integer * args->p_rest->p_first->integer);
 				case NF_DIV:
-					if (!args || !args->p_first || !args->p_rest || !args->p_rest->p_first)
+					if (!args || is_empty_list(args) || !args->p_first || !args->p_rest || !args->p_rest->p_first)
 					{
 						// Error: invalid args
+						printf("apply : error: invalid args\n");
 						return NULL;
 					}
 					return make_int(args->p_first->integer / args->p_rest->p_first->integer);
+				case NF_LIST_P:
+					if (!args || is_empty_list(args))
+					{
+						// Error: invalid args
+						printf("apply : error: invalid args\n");
+						return NULL;
+					}
+					return make_int(args->p_first && args->p_first->kind == T_PAIR);
+				case NF_LIST:
+					if (!args)
+					{
+						return make_empty_list();
+					}
+					return args;
+				case NF_COUNT:
+					{
+						if (!args || is_empty_list(args) || !args->p_first)
+						{
+							// Error: invalid args
+							printf("apply : error: invalid args\n");
+							return NULL;
+						}
+						args = args->p_first;
+						int i;
+						for (i = 0; args; i++)
+						{
+							args = args->p_rest;
+						}
+						return make_int(i);
+					}
 			}
 		case T_FUNC:
 			{
@@ -896,11 +948,13 @@ Cell *apply (Cell *head, Cell *args, Cell *env)
 				if (args)
 				{
 					// Error: function given too many arguments
+					printf("apply : error : function given too many arguments\n");
 					return NULL;
 				}
 				if (params)
 				{
 					// Error: function not given enough arguments
+					printf("apply : error : function not given enough arguments\n");
 					return NULL;
 				}
 				Cell *result = EVAL(head->p_rest, fn_env);
@@ -909,6 +963,7 @@ Cell *apply (Cell *head, Cell *args, Cell *env)
 			}
 		default:
 			// Error: not a function
+			printf("apply : error : not a function\n");
 			return NULL;
 	}
 }
@@ -927,11 +982,44 @@ Cell *EVAL (Cell *x, Cell *env)
 	if (is_empty_list(x))
 		return x;
 
-	// Normal function application
-	Cell *e_list = eval_ast(x, env);
-	Cell *head = e_list->p_first;
-	Cell *args = e_list->p_rest;
-	return apply(head, args, env);
+	Cell *head = eval_ast(x->p_first, env);
+	Cell *args = x->p_rest;
+	if (!head)
+	{
+		// Error: invalid head
+		printf("EVAL : error : invalid first element of list\n");
+		return NULL;
+	}
+	if (head->kind == T_SPECIAL_FORM)
+	{
+		// Special forms
+		switch (head->spec)
+		{
+			case SO_DEF_BANG: // (def! <symbol> value)
+				if (!args || !args->p_first || !args->p_rest
+						|| args->p_first->kind != T_SYMBOL)
+				{
+					// Error: invalid args
+					printf("def! : error : invalid args");
+					return NULL;
+				}
+				Cell *val = EVAL(args->p_rest->p_first, env);
+				env_set(env, args->p_first, val);
+				return NULL;
+			case SO_LET_STAR:
+			case SO_IF:
+			case SO_FN_STAR:
+			case SO_DO:
+				printf("EVAL : error : not implemented yet\n");
+		}
+		return NULL;
+	}
+	else
+	{
+		// Normal function application
+		args = eval_ast(args, env);
+		return apply(head, args, env);
+	}
 }
 
 void PRINT (Cell *expr)
@@ -995,6 +1083,13 @@ Cell *init (int ncells, int nchars)
 	env_set(env, make_symbol(string_intern_c("-")), make_native_fn(NF_SUB));
 	env_set(env, make_symbol(string_intern_c("*")), make_native_fn(NF_MUL));
 	env_set(env, make_symbol(string_intern_c("/")), make_native_fn(NF_DIV));
+	env_set(env, make_symbol(string_intern_c("list")), make_native_fn(NF_LIST));
+	env_set(env, make_symbol(string_intern_c("list?")), make_native_fn(NF_LIST_P));
+	env_set(env, make_symbol(string_intern_c("count")), make_native_fn(NF_COUNT));
+	env_set(env, make_symbol(string_intern_c("def!")), make_spec(SO_DEF_BANG));
+	env_set(env, make_symbol(string_intern_c("fn*")), make_spec(SO_FN_STAR));
+	env_set(env, make_symbol(string_intern_c("let*")), make_spec(SO_LET_STAR));
+	env_set(env, make_symbol(string_intern_c("do")), make_spec(SO_DO));
 	return env;
 }
 
@@ -1006,6 +1101,11 @@ int main (void)
 	{
 		return 1;
 	}
+
+	// Debug
+	printf("environment: ");
+	PRINT(repl_env);
+	printf("\n");
 
 	// REPL
 	char buffer[1024];
