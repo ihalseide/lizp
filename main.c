@@ -29,6 +29,13 @@ enum Native_func
 	NF_COUNT,
 	NF_LIST,
 	NF_LIST_P,
+	NF_EMPTY_P,
+	NF_PRN,
+	NF_EQ,
+	NF_LT,
+	NF_GT,
+	NF_LTE,
+	NF_GTE,
 };
 
 enum Special_op
@@ -842,6 +849,35 @@ Cell *symbol_lookup (Cell *env, Cell *sym)
 	return slot->p_rest;
 }
 
+int cell_eq (Cell *a, Cell *b)
+{
+	if (!a || !b)
+		return a == b;
+	if (a == b)
+		return 1;
+	if (a->kind != b->kind)
+		return 0;
+	switch (a->kind)
+	{
+		case T_INT:
+			return a->integer == b->integer;
+		case T_STRING:
+		case T_SYMBOL:
+		case T_FUNC:
+			// TODO
+			return 0;
+		case T_NATIVE_FUNC:
+			return a->func == b->func;
+		case T_SPECIAL_FORM:
+			return a->spec == b->spec;
+		case T_PAIR:
+			return cell_eq(a->p_first, b->p_first)
+				&& cell_eq(a->p_rest, b->p_rest);
+		default:
+			return 0;
+	}
+}
+
 Cell *eval_ast (Cell *ast, Cell *env)
 {
 	switch (ast->kind)
@@ -855,6 +891,75 @@ Cell *eval_ast (Cell *ast, Cell *env)
 		case T_FUNC:
 		default:
 			return ast;
+	}
+}
+
+// Do a native function which should have 1 args
+Cell *apply_native1 (enum Native_func fn, Cell *args)
+{
+	if (!args || is_empty_list(args) || !args->p_first)
+	{
+		printf("apply : error: invalid args\n");
+		return NULL;
+	}
+	switch (fn)
+	{
+		case NF_PRN:
+			PRINT(args->p_first);
+			return NULL;
+		case NF_EMPTY_P:
+			return make_int(is_empty_list(args->p_first));
+		case NF_COUNT:
+			if (args->p_first->kind != T_PAIR)
+				return NULL;
+			return make_int(list_length(args->p_first));
+		case NF_LIST_P:
+			return make_int(args->p_first && args->p_first->kind == T_PAIR);
+		default:
+			printf("apply_native1 : error : invalid native fn\n");
+			return NULL;
+	}
+}
+
+// Do a native function which should have 2 args
+Cell *apply_native2 (enum Native_func fn, Cell *args)
+{
+	if (!args || is_empty_list(args) || !args->p_first || !args->p_rest || !args->p_rest->p_first)
+	{
+		printf("apply : error: invalid args\n");
+		return NULL;
+	}
+	switch (fn)
+	{
+		case NF_EQ:
+			return make_int(cell_eq(args->p_first, args->p_rest->p_first));
+		case NF_LT:
+			if (!args->p_first->kind == T_INT || !args->p_rest->p_first->kind == T_INT)
+				return NULL;
+			return make_int(args->p_first->integer < args->p_rest->p_first->integer);
+		case NF_GT:
+			if (!args->p_first->kind == T_INT || !args->p_rest->p_first->kind == T_INT)
+				return NULL;
+			return make_int(args->p_first->integer > args->p_rest->p_first->integer);
+		case NF_LTE:
+			if (!args->p_first->kind == T_INT || !args->p_rest->p_first->kind == T_INT)
+				return NULL;
+			return make_int(args->p_first->integer <= args->p_rest->p_first->integer);
+		case NF_GTE:
+			if (!args->p_first->kind == T_INT || !args->p_rest->p_first->kind == T_INT)
+				return NULL;
+			return make_int(args->p_first->integer >= args->p_rest->p_first->integer);
+		case NF_ADD:
+			return make_int(args->p_first->integer + args->p_rest->p_first->integer);
+		case NF_SUB:
+			return make_int(args->p_first->integer - args->p_rest->p_first->integer);
+		case NF_MUL:
+			return make_int(args->p_first->integer * args->p_rest->p_first->integer);
+		case NF_DIV:
+			return make_int(args->p_first->integer / args->p_rest->p_first->integer);
+		default:
+			printf("apply_native2 : error : invalid native fn\n");
+			return NULL;
 	}
 }
 
@@ -873,65 +978,29 @@ Cell *apply (Cell *head, Cell *args, Cell *env)
 	switch (head->kind)
 	{
 		case T_NATIVE_FUNC:
-			//printf("apply : note : native function call %d\n", head->func);
 			switch (head->func)
 			{
-				case NF_ADD:
-					if (!args || is_empty_list(args) || !args->p_first || !args->p_rest || !args->p_rest->p_first)
-					{
-						// Error: invalid args
-						printf("apply : error: invalid args\n");
-						return NULL;
-					}
-					return make_int(args->p_first->integer + args->p_rest->p_first->integer);
-				case NF_SUB:
-					if (!args || is_empty_list(args) || !args->p_first || !args->p_rest || !args->p_rest->p_first)
-					{
-						// Error: invalid args
-						printf("apply : error: invalid args\n");
-						return NULL;
-					}
-					return make_int(args->p_first->integer - args->p_rest->p_first->integer);
-				case NF_MUL:
-					if (!args || is_empty_list(args) || !args->p_first || !args->p_rest || !args->p_rest->p_first)
-					{
-						// Error: invalid args
-						printf("apply : error: invalid args\n");
-						return NULL;
-					}
-					return make_int(args->p_first->integer * args->p_rest->p_first->integer);
-				case NF_DIV:
-					if (!args || is_empty_list(args) || !args->p_first || !args->p_rest || !args->p_rest->p_first)
-					{
-						// Error: invalid args
-						printf("apply : error: invalid args\n");
-						return NULL;
-					}
-					return make_int(args->p_first->integer / args->p_rest->p_first->integer);
+				case NF_PRN:
+				case NF_EMPTY_P:
+				case NF_COUNT:
 				case NF_LIST_P:
-					if (!args || is_empty_list(args))
-					{
-						// Error: invalid args
-						printf("apply : error: invalid args\n");
-						return NULL;
-					}
-					return make_int(args->p_first && args->p_first->kind == T_PAIR);
+					return apply_native1(head->func, args);
+				case NF_EQ:
+				case NF_LT:
+				case NF_GT:
+				case NF_LTE:
+				case NF_GTE:
+				case NF_ADD:
+				case NF_SUB:
+				case NF_MUL:
+				case NF_DIV:
+					return apply_native2(head->func, args);
 				case NF_LIST:
 					if (!args)
 					{
 						return make_empty_list();
 					}
 					return args;
-				case NF_COUNT:
-					{
-						if (!args || is_empty_list(args) || !args->p_first)
-						{
-							// Error: invalid args
-							printf("apply : error: invalid args\n");
-							return NULL;
-						}
-						return make_int(list_length(args->p_first));
-					}
 			}
 		case T_FUNC:
 			{
@@ -1161,22 +1230,27 @@ Cell *init (int ncells, int nchars)
 	// the empty string.
 	string_list = make_pair(make_string(""), NULL);
 
-	// Symbols...
-
 	// Setup the global environment now
 	Cell *env = env_create(NULL);
+	env_set(env, make_symbol(string_intern_c("def!")), make_spec(SO_DEF_BANG));
+	env_set(env, make_symbol(string_intern_c("fn*")), make_spec(SO_FN_STAR));
+	env_set(env, make_symbol(string_intern_c("let*")), make_spec(SO_LET_STAR));
+	env_set(env, make_symbol(string_intern_c("do")), make_spec(SO_DO));
+	env_set(env, make_symbol(string_intern_c("if")), make_spec(SO_IF));
 	env_set(env, make_symbol(string_intern_c("+")), make_native_fn(NF_ADD));
 	env_set(env, make_symbol(string_intern_c("-")), make_native_fn(NF_SUB));
 	env_set(env, make_symbol(string_intern_c("*")), make_native_fn(NF_MUL));
 	env_set(env, make_symbol(string_intern_c("/")), make_native_fn(NF_DIV));
 	env_set(env, make_symbol(string_intern_c("list")), make_native_fn(NF_LIST));
 	env_set(env, make_symbol(string_intern_c("list?")), make_native_fn(NF_LIST_P));
+	env_set(env, make_symbol(string_intern_c("empty?")), make_native_fn(NF_EMPTY_P));
 	env_set(env, make_symbol(string_intern_c("count")), make_native_fn(NF_COUNT));
-	env_set(env, make_symbol(string_intern_c("def!")), make_spec(SO_DEF_BANG));
-	env_set(env, make_symbol(string_intern_c("fn*")), make_spec(SO_FN_STAR));
-	env_set(env, make_symbol(string_intern_c("let*")), make_spec(SO_LET_STAR));
-	env_set(env, make_symbol(string_intern_c("do")), make_spec(SO_DO));
-	env_set(env, make_symbol(string_intern_c("if")), make_spec(SO_IF));
+	env_set(env, make_symbol(string_intern_c("prn")), make_native_fn(NF_PRN));
+	env_set(env, make_symbol(string_intern_c("=")), make_native_fn(NF_EQ));
+	env_set(env, make_symbol(string_intern_c("<")), make_native_fn(NF_LT));
+	env_set(env, make_symbol(string_intern_c(">")), make_native_fn(NF_GT));
+	env_set(env, make_symbol(string_intern_c("<=")), make_native_fn(NF_LTE));
+	env_set(env, make_symbol(string_intern_c(">=")), make_native_fn(NF_GTE));
 	return env;
 }
 
