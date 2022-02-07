@@ -1105,16 +1105,15 @@ Cell *EVAL (Cell *x, Cell *env)
 						Cell *cond = EVAL(args->p_first, env);
 						if (cond)
 						{
-							return EVAL(args->p_rest->p_first, env);
+							x = args->p_rest->p_first;
+							continue;
 						}
-						else
+						if (args->p_rest->p_rest)
 						{
-							if (args->p_rest->p_rest)
-							{
-								return EVAL(args->p_rest->p_rest->p_first, env);
-							}
-							return NULL;
+							x = args->p_rest->p_rest->p_first;
+							continue;
 						}
+						return NULL;
 					}
 				case SO_DO: // (do expr1 expr2 ...)
 					// Evaluate all but the last item
