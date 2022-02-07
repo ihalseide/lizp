@@ -104,22 +104,6 @@ Cell *make_int (int n)
 	return x;
 }
 
-Cell *make_fn (Cell *params, Cell *body)
-{
-	// debug
-	printf("make_fn : note : params = ");
-	PRINT(params);
-	printf("\n");
-
-	Cell *x = cell_init(T_FUNC);
-	if (x)
-	{
-		x->p_first = params;
-		x->p_rest = body;
-	}
-	return x;
-}
-
 Cell *make_spec (enum Special_op id)
 {
 	Cell *x = cell_init(T_SPECIAL_FORM);
@@ -166,6 +150,19 @@ Cell *make_string (const char *str)
 	Cell *x = cell_init(T_STRING);
 	if (x)
 		x->s_ptr = str;
+	return x;
+}
+
+// A custom lisp function is a really just a list.
+// The form of that list is: (params env . body)
+Cell *make_fn (Cell *params, Cell *body, Cell *outer_env)
+{
+	Cell *x = cell_init(T_FUNC);
+	if (x)
+	{
+		x->p_first = params;
+		x->p_rest = make_pair(outer_env, body);
+	}
 	return x;
 }
 
@@ -265,12 +262,6 @@ int symbol_eq (const Cell *s1, const Cell *s2)
 	return s1 && (s1->kind == T_SYMBOL) && s1->s_ptr
 		&& s2 && (s2->kind == T_SYMBOL) && s2->s_ptr
 		&& (strcmp(s1->s_ptr, s2->s_ptr) == 0);
-}
-
-// Env = (alist . outer)
-Cell *env_create (Cell *env_outer)
-{
-	return make_pair(make_empty_list(), env_outer);
 }
 
 // Find a symbol in an alist.
@@ -382,6 +373,57 @@ void env_set (Cell *env, Cell *sym, Cell *val)
 		// Change the value of the already present slot.
 		slot->p_rest = val;
 	}
+}
+
+// An environment is a list of the form (alist . outer-env).
+// Create an environment with each item of the
+// "binds" list set to the corresponding item in the "exprs" list.
+Cell *env_create (Cell *env_outer, Cell *binds, Cell *exprs)
+{
+	// Validate args
+	if (env_outer && env_outer->kind != T_PAIR)
+	{
+		printf("env_create : error : invalid outer environment\n");
+		return NULL;
+	}
+
+	Cell *env = make_pair(make_empty_list(), env_outer);
+	if (!env) // Could be NULL
+		return NULL;
+
+	// Create the bindings by iterating both lists
+	while (binds && exprs && !is_empty_list(binds) && !is_empty_list(exprs))
+	{
+		// Bind 1 pair
+		Cell *sym = binds->p_first;
+		Cell *val = exprs->p_first;
+		if (!sym || sym->kind != T_SYMBOL)
+		{
+			printf("env_create : error : member of the bindings list is not a symbol\n");
+			return NULL;
+		}
+		env_set(env, sym, val);
+
+		// Next
+		binds = binds->p_rest;
+		exprs = exprs->p_rest;
+	}
+
+	// Left over symbols in the bindings list
+	if (binds && !is_empty_list(binds))
+	{
+		printf("env_create : error : not enough values to bind to symbols list\n");
+		return NULL;
+	}
+
+	// Left over values in the exprs list
+	if (exprs && !is_empty_list(exprs))
+	{
+		printf("env_create : error : too many values to bind to symbols list\n");
+		return NULL;
+	}
+
+	return env;
 }
 
 int parse_int (const char *start, int length, int *out)
@@ -789,21 +831,6 @@ Cell *eval_each (Cell *x, Cell *env)
 	return y;
 }
 
-Cell *symbol_lookup (Cell *env, Cell *sym)
-{
-	Cell *slot = env_get(env, sym);
-
-	if (!slot)
-	{
-		// Error: Symbol undefined.
-		printf("symbol_lookup : error : symbol undefined\n");
-		return NULL;
-	}
-
-	// Return the slot's value
-	return slot->p_rest;
-}
-
 int cell_eq (Cell *a, Cell *b)
 {
 	if (!a || !b)
@@ -838,7 +865,13 @@ Cell *eval_ast (Cell *ast, Cell *env)
 	switch (ast->kind)
 	{
 		case T_SYMBOL:
-			return symbol_lookup(env, ast);
+			{
+				// Get the value out of the environment's slot
+				Cell *slot = env_get(env, ast);
+				if (slot)
+					return slot->p_rest;
+				return slot;
+			}
 		case T_PAIR:
 			return eval_each(ast, env);
 		case T_INT:
@@ -962,30 +995,12 @@ Cell *apply (Cell *head, Cell *args, Cell *env)
 			}
 		case T_FUNC:
 			{
-				// Lisp function...
-				Cell *fn_env = env_create(env);
-				Cell *params = head->p_first; // function parameter list
-				while (args && params)
-				{
-					env_set(fn_env, params->p_first, args->p_first);
-					args = args->p_rest;
-					params = params->p_rest;
-				}
-				if (args)
-				{
-					// Error: function given too many arguments
-					printf("apply : error : function given too many arguments\n");
-					return NULL;
-				}
-				if (params)
-				{
-					// Error: function not given enough arguments
-					printf("apply : error : function not given enough arguments\n");
-					return NULL;
-				}
-				Cell *result = EVAL(head->p_rest, fn_env);
-				// TODO: discard the fn_env
-				return result;
+				// Lisp function (see comment before the definition of function make_fn)
+				Cell *params = head->p_first;          // function parameter list
+				Cell *closure = head->p_rest->p_first; // function outer closure environment
+				Cell *body = head->p_rest->p_rest;     // function body
+				Cell *fn_env = env_create(closure, params, args);
+				return EVAL(body, fn_env);
 			}
 		default:
 			// Error: not a function
@@ -994,24 +1009,24 @@ Cell *apply (Cell *head, Cell *args, Cell *env)
 	}
 }
 
-Cell *EVAL (Cell *x, Cell *env)
+Cell *EVAL (Cell *ast, Cell *env)
 {
 	while (1)
 	{
 		// C NULL -> Lisp nil
-		if (!x)
-			return x;
+		if (!ast)
+			return ast;
 
 		// Atom is passed to eval_ast
-		if (!is_list(x))
-			return eval_ast(x, env);
+		if (!is_list(ast))
+			return eval_ast(ast, env);
 
 		// Empty list evals to itself
-		if (is_empty_list(x))
-			return x;
+		if (is_empty_list(ast))
+			return ast;
 
-		Cell *head = eval_ast(x->p_first, env);
-		Cell *args = x->p_rest;
+		Cell *head = EVAL(ast->p_first, env);
+		Cell *args = ast->p_rest;
 		if (!args)
 		{
 			args = make_empty_list();
@@ -1047,7 +1062,7 @@ Cell *EVAL (Cell *x, Cell *env)
 							printf("let* : error : invalid args");
 							return NULL;
 						}
-						Cell *let_env = env_create(env);
+						Cell *let_env = env_create(env, NULL, NULL);
 						// Go through the bindings list and add the
 						// bindings to the environment
 						Cell *p = args->p_first; // pointer to bindings list
@@ -1074,29 +1089,37 @@ Cell *EVAL (Cell *x, Cell *env)
 
 						// TODO: discard env?
 						env = let_env;
-						x = args->p_rest->p_first;
+						ast = args->p_rest->p_first;
 						continue;
 					}
 				case SO_FN_STAR: // (fn* (symbol1 symbol2 ...) expr)
-					if (!args || !args->p_first || !args->p_rest)
 					{
-						// Error: invalid args
-						printf("fn* : error : invalid args");
-						return NULL;
-					}
-					// Check that the parameter list is only symbols
-					Cell *p = args->p_first;
-					while (p && p->p_first)
-					{
-						if (p->p_first->kind != T_SYMBOL)
+						if (!args || !args->p_first || !args->p_rest)
 						{
-							// Error: parameter list must be all symbols
-							printf("fn* : error : parameter list must be all symbols\n");
+							// Error: invalid args
+							printf("fn* : error : invalid args");
 							return NULL;
 						}
-						p = p->p_rest;
+						// Check that the parameter list is only symbols
+						Cell *p = args->p_first;
+						while (p && !is_empty_list(p))
+						{
+							if (!p->p_first || p->p_first->kind != T_SYMBOL)
+							{
+								// Error: parameter list must be all symbols
+								printf("fn* : error : parameter list must be all symbols\n");
+								return NULL;
+							}
+							if (p->p_rest && p->p_rest->kind != T_PAIR)
+							{
+								// Something other than NULL or a list is next
+								printf("fn* : error : parameter list is not a proper list\n");
+								return NULL;
+							}
+							p = p->p_rest;
+						}
+						return make_fn(args->p_first, args->p_rest->p_first, env);
 					}
-					return make_fn(args->p_first, args->p_rest->p_first);
 				case SO_IF: // (if expr true {optional false?})
 					{
 						if (!args || !args->p_first || !args->p_rest || (args->p_rest->p_rest && args->p_rest->p_rest->p_rest))
@@ -1108,12 +1131,12 @@ Cell *EVAL (Cell *x, Cell *env)
 						Cell *cond = EVAL(args->p_first, env);
 						if (cond)
 						{
-							x = args->p_rest->p_first;
+							ast = args->p_rest->p_first;
 							continue;
 						}
 						if (args->p_rest->p_rest)
 						{
-							x = args->p_rest->p_rest->p_first;
+							ast = args->p_rest->p_rest->p_first;
 							continue;
 						}
 						return NULL;
@@ -1129,7 +1152,7 @@ Cell *EVAL (Cell *x, Cell *env)
 					// Has a last item, so do a tail call to evaluate that
 					if (args && args->kind == T_PAIR)
 					{
-						x = args->p_first;
+						ast = args->p_first;
 						continue;
 					}
 					
@@ -1200,7 +1223,7 @@ Cell *init (int ncells, int nchars)
 	string_list = make_pair(make_string(""), NULL);
 
 	// Setup the global environment now
-	Cell *env = env_create(NULL);
+	Cell *env = env_create(NULL, NULL, NULL);
 	env_set(env, make_symbol(string_intern_c("def!")), make_spec(SO_DEF_BANG));
 	env_set(env, make_symbol(string_intern_c("fn*")), make_spec(SO_FN_STAR));
 	env_set(env, make_symbol(string_intern_c("let*")), make_spec(SO_LET_STAR));
