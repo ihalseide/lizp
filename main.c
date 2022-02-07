@@ -20,7 +20,7 @@ enum Native_func
 	NF_DIV,    NF_COUNT,   NF_LIST,
 	NF_LIST_P, NF_EMPTY_P, NF_PRN,
 	NF_EQ,     NF_LT,      NF_GT,
-	NF_LTE,    NF_GTE,
+	NF_LTE,    NF_GTE,     NF_INT_P,
 };
 
 enum Special_op
@@ -870,6 +870,8 @@ Cell *apply_native1 (enum Native_func fn, Cell *args)
 			return make_int(list_length(args->p_first));
 		case NF_LIST_P:
 			return make_int(args->p_first && args->p_first->kind == T_PAIR);
+		case NF_INT_P:
+			return make_int(args->p_first && args->p_first->kind == T_INT);
 		default:
 			printf("apply_native1 : error : invalid native fn\n");
 			return NULL;
@@ -939,6 +941,7 @@ Cell *apply (Cell *head, Cell *args, Cell *env)
 				case NF_EMPTY_P:
 				case NF_COUNT:
 				case NF_LIST_P:
+				case NF_INT_P:
 					return apply_native1(head->func, args);
 				case NF_EQ:
 				case NF_LT:
@@ -1081,7 +1084,7 @@ Cell *EVAL (Cell *x, Cell *env)
 						printf("fn* : error : invalid args");
 						return NULL;
 					}
-					// Check that the parameter list is all symbols
+					// Check that the parameter list is only symbols
 					Cell *p = args->p_first;
 					while (p && p->p_first)
 					{
@@ -1217,6 +1220,7 @@ Cell *init (int ncells, int nchars)
 	env_set(env, make_symbol(string_intern_c(">")), make_native_fn(NF_GT));
 	env_set(env, make_symbol(string_intern_c("<=")), make_native_fn(NF_LTE));
 	env_set(env, make_symbol(string_intern_c(">=")), make_native_fn(NF_GTE));
+	env_set(env, make_symbol(string_intern_c("int?")), make_native_fn(NF_INT_P));
 	return env;
 }
 
