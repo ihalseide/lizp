@@ -6,8 +6,8 @@ This is my own (work-in-progress) implementation of a Lisp programming language.
 
 ## Built-in functions
 
-The built-in functions are "+", "-", "\*", and "/".
+The built-in functions are "+", "-", "\*", "/", "count", "list", "list?", "empty?", "prn", "=", "<", ">", "<=", ">=", and "int?".
 
 ## Special forms
 
-The impemented special forms are "def!", "let\*", "do", and "fn\*".
+The impemented special forms are "def!", "let\*", "do", "if", and "fn\*".
