@@ -49,21 +49,23 @@ int char_pool_cap = 0;
 // Strings interned
 Cell *string_list = NULL;
 
-// Interned strings for special form symbols
-const char *so_def_bang;
-const char *so_let_star;
-const char *so_if;
-const char *so_fn_star;
-const char *so_do;
+// Interned strings for special use
+const char *s_nil,
+	  *s_false,
+	  *s_true,
+	  *s_def_bang,
+	  *s_let_star,
+	  *s_if,
+	  *s_fn_star,
+	  *s_do;
 
 int char_is_symbol (char c)
 {
-	return c && !isspace(c) && (c != '.') && (c != '[') && (c != ']')
+	return (c > ' ') && (c != '.') && (c != '[') && (c != ']')
 		&& (c != '(') && (c != ')') && (c != '{') && (c != '}');
 }
 
 // Get a new cell
-// Can return NULL
 Cell *cell_get ()
 {
 	if (!cell_pool)
@@ -167,7 +169,7 @@ int list_length (Cell *list)
 }
 
 // Add string to the char_pool.
-// Helper function for use by string_intern and string_intern_cstring.
+// Helper function for use by string_intern and string_intern_c
 const char *string_create (const char *start, int length)
 {
 	// Validate inputs
@@ -317,6 +319,7 @@ Cell *env_get (Cell *env, Cell *sym)
 	if (!containing_env)
 	{
 		// Symbol not found
+		printf("env_get : error : symbol undefined\n");
 		return NULL;
 	}
 
@@ -481,7 +484,11 @@ int read_atom (const char *start, int length, Cell **out)
 		else
 		{
 			// Symbol
-			*out = make_symbol(string_intern(start, p - start));
+			const char *name = string_intern(start, p - start);
+			if (name == s_nil)
+				*out = NULL;
+			else
+				*out = make_symbol(name);
 		}
 
 		return p - start;
@@ -742,7 +749,7 @@ int pr_str (Cell *x, char *out, int length)
 	// Debug only, should be nil
 	if (!x)
 	{
-		return print_cstr("NULL", out, length);
+		return print_cstr("nil", out, length);
 	}
 
 	switch (x->kind)
@@ -840,15 +847,21 @@ int cell_eq (Cell *a, Cell *b)
 
 Cell *eval_ast (Cell *ast, Cell *env)
 {
+	if (!ast)
+		return NULL;
+
 	switch (ast->kind)
 	{
 		case T_SYMBOL:
 			{
+				// Self-evaluating symbols
+				if (ast->val.as_str == s_true || ast->val.as_str == s_false)
+					return ast;
 				// Get the value out of the environment's slot
 				Cell *slot = env_get(env, ast);
-				if (slot)
-					return slot->val.as_pair.rest;
-				return slot;
+				if (!slot) // Error: undefined symbol
+					return NULL;
+				return slot->val.as_pair.rest;
 			}
 		case T_PAIR:
 			return eval_each(ast, env);
@@ -874,15 +887,15 @@ Cell *apply_native1 (enum Native_func fn, Cell *args)
 			PRINT(args->val.as_pair.first);
 			return NULL;
 		case NF_EMPTY_P:
-			return make_int(is_empty_list(args->val.as_pair.first));
+			return make_symbol(is_empty_list(args->val.as_pair.first)? s_true : s_false);
 		case NF_COUNT:
 			if (args->val.as_pair.first->kind != T_PAIR)
 				return NULL;
 			return make_int(list_length(args->val.as_pair.first));
 		case NF_LIST_P:
-			return make_int(args->val.as_pair.first && args->val.as_pair.first->kind == T_PAIR);
+			return make_symbol((args->val.as_pair.first && args->val.as_pair.first->kind == T_PAIR) ? s_true : s_false);
 		case NF_INT_P:
-			return make_int(args->val.as_pair.first && args->val.as_pair.first->kind == T_INT);
+			return make_symbol((args->val.as_pair.first && args->val.as_pair.first->kind == T_INT) ? s_true : s_false);
 		default:
 			printf("apply_native1 : error : invalid native fn\n");
 			return NULL;
@@ -991,7 +1004,6 @@ Cell *EVAL (Cell *ast, Cell *env)
 {
 	while (1)
 	{
-		// C NULL -> Lisp nil
 		if (!ast)
 			return ast;
 
@@ -1011,7 +1023,7 @@ Cell *EVAL (Cell *ast, Cell *env)
 		if (head && head->kind == T_SYMBOL)
 		{
 			// Special forms
-			if (head->val.as_str == so_def_bang) // (def! <symbol> value)
+			if (head->val.as_str == s_def_bang) // (def! <symbol> value)
 			{
 				if (!args || !args->val.as_pair.first || !args->val.as_pair.rest
 						|| args->val.as_pair.first->kind != T_SYMBOL)
@@ -1024,7 +1036,7 @@ Cell *EVAL (Cell *ast, Cell *env)
 				env_set(env, args->val.as_pair.first, val);
 				return NULL;
 			}
-			else if (head->val.as_str == so_let_star) // (let* <list of symbols and values> expr)
+			else if (head->val.as_str == s_let_star) // (let* <list of symbols and values> expr)
 			{
 				if (!args || !args->val.as_pair.first || !args->val.as_pair.rest)
 				{
@@ -1062,7 +1074,7 @@ Cell *EVAL (Cell *ast, Cell *env)
 				ast = args->val.as_pair.rest->val.as_pair.first;
 				continue;
 			}
-			else if (head->val.as_str == so_fn_star) // (fn* (symbol1 symbol2 ...) expr)
+			else if (head->val.as_str == s_fn_star) // (fn* (symbol1 symbol2 ...) expr)
 			{
 				if (!args || !args->val.as_pair.first || !args->val.as_pair.rest)
 				{
@@ -1090,7 +1102,7 @@ Cell *EVAL (Cell *ast, Cell *env)
 				}
 				return make_fn(args->val.as_pair.first, args->val.as_pair.rest->val.as_pair.first, env);
 			}
-			else if (head->val.as_str == so_if) // (if expr true {optional false?})
+			else if (head->val.as_str == s_if) // (if expr true {optional false?})
 			{
 				if (!args || !args->val.as_pair.first || !args->val.as_pair.rest || (args->val.as_pair.rest->val.as_pair.rest && args->val.as_pair.rest->val.as_pair.rest->val.as_pair.rest))
 				{
@@ -1099,7 +1111,7 @@ Cell *EVAL (Cell *ast, Cell *env)
 					return NULL;
 				}
 				Cell *cond = EVAL(args->val.as_pair.first, env);
-				if (cond)
+				if (cond && !(cond->kind == T_SYMBOL && cond->val.as_str == s_false))
 				{
 					ast = args->val.as_pair.rest->val.as_pair.first;
 					continue;
@@ -1111,7 +1123,7 @@ Cell *EVAL (Cell *ast, Cell *env)
 				}
 				return NULL;
 			}
-			else if (head->val.as_str == so_do) // (do expr1 expr2 ...)
+			else if (head->val.as_str == s_do) // (do expr1 expr2 ...)
 			{
 				// Evaluate all but the last item
 				while (args && !is_empty_list(args) && args->kind == T_PAIR && args->val.as_pair.rest)
@@ -1193,29 +1205,36 @@ Cell *init (int ncells, int nchars)
 	string_list = make_pair(make_string(""), NULL);
 
 	// Intern important strings
-	so_def_bang = string_intern_c("def!");
-	so_fn_star  = string_intern_c("fn*");
-	so_let_star = string_intern_c("let*");
-	so_do       = string_intern_c("do");
-	so_if       = string_intern_c("if");
+	// 2 types:
+	//   self-evaluating symbols,
+	//   and the names of special forms.
+	s_nil      = string_intern_c("nil");
+	s_true     = string_intern_c("#t");
+	s_false    = string_intern_c("#f");
+
+	s_def_bang = string_intern_c("def!");
+	s_fn_star  = string_intern_c("fn*");
+	s_let_star = string_intern_c("let*");
+	s_do       = string_intern_c("do");
+	s_if       = string_intern_c("if");
 
 	// Setup the global environment now
 	Cell *env = env_create(NULL, NULL, NULL);
+	env_set(env, make_symbol(string_intern_c("*")), make_native_fn(NF_MUL));
 	env_set(env, make_symbol(string_intern_c("+")), make_native_fn(NF_ADD));
 	env_set(env, make_symbol(string_intern_c("-")), make_native_fn(NF_SUB));
-	env_set(env, make_symbol(string_intern_c("*")), make_native_fn(NF_MUL));
 	env_set(env, make_symbol(string_intern_c("/")), make_native_fn(NF_DIV));
+	env_set(env, make_symbol(string_intern_c("<")), make_native_fn(NF_LT));
+	env_set(env, make_symbol(string_intern_c("<=")), make_native_fn(NF_LTE));
+	env_set(env, make_symbol(string_intern_c("=")), make_native_fn(NF_EQ));
+	env_set(env, make_symbol(string_intern_c(">")), make_native_fn(NF_GT));
+	env_set(env, make_symbol(string_intern_c(">=")), make_native_fn(NF_GTE));
+	env_set(env, make_symbol(string_intern_c("count")), make_native_fn(NF_COUNT));
+	env_set(env, make_symbol(string_intern_c("empty?")), make_native_fn(NF_EMPTY_P));
+	env_set(env, make_symbol(string_intern_c("int?")), make_native_fn(NF_INT_P));
 	env_set(env, make_symbol(string_intern_c("list")), make_native_fn(NF_LIST));
 	env_set(env, make_symbol(string_intern_c("list?")), make_native_fn(NF_LIST_P));
-	env_set(env, make_symbol(string_intern_c("empty?")), make_native_fn(NF_EMPTY_P));
-	env_set(env, make_symbol(string_intern_c("count")), make_native_fn(NF_COUNT));
 	env_set(env, make_symbol(string_intern_c("prn")), make_native_fn(NF_PRN));
-	env_set(env, make_symbol(string_intern_c("=")), make_native_fn(NF_EQ));
-	env_set(env, make_symbol(string_intern_c("<")), make_native_fn(NF_LT));
-	env_set(env, make_symbol(string_intern_c(">")), make_native_fn(NF_GT));
-	env_set(env, make_symbol(string_intern_c("<=")), make_native_fn(NF_LTE));
-	env_set(env, make_symbol(string_intern_c(">=")), make_native_fn(NF_GTE));
-	env_set(env, make_symbol(string_intern_c("int?")), make_native_fn(NF_INT_P));
 	return env;
 }
 
