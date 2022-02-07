@@ -3,8 +3,6 @@
 #include <stdlib.h>
 #include <ctype.h>
 
-// TODO: step 4 of MAL process (tail call optimization in EVAL)
-
 enum Cell_kind
 {
 	T_INT,
@@ -1118,16 +1116,22 @@ Cell *EVAL (Cell *x, Cell *env)
 							return NULL;
 						}
 					}
-				case SO_DO:
+				case SO_DO: // (do expr1 expr2 ...)
+					// Evaluate all but the last item
+					while (args && !is_empty_list(args) && args->kind == T_PAIR && args->p_rest)
 					{
-						Cell *latest = NULL;
-						while (args && !is_empty_list(args))
-						{
-							latest = EVAL(args->p_first, env);
-							args = args->p_rest;
-						}
-						return latest;
+						EVAL(args->p_first, env);
+						args = args->p_rest;
 					}
+
+					// Has a last item, so do a tail call to evaluate that
+					if (args && args->kind == T_PAIR)
+					{
+						x = args->p_first;
+						continue;
+					}
+					
+					// No items
 			}
 			return NULL;
 		}
