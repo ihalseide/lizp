@@ -1008,7 +1008,7 @@ Cell *EVAL (Cell *ast, Cell *env)
 		if (!args)
 			args = make_empty_list();
 
-		if (head->kind == T_SYMBOL)
+		if (head && head->kind == T_SYMBOL)
 		{
 			// Special forms
 			if (head->val.as_str == so_def_bang) // (def! <symbol> value)
@@ -1192,12 +1192,14 @@ Cell *init (int ncells, int nchars)
 	// the empty string.
 	string_list = make_pair(make_string(""), NULL);
 
-	// Setup the global environment now
+	// Intern important strings
 	so_def_bang = string_intern_c("def!");
-	so_let_star = string_intern_c("fn*");
-	so_if = string_intern_c("let*");
-	so_fn_star = string_intern_c("do");
-	so_do = string_intern_c("if");
+	so_fn_star  = string_intern_c("fn*");
+	so_let_star = string_intern_c("let*");
+	so_do       = string_intern_c("do");
+	so_if       = string_intern_c("if");
+
+	// Setup the global environment now
 	Cell *env = env_create(NULL, NULL, NULL);
 	env_set(env, make_symbol(string_intern_c("+")), make_native_fn(NF_ADD));
 	env_set(env, make_symbol(string_intern_c("-")), make_native_fn(NF_SUB));
