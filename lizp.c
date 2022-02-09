@@ -14,26 +14,30 @@ enum Native_func
 	NF_LIST,
 	NF_LIST_P,
 	NF_EMPTY_P,
-	NF_PRN,
 	NF_EQ,
 	NF_LT,
 	NF_GT,
 	NF_LTE,
 	NF_GTE,
 	NF_INT_P,
-	NF_READ_STR,
 	NF_SLURP,
+	NF_PRN,
+	NF_READ_STR,
+	NF_STR,
+	NF_PR_STR,
+	NF_PRINTLN,
 	NF_EVAL,
 };
 
 enum Cell_kind
 {
-	T_INT,
-	T_STRING,
-	T_SYMBOL,
-	T_FUNC,
-	T_NATIVE_FUNC,
-	T_PAIR,
+	CK_INT,
+	CK_STRING,
+	CK_SYMBOL,
+	CK_FUNC,
+	CK_NATIVE_FUNC,
+	CK_PAIR,
+	CK_ATOM,
 };
 
 typedef struct cell Cell;
@@ -45,6 +49,7 @@ struct cell
 		int as_int;
 		const char *as_str;
 		enum Native_func as_func;
+		Cell *as_atom;
 		struct
 		{
 			Cell * first;
@@ -54,7 +59,7 @@ struct cell
 };
 
 void PRINT (Cell *expr);
-int pr_str (Cell *x, char *out, int length);
+int pr_str (Cell *x, char *out, int length, int readable);
 
 // Cell memory (holds the actual cell values):
 Cell *cell_pool = NULL;
@@ -110,7 +115,7 @@ Cell *cell_init (enum Cell_kind k)
 
 Cell *make_int (int n)
 {
-	Cell *x = cell_init(T_INT);
+	Cell *x = cell_init(CK_INT);
 	if (x)
 		x->val.as_int = n;
 	return x;
@@ -118,7 +123,7 @@ Cell *make_int (int n)
 
 Cell *make_native_fn (enum Native_func id)
 {
-	Cell *x = cell_init(T_NATIVE_FUNC);
+	Cell *x = cell_init(CK_NATIVE_FUNC);
 	if (x)
 		x->val.as_func = id;
 	return x;
@@ -126,11 +131,21 @@ Cell *make_native_fn (enum Native_func id)
 
 Cell *make_pair (Cell *first, Cell *rest)
 {
-	Cell *x = cell_init(T_PAIR);
+	Cell *x = cell_init(CK_PAIR);
 	if (x)
 	{
 		x->val.as_pair.first = first;
 		x->val.as_pair.rest = rest;
+	}
+	return x;
+}
+
+Cell *make_atom (Cell *ref)
+{
+	Cell *x = cell_init(CK_ATOM);
+	if (x)
+	{
+		x->val.as_atom = ref;
 	}
 	return x;
 }
@@ -142,7 +157,7 @@ Cell *make_empty_list ()
 
 Cell *make_symbol (const char *str)
 {
-	Cell *x = cell_init(T_SYMBOL);
+	Cell *x = cell_init(CK_SYMBOL);
 	if (x)
 		x->val.as_str = str;
 	return x;
@@ -150,7 +165,7 @@ Cell *make_symbol (const char *str)
 
 Cell *make_string (const char *str)
 {
-	Cell *x = cell_init(T_STRING);
+	Cell *x = cell_init(CK_STRING);
 	if (x)
 		x->val.as_str = str;
 	return x;
@@ -160,7 +175,7 @@ Cell *make_string (const char *str)
 // The form of that list is: (params env . body)
 Cell *make_fn (Cell *params, Cell *body, Cell *outer_env)
 {
-	Cell *x = cell_init(T_FUNC);
+	Cell *x = cell_init(CK_FUNC);
 	if (x)
 	{
 		x->val.as_pair.first = params;
@@ -176,13 +191,13 @@ int is_kind (Cell *x, enum Cell_kind kind)
 
 int is_empty_list (Cell *x)
 {
-	return is_kind(x, T_PAIR) && (x->val.as_pair.first == NULL);
+	return is_kind(x, CK_PAIR) && (x->val.as_pair.first == NULL);
 }
 
 int list_length (Cell *list)
 {
 	int i;
-	for (i = 0; is_kind(list, T_PAIR) && !is_empty_list(list); i++)
+	for (i = 0; is_kind(list, CK_PAIR) && !is_empty_list(list); i++)
 		list = list->val.as_pair.rest;
 	return i;
 }
@@ -262,8 +277,8 @@ void string_skip_white(const char **stream, int *length)
 
 int symbol_eq (const Cell *s1, const Cell *s2)
 {
-	return s1 && (s1->kind == T_SYMBOL) && s1->val.as_str
-		&& s2 && (s2->kind == T_SYMBOL) && s2->val.as_str
+	return s1 && (s1->kind == CK_SYMBOL) && s1->val.as_str
+		&& s2 && (s2->kind == CK_SYMBOL) && s2->val.as_str
 		&& (strcmp(s1->val.as_str, s2->val.as_str) == 0);
 }
 
@@ -272,7 +287,7 @@ int symbol_eq (const Cell *s1, const Cell *s2)
 Cell *alist_assoc (const Cell *sym, Cell *alist)
 {
 	// Validate inputs
-	if (!sym || !alist || (sym->kind != T_SYMBOL) || (alist->kind != T_PAIR))
+	if (!sym || !alist || (sym->kind != CK_SYMBOL) || (alist->kind != CK_PAIR))
 	{
 		return NULL;
 	}
@@ -300,13 +315,13 @@ Cell *alist_assoc (const Cell *sym, Cell *alist)
 Cell *env_find (Cell *env, const Cell *sym)
 {
 	// Validate inputs
-	if (!env || (env->kind != T_PAIR) || !sym || (sym->kind != T_SYMBOL))
+	if (!env || (env->kind != CK_PAIR) || !sym || (sym->kind != CK_SYMBOL))
 	{
 		return NULL;
 	}
 
 	// Search up the environment hierarchy
-	while (env && is_kind(env, T_PAIR) && !is_empty_list(env))
+	while (env && is_kind(env, CK_PAIR) && !is_empty_list(env))
 	{
 		if (alist_assoc(sym, env->val.as_pair.first))
 		{
@@ -328,7 +343,7 @@ Cell *env_find (Cell *env, const Cell *sym)
 Cell *env_get (Cell *env, Cell *sym)
 {
 	// Validate inputs
-	if (!env || (env->kind != T_PAIR) || !sym || (sym->kind != T_SYMBOL))
+	if (!env || (env->kind != CK_PAIR) || !sym || (sym->kind != CK_SYMBOL))
 	{
 		return NULL;
 	}
@@ -349,7 +364,7 @@ Cell *env_get (Cell *env, Cell *sym)
 void env_set (Cell *env, Cell *sym, Cell *val)
 {
 	// Validate inputs.
-	if (!env || (env->kind != T_PAIR) || !sym || (sym->kind != T_SYMBOL))
+	if (!env || (env->kind != CK_PAIR) || !sym || (sym->kind != CK_SYMBOL))
 	{
 		return;
 	}
@@ -385,7 +400,7 @@ void env_set (Cell *env, Cell *sym, Cell *val)
 Cell *env_create (Cell *env_outer, Cell *binds, Cell *exprs)
 {
 	// Validate args
-	if (env_outer && env_outer->kind != T_PAIR)
+	if (env_outer && env_outer->kind != CK_PAIR)
 	{
 		printf("env_create : error : invalid outer environment\n");
 		return NULL;
@@ -401,7 +416,7 @@ Cell *env_create (Cell *env_outer, Cell *binds, Cell *exprs)
 		// Bind 1 pair
 		Cell *sym = binds->val.as_pair.first;
 		Cell *val = exprs->val.as_pair.first;
-		if (!sym || sym->kind != T_SYMBOL)
+		if (!sym || sym->kind != CK_SYMBOL)
 		{
 			printf("env_create : error : member of the bindings list is not a symbol\n");
 			return NULL;
@@ -484,7 +499,7 @@ int read_string_literal (const char *start, int length, Cell **out)
 	if (*view != '"')
 	{
 		// Error: unexpected end of string
-		printf("read_atom : error : unexpected end of string\n");
+		printf("read_string_literal : error : unexpected end of string\n");
 		*out = NULL;
 	}
 	else
@@ -501,7 +516,7 @@ int read_string_literal (const char *start, int length, Cell **out)
 	return view - start;
 }
 
-int read_atom (const char *start, int length, Cell **out)
+int read_item (const char *start, int length, Cell **out)
 {
 	// Validate arguments
 	if (!out)
@@ -669,7 +684,7 @@ int read_str (const char *start, int length, Cell **out)
 			break;
 		default:
 			// Read symbol or number
-			string_step(&view, &rem, read_atom(view, rem, out));
+			string_step(&view, &rem, read_item(view, rem, out));
 			break;
 	}
 	string_skip_white(&view, &rem);
@@ -721,7 +736,22 @@ int print_string (const char *str, char *out, int length, int readable)
 
 	// String contents
 	while (*str && (rem > 0))
-		string_step((const char**) &view, &rem, print_char(*str++, view, rem));
+	{
+		if (readable && (*str == '\\') && (rem > 1))
+		{
+			string_step((const char**) &view, &rem, print_char(*str++, view, rem));
+			char p = *str;
+			switch (p)
+			{
+				case 'n': p = '\n';
+				case 't': p = '\t';
+			}
+		}
+		else
+		{
+			string_step((const char**) &view, &rem, print_char(*str++, view, rem));
+		}
+	}
 
 	// Closing quote
 	if (readable)
@@ -761,10 +791,10 @@ int print_int (int n, char *out, int length)
 	return len;
 }
 
-int print_list (Cell *list, char *out, int length)
+int print_list (Cell *list, char *out, int length, int readable)
 {
 	// Validate arguments
-	if (!is_kind(list, T_PAIR) || !out || (length <= 0))
+	if (!is_kind(list, CK_PAIR) || !out || (length <= 0))
 		return 0;
 
 	char *view = out;
@@ -776,25 +806,25 @@ int print_list (Cell *list, char *out, int length)
 	// Print the first item with no leading space
 	if (!is_empty_list(list))
 	{
-		string_step((const char**)&view, &rem, pr_str(list->val.as_pair.first, view, rem));
+		string_step((const char**)&view, &rem, pr_str(list->val.as_pair.first, view, rem, readable));
 		// Next item
 		list = list->val.as_pair.rest;
 	}
 
 	// Print normal list elements
-	while (is_kind(list, T_PAIR) && !is_empty_list(list))
+	while (is_kind(list, CK_PAIR) && !is_empty_list(list))
 	{
 		string_step((const char**)&view, &rem, print_char(' ', view, rem));
-		string_step((const char**)&view, &rem, pr_str(list->val.as_pair.first, view, rem));
+		string_step((const char**)&view, &rem, pr_str(list->val.as_pair.first, view, rem, readable));
 		// Next item
 		list = list->val.as_pair.rest;
 	}
 
 	// If there is a value (except nil) in the final rest slot, then print it dotted
-	if (list && !is_empty_list(list) && !(is_kind(list, T_SYMBOL) && list->val.as_str == s_nil))
+	if (list && !is_empty_list(list) && !(is_kind(list, CK_SYMBOL) && list->val.as_str == s_nil))
 	{
 		string_step((const char**)&view, &rem, print_string(" | ", view, rem, 0));
-		string_step((const char**)&view, &rem, pr_str(list, view, rem));
+		string_step((const char**)&view, &rem, pr_str(list, view, rem, readable));
 	}
 
 	// Print closing char
@@ -806,7 +836,7 @@ int print_list (Cell *list, char *out, int length)
 
 // Prints form X to output stream
 // Returns: number of chars written
-int pr_str (Cell *x, char *out, int length)
+int pr_str (Cell *x, char *out, int length, int readable)
 {
 	// Validate inputs
 	if (!out || !x || length <= 0)
@@ -816,18 +846,20 @@ int pr_str (Cell *x, char *out, int length)
 
 	switch (x->kind)
 	{
-		case T_INT:
+		case CK_INT:
 			return print_int(x->val.as_int, out, length);
-		case T_STRING:
-			return print_string(x->val.as_str, out, length, 1);
-		case T_SYMBOL:
+		case CK_STRING:
+			return print_string(x->val.as_str, out, length, readable);
+		case CK_SYMBOL:
 			return print_string(x->val.as_str, out, length, 0);
-		case T_PAIR:
-			return print_list(x, out, length);
-		case T_FUNC:
+		case CK_PAIR:
+			return print_list(x, out, length, readable);
+		case CK_FUNC:
 			return print_cstr("#<fn>", out, length);
-		case T_NATIVE_FUNC:
+		case CK_NATIVE_FUNC:
 			return print_cstr("#<code>", out, length);
+		case CK_ATOM:
+			return print_cstr("#<atom>", out, length);
 	}
 
 	// Error: invalid cell kind
@@ -864,7 +896,7 @@ Cell *eval_each (Cell *x, Cell *env)
 	x = x->val.as_pair.rest;
 	while (x != NULL && p_y != NULL)
 	{
-		if (x->kind != T_PAIR)
+		if (x->kind != CK_PAIR)
 		{
 			// dotted list
 			p_y->val.as_pair.rest = EVAL(x, env);
@@ -892,16 +924,16 @@ int cell_eq (Cell *a, Cell *b)
 		return 0;
 	switch (a->kind)
 	{
-		case T_INT:
+		case CK_INT:
 			return a->val.as_int == b->val.as_int;
-		case T_STRING:
-		case T_SYMBOL:
-		case T_FUNC:
+		case CK_STRING:
+		case CK_SYMBOL:
+		case CK_FUNC:
 			// TODO
 			return 0;
-		case T_NATIVE_FUNC:
+		case CK_NATIVE_FUNC:
 			return a->val.as_func == b->val.as_func;
-		case T_PAIR:
+		case CK_PAIR:
 			return cell_eq(a->val.as_pair.first, b->val.as_pair.first)
 				&& cell_eq(a->val.as_pair.rest, b->val.as_pair.rest);
 		default:
@@ -925,7 +957,7 @@ Cell *eval_ast (Cell *ast, Cell *env)
 
 	switch (ast->kind)
 	{
-		case T_SYMBOL: // Look up symbol's value
+		case CK_SYMBOL: // Look up symbol's value
 			{
 				// These special symbols are self-evaluating
 				if (ast->val.as_str == s_nil || ast->val.as_str == s_true || ast->val.as_str == s_false)
@@ -936,15 +968,16 @@ Cell *eval_ast (Cell *ast, Cell *env)
 				if (slot)
 					return slot->val.as_pair.rest;
 
-				printf("eval_ast : error : undefined symbol `%s'\n", ast->val.as_str);
+				printf("eval_ast : error : undefined symbol '%s'\n", ast->val.as_str);
 				return NULL;
 			}
-		case T_PAIR:
+		case CK_PAIR:
 			return eval_each(ast, env);
-		case T_INT: // Self-evaluating values
-		case T_STRING:
-		case T_FUNC:
-		case T_NATIVE_FUNC:
+		case CK_INT: // Self-evaluating values
+		case CK_STRING:
+		case CK_FUNC:
+		case CK_NATIVE_FUNC:
+		case CK_ATOM:
 			return ast;
 	}
 
@@ -955,7 +988,7 @@ Cell *eval_ast (Cell *ast, Cell *env)
 // Do a native function which should have exactly 1 args
 Cell *apply_native1 (enum Native_func fn, Cell *args, Cell *env)
 {
-	if (!is_kind(args, T_PAIR) || is_empty_list(args) || is_kind(args->val.as_pair.rest, T_PAIR))
+	if (!is_kind(args, CK_PAIR) || is_empty_list(args) || is_kind(args->val.as_pair.rest, CK_PAIR))
 	{
 		printf("apply_native1 : error: invalid arguments for native function that has 1 parameter\n");
 		return NULL;
@@ -997,26 +1030,23 @@ Cell *apply_native1 (enum Native_func fn, Cell *args, Cell *env)
 				return make_string(s);
 			}
 			return NULL;
-		case NF_READ_STR: // (read-str "str") -> any value
+		case NF_READ_STR: // (read-string "str") -> any value
 			{
 				Cell *result = NULL;
-				if (is_kind(a, T_STRING))
+				if (is_kind(a, CK_STRING))
 					read_str(a->val.as_str, strlen(a->val.as_str), &result);
 				return result;
 			}
-		case NF_PRN:
-			PRINT(a);
-			return make_symbol(s_nil);
 		case NF_EMPTY_P:
 			return make_symbol(is_empty_list(a)? s_true : s_false);
 		case NF_COUNT:
-			if (!is_kind(a, T_PAIR))
+			if (!is_kind(a, CK_PAIR))
 				return make_symbol(s_nil);
 			return make_int(list_length(a));
 		case NF_LIST_P:
-			return make_bool_sym(is_kind(a, T_PAIR));
+			return make_bool_sym(is_kind(a, CK_PAIR));
 		case NF_INT_P:
-			return make_bool_sym(is_kind(a, T_INT));
+			return make_bool_sym(is_kind(a, CK_INT));
 		default:
 			assert(0);
 			return NULL;
@@ -1027,9 +1057,9 @@ Cell *apply_native1 (enum Native_func fn, Cell *args, Cell *env)
 Cell *apply_native2 (enum Native_func fn, Cell *args)
 {
 	// Validate arguments
-	if (!is_kind(args, T_PAIR) || is_empty_list(args) || !args->val.as_pair.first
+	if (!is_kind(args, CK_PAIR) || is_empty_list(args) || !args->val.as_pair.first
 			|| !args->val.as_pair.rest || !args->val.as_pair.rest->val.as_pair.first
-			|| is_kind(args->val.as_pair.rest->val.as_pair.rest, T_PAIR))
+			|| is_kind(args->val.as_pair.rest->val.as_pair.rest, CK_PAIR))
 	{
 		printf("apply_native2 : error: invalid arguments for native function that has 2 parameters\n");
 		return NULL;
@@ -1041,41 +1071,72 @@ Cell *apply_native2 (enum Native_func fn, Cell *args)
 	{
 		case NF_EQ: return make_bool_sym(cell_eq(a, b));
 		case NF_LT:
-			if (!is_kind(a, T_INT) || !is_kind(b, T_INT))
+			if (!is_kind(a, CK_INT) || !is_kind(b, CK_INT))
 				return NULL;
 			return make_bool_sym(a->val.as_int < b->val.as_int);
 		case NF_GT:
-			if (!is_kind(a, T_INT) || !is_kind(b, T_INT))
+			if (!is_kind(a, CK_INT) || !is_kind(b, CK_INT))
 				return NULL;
 			return make_bool_sym(a->val.as_int > b->val.as_int);
 		case NF_LTE:
-			if (!is_kind(a, T_INT) || !is_kind(b, T_INT))
+			if (!is_kind(a, CK_INT) || !is_kind(b, CK_INT))
 				return NULL;
 			return make_bool_sym(a->val.as_int <= b->val.as_int);
 		case NF_GTE:
-			if (!is_kind(a, T_INT) || !is_kind(b, T_INT))
+			if (!is_kind(a, CK_INT) || !is_kind(b, CK_INT))
 				return NULL;
 			return make_bool_sym(a->val.as_int >= b->val.as_int);
 		case NF_ADD:
-			if (!is_kind(a, T_INT) || !is_kind(b, T_INT))
+			if (!is_kind(a, CK_INT) || !is_kind(b, CK_INT))
 				return NULL;
 			return make_int(a->val.as_int + b->val.as_int);
 		case NF_SUB:
-			if (!is_kind(a, T_INT) || !is_kind(b, T_INT))
+			if (!is_kind(a, CK_INT) || !is_kind(b, CK_INT))
 				return NULL;
 			return make_int(a->val.as_int - b->val.as_int);
 		case NF_MUL:
-			if (!is_kind(a, T_INT) || !is_kind(b, T_INT))
+			if (!is_kind(a, CK_INT) || !is_kind(b, CK_INT))
 				return NULL;
 			return make_int(a->val.as_int * b->val.as_int);
 		case NF_DIV:
-			if (!is_kind(a, T_INT) || !is_kind(b, T_INT))
+			if (!is_kind(a, CK_INT) || !is_kind(b, CK_INT))
 				return NULL;
 			return make_int(a->val.as_int / b->val.as_int);
 		default:
 			printf("apply_native2 : error : invalid native fn\n");
 			return NULL;
 	}
+}
+
+// Print to char_free pointer and return length written
+// Does do null termination
+int print_scratch (Cell *args, char sep, int readable)
+{
+	// Validate arguments
+	if (!args)
+		return 0;
+
+	char *p = char_free;
+	int len = char_pool_cap - (char_free - char_pool);
+
+	// Print first item with no separator
+	if ((len > 1) && is_kind(args, CK_PAIR) && !is_empty_list(args))
+	{
+		string_step((const char**) &p, &len, pr_str(args->val.as_pair.first, p, len, readable));
+		args = args->val.as_pair.rest;
+	}
+
+	// Print the remaining items with separators
+	while ((len > 1) && is_kind(args, CK_PAIR) && !is_empty_list(args))
+	{
+		if (sep)
+			string_step((const char**) &p, &len, print_char(sep, p, len));
+		string_step((const char**) &p, &len, pr_str(args->val.as_pair.first, p, len, readable));
+		args = args->val.as_pair.rest;
+	}
+	print_char('\0', p, len);
+
+	return p - char_free;
 }
 
 Cell *EVAL (Cell *ast, Cell *env)
@@ -1088,7 +1149,7 @@ Cell *EVAL (Cell *ast, Cell *env)
 			return ast;
 		}
 
-		if (!is_kind(ast, T_PAIR)) // ast is an Atom type
+		if (!is_kind(ast, CK_PAIR))
 			return eval_ast(ast, env);
 
 		if (is_empty_list(ast)) // Empty list evals to itself
@@ -1098,7 +1159,7 @@ Cell *EVAL (Cell *ast, Cell *env)
 
 		{
 			Cell *head = ast->val.as_pair.first;
-			if (is_kind(head, T_SYMBOL))
+			if (is_kind(head, CK_SYMBOL))
 			{
 				// Special forms...
 
@@ -1109,7 +1170,7 @@ Cell *EVAL (Cell *ast, Cell *env)
 				if (head->val.as_str == s_def_bang) // (def! <symbol> value)
 				{
 					if (!args || !args->val.as_pair.first || !args->val.as_pair.rest
-							|| args->val.as_pair.first->kind != T_SYMBOL)
+							|| args->val.as_pair.first->kind != CK_SYMBOL)
 					{
 						// Error: invalid args
 						printf("def! : error : invalid args");
@@ -1143,7 +1204,7 @@ Cell *EVAL (Cell *ast, Cell *env)
 							printf("let* : error : odd amount of arguments in first list\n");
 							return NULL;
 						}
-						if (!p->val.as_pair.first || p->val.as_pair.first->kind != T_SYMBOL)
+						if (!p->val.as_pair.first || p->val.as_pair.first->kind != CK_SYMBOL)
 						{
 							// Error: even element in bindings list not a symbol
 							printf("let* : error : even element in bindings list not a symbol\n");
@@ -1173,13 +1234,13 @@ Cell *EVAL (Cell *ast, Cell *env)
 					Cell *p = args->val.as_pair.first;
 					while (p && !is_empty_list(p))
 					{
-						if (!p->val.as_pair.first || p->val.as_pair.first->kind != T_SYMBOL)
+						if (!p->val.as_pair.first || p->val.as_pair.first->kind != CK_SYMBOL)
 						{
 							// Error: parameter list must be all symbols
 							printf("fn* : error : parameter list must be all symbols\n");
 							return NULL;
 						}
-						if (p->val.as_pair.rest && p->val.as_pair.rest->kind != T_PAIR)
+						if (p->val.as_pair.rest && p->val.as_pair.rest->kind != CK_PAIR)
 						{
 							// Something other than NULL or a list is next
 							printf("fn* : error : parameter list is not a proper list\n");
@@ -1189,7 +1250,7 @@ Cell *EVAL (Cell *ast, Cell *env)
 					}
 					return make_fn(args->val.as_pair.first, args->val.as_pair.rest->val.as_pair.first, env);
 				}
-				else if (head->val.as_str == s_if) // (if expr true {optional false?})
+				else if (head->val.as_str == s_if) // [if expr true {optional false?}]
 				{
 					if (!args || !args->val.as_pair.first || !args->val.as_pair.rest || (args->val.as_pair.rest->val.as_pair.rest && args->val.as_pair.rest->val.as_pair.rest->val.as_pair.rest))
 					{
@@ -1198,7 +1259,7 @@ Cell *EVAL (Cell *ast, Cell *env)
 						return NULL;
 					}
 					Cell *cond = EVAL(args->val.as_pair.first, env);
-					if (cond && !(cond->kind == T_SYMBOL && cond->val.as_str == s_false))
+					if (cond && !(cond->kind == CK_SYMBOL && (cond->val.as_str == s_false || cond->val.as_str == s_nil)))
 					{
 						ast = args->val.as_pair.rest->val.as_pair.first;
 						continue;
@@ -1208,19 +1269,19 @@ Cell *EVAL (Cell *ast, Cell *env)
 						ast = args->val.as_pair.rest->val.as_pair.rest->val.as_pair.first;
 						continue;
 					}
-					return NULL;
+					return make_symbol(s_nil);
 				}
 				else if (head->val.as_str == s_do) // (do expr1 expr2 ...)
 				{
 					// Evaluate all but the last item
-					while (args && !is_empty_list(args) && args->kind == T_PAIR && args->val.as_pair.rest)
+					while (is_kind(args, CK_PAIR) && !is_empty_list(args) && args->val.as_pair.rest)
 					{
 						EVAL(args->val.as_pair.first, env);
 						args = args->val.as_pair.rest;
 					}
 
 					// Has a last item, so do a tail call to evaluate that
-					if (args && args->kind == T_PAIR)
+					if (is_kind(args, CK_PAIR))
 					{
 						ast = args->val.as_pair.first;
 						continue;
@@ -1254,13 +1315,12 @@ Cell *EVAL (Cell *ast, Cell *env)
 
 		switch (f->kind)
 		{
-			case T_NATIVE_FUNC:
+			case CK_NATIVE_FUNC:
 				switch (f->val.as_func)
 				{
 					case NF_EVAL:
 					case NF_SLURP:
 					case NF_READ_STR:
-					case NF_PRN:
 					case NF_EMPTY_P:
 					case NF_COUNT:
 					case NF_LIST_P:
@@ -1276,10 +1336,32 @@ Cell *EVAL (Cell *ast, Cell *env)
 					case NF_MUL:
 					case NF_DIV: // Functions with 2 parameters
 						return apply_native2(f->val.as_func, args);
-					case NF_LIST: // [list ...] is a variadic function
+					case NF_LIST: // [list a ...] -> [a ...] (variadic)
 						return args;
+					case NF_PR_STR: // [pr-str "a" "b" "c" ...] -> "a b c ..." (prints readably)
+						{
+							int len = print_scratch(args, ' ', 1);
+							Cell *s = make_string(char_free);
+							char_free += len;
+							return s;
+						}
+					case NF_STR: // [str "a" "b" "c" ...] -> "abc..." (prints non-readably)
+						{
+							int len = print_scratch(args, 0, 0);
+							Cell *s = make_string(char_free);
+							char_free += len;
+							return s;
+						}
+					case NF_PRN: // [prn "a" "b" "c" ...] -> nil (prints readably)
+						print_scratch(args, ' ', 1);
+						printf("%s", char_free);
+						return make_symbol(s_nil);
+					case NF_PRINTLN: // [println "a" "b" "c" ...] -> nil (prints non-readably)
+						print_scratch(args, ' ', 0);
+						printf("%s\n", char_free);
+						return make_symbol(s_nil);
 				}
-			case T_FUNC: // Lisp function created by fn* (see comment before the definition of function make_fn)
+			case CK_FUNC: // Lisp function created by fn* (see comment before the definition of function make_fn)
 				{
 					ast = f->val.as_pair.rest->val.as_pair.rest;             // ast = function body ast
 					env = env_create(f->val.as_pair.rest->val.as_pair.first, // function's outer env
@@ -1296,16 +1378,20 @@ Cell *EVAL (Cell *ast, Cell *env)
 
 void PRINT (Cell *expr)
 {
-	char buffer[1000];
+	char buffer[2 * 1024];
 
-	int p_len = pr_str(expr, buffer, sizeof(buffer));
+	int p_len = pr_str(expr, buffer, sizeof(buffer), 1);
 
-	printf("%.*s", p_len, buffer);
+	printf("%.*s\n", p_len, buffer);
 }
 
 // Do one read, eval, and print cycle on a string.
 void rep (const char *start, int length, Cell *env)
 {
+	// Allow passing C strings and to automatically get the length
+	if (length < 0)
+		length = strlen(start);
+
 	Cell * form = READ(start, length);
 	if (form)
 	{
@@ -1385,10 +1471,13 @@ Cell *init (int ncells, int nchars)
 	env_set(env, make_symbol(string_intern_c("int?")), make_native_fn(NF_INT_P));
 	env_set(env, make_symbol(string_intern_c("list")), make_native_fn(NF_LIST));
 	env_set(env, make_symbol(string_intern_c("list?")), make_native_fn(NF_LIST_P));
-	env_set(env, make_symbol(string_intern_c("prn")), make_native_fn(NF_PRN));
-	env_set(env, make_symbol(string_intern_c("read-str")), make_native_fn(NF_READ_STR));
+	env_set(env, make_symbol(string_intern_c("read-string")), make_native_fn(NF_READ_STR));
 	env_set(env, make_symbol(string_intern_c("slurp")), make_native_fn(NF_SLURP));
 	env_set(env, make_symbol(string_intern_c("eval")), make_native_fn(NF_EVAL));
+	env_set(env, make_symbol(string_intern_c("prn")), make_native_fn(NF_PRN));
+	env_set(env, make_symbol(string_intern_c("str")), make_native_fn(NF_STR));
+	env_set(env, make_symbol(string_intern_c("pr-str")), make_native_fn(NF_PR_STR));
+	env_set(env, make_symbol(string_intern_c("println")), make_native_fn(NF_PRINTLN));
 
 	return env;
 }
@@ -1402,16 +1491,14 @@ int main (void)
 		return 1;
 	}
 
-	// Debug
-	printf("environment: ");
-	PRINT(repl_env);
-	printf("\n");
+	// Initialization code
+	rep("[def! load-file [fn* [f] [eval [read-string [str \"[do \" [slurp f] \"\nnil]\"]]]]]", -1, repl_env);
 
 	// REPL
 	char buffer[1024];
 	while (1)
 	{
-		printf("LSP> ");
+		printf("LZP> ");
 		if(!fgets(buffer, sizeof(buffer), stdin))
 			break;
 		rep(buffer, strlen(buffer), repl_env);
