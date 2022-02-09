@@ -21,6 +21,7 @@ enum Native_func
 	NF_LTE,
 	NF_GTE,
 	NF_INT_P,
+	NF_READ_STR,
 };
 
 enum Cell_kind
@@ -77,7 +78,7 @@ const char *s_nil,
 
 int char_is_symbol (char c)
 {
-	return (c > ' ') && (c != '|') && (c != '[') && (c != ']')
+	return (c > ' ') && (c != '"') && (c != '|') && (c != '[') && (c != ']')
 		&& (c != '(') && (c != ')') && (c != '{') && (c != '}');
 }
 
@@ -493,7 +494,9 @@ int read_string_literal (const char *start, int length, Cell **out)
 		*out = make_string(string_intern(start + 1, view - start - 2));
 	}
 
-	return view - start - 2;
+	// Keep the quotes in the length,
+	// because those characters were actually read.
+	return view - start;
 }
 
 int read_atom (const char *start, int length, Cell **out)
@@ -920,23 +923,23 @@ Cell *eval_ast (Cell *ast, Cell *env)
 
 	switch (ast->kind)
 	{
-		case T_SYMBOL:
+		case T_SYMBOL: // Look up symbol's value
 			{
 				// These special symbols are self-evaluating
 				if (ast->val.as_str == s_nil || ast->val.as_str == s_true || ast->val.as_str == s_false)
 					return ast;
+
 				// Get the value out of the environment's slot
 				Cell *slot = env_get(env, ast);
-				if (!slot) // Error: undefined symbol
-				{
-					printf("eval_ast : error : undefined symbol `%s'\n", ast->val.as_str);
-					return NULL;
-				}
-				return slot->val.as_pair.rest;
+				if (slot)
+					return slot->val.as_pair.rest;
+
+				printf("eval_ast : error : undefined symbol `%s'\n", ast->val.as_str);
+				return NULL;
 			}
 		case T_PAIR:
 			return eval_each(ast, env);
-		case T_INT:
+		case T_INT: // Self-evaluating values
 		case T_STRING:
 		case T_FUNC:
 		case T_NATIVE_FUNC:
@@ -950,15 +953,21 @@ Cell *eval_ast (Cell *ast, Cell *env)
 // Do a native function which should have exactly 1 args
 Cell *apply_native1 (enum Native_func fn, Cell *args)
 {
-	if (!is_kind(args, T_PAIR) || is_empty_list(args) || !args->val.as_pair.first
-			|| is_kind(args->val.as_pair.rest, T_PAIR));
+	if (!is_kind(args, T_PAIR) || is_empty_list(args) || is_kind(args->val.as_pair.rest, T_PAIR))
 	{
-		printf("apply : error: invalid args\n");
+		printf("apply_native1 : error: invalid arguments for native function that has 1 parameter\n");
 		return NULL;
 	}
 	Cell *a = args->val.as_pair.first;
 	switch (fn)
 	{
+		case NF_READ_STR: // (read-str "str")
+			{
+				Cell *result = NULL;
+				if (is_kind(a, T_STRING))
+					read_str(a->val.as_str, strlen(a->val.as_str), &result);
+				return result;
+			}
 		case NF_PRN:
 			PRINT(a);
 			return NULL;
@@ -986,7 +995,7 @@ Cell *apply_native2 (enum Native_func fn, Cell *args)
 			|| !args->val.as_pair.rest || !args->val.as_pair.rest->val.as_pair.first
 			|| is_kind(args->val.as_pair.rest->val.as_pair.rest, T_PAIR))
 	{
-		printf("apply : error : arguments have invalid form\n");
+		printf("apply_native2 : error: invalid arguments for native function that has 2 parameters\n");
 		return NULL;
 	}
 
@@ -1039,7 +1048,7 @@ Cell *EVAL (Cell *ast, Cell *env)
 	{
 		if (!ast) // Error? ast is invalid
 		{
-			printf("EVAL : error? : ast is NULL\n");
+			printf("EVAL : error : ast is NULL\n");
 			return ast;
 		}
 
@@ -1198,7 +1207,10 @@ Cell *EVAL (Cell *ast, Cell *env)
 		Cell *f = ast->val.as_pair.first;
 		Cell *args = ast->val.as_pair.rest;
 		if (!f) // Error: not a function
+		{
+			printf("EVAL : error : first expression in list is not a fuction\n");
 			return NULL;
+		}
 
 		args = ast->val.as_pair.rest;
 		if (!args) // Just in case the args is not properly an empty list
@@ -1209,6 +1221,7 @@ Cell *EVAL (Cell *ast, Cell *env)
 			case T_NATIVE_FUNC:
 				switch (f->val.as_func)
 				{
+					case NF_READ_STR:
 					case NF_PRN:
 					case NF_EMPTY_P:
 					case NF_COUNT:
@@ -1237,7 +1250,7 @@ Cell *EVAL (Cell *ast, Cell *env)
 					continue;
 				}
 			default: // Error: not a function
-				printf("EVAL : error : not a function\n");
+				printf("EVAL : error : first item in list is not a function\n");
 				return NULL;
 		}
 	}
@@ -1335,6 +1348,8 @@ Cell *init (int ncells, int nchars)
 	env_set(env, make_symbol(string_intern_c("list")), make_native_fn(NF_LIST));
 	env_set(env, make_symbol(string_intern_c("list?")), make_native_fn(NF_LIST_P));
 	env_set(env, make_symbol(string_intern_c("prn")), make_native_fn(NF_PRN));
+	env_set(env, make_symbol(string_intern_c("read-str")), make_native_fn(NF_READ_STR));
+
 	return env;
 }
 
