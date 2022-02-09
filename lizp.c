@@ -2,6 +2,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <ctype.h>
+#include <assert.h>
 
 enum Native_func
 {
@@ -178,7 +179,7 @@ int is_empty_list (Cell *x)
 int list_length (Cell *list)
 {
 	int i;
-	for (i = 0; list && is_kind(list, T_PAIR) && !is_empty_list(list); i++)
+	for (i = 0; is_kind(list, T_PAIR) && !is_empty_list(list); i++)
 		list = list->val.as_pair.rest;
 	return i;
 }
@@ -457,54 +458,79 @@ int parse_int (const char *start, int length, int *out)
 	return num_len;
 }
 
-int read_atom (const char *start, int length, Cell **out)
+int read_string_literal (const char *start, int length, Cell **out)
 {
-	const char *p = start;
-	int rem = length;
-
-	if (*p == '"')
+	// Validate inputs
+	if (!out)
+		return 0;
+	if (!start || length <= 0)
 	{
-		// String
-		while (rem > 0 && *p != '"')
-		{
-			string_step(&p, &rem, 1);
-		}
+		*out = NULL;
+		return 0;
+	}
 
-		if (*p != '"')
-		{
-			// Error: unexpected end of string
-			printf("read_atom : error : unexpected end of string\n");
-			return 0;
-		}
+	const char *view = start;
 
-		// Intern string, remove quotes
-		*out = make_string(string_intern(start + 1, p - start - 2));
-		return p - start - 2;
+	// Read opening quote
+	string_step(&view, &length, 1);
+
+	// String
+	while (length > 0 && *view != '"')
+		string_step(&view, &length, 1);
+
+	if (*view != '"')
+	{
+		// Error: unexpected end of string
+		printf("read_atom : error : unexpected end of string\n");
+		*out = NULL;
 	}
 	else
 	{
-		// Symbol or number
-		while (rem > 0 && char_is_symbol(*p))
-		{
-			string_step(&p, &rem, 1);
-		}
+		// Read closing quote
+		string_step(&view, &length, 1);
 
-		if (isdigit(*start) || ((length > 1) && (*start == '-') && isdigit(*(start + 1))))
-		{
-			// Number
-			int x;
-			parse_int(start, p - start, &x);
-			*out = make_int(x);
-		}
-		else
-		{
-			// Symbol
-			const char *name = string_intern(start, p - start);
-			*out = make_symbol(name);
-		}
-
-		return p - start;
+		// Intern string, remove quotes
+		*out = make_string(string_intern(start + 1, view - start - 2));
 	}
+
+	return view - start - 2;
+}
+
+int read_atom (const char *start, int length, Cell **out)
+{
+	// Validate arguments
+	if (!out)
+		return 0;
+	if (!start || (length <= 0))
+	{
+		*out = NULL;
+		return 0;
+	}
+
+	const char *p = start;
+	int rem = length;
+
+	// Symbol or number
+	while (rem > 0 && char_is_symbol(*p))
+		string_step(&p, &rem, 1);
+
+	// Symbols or numbers can start with a '-', so we need to distinguish them by 
+	// what the next character is.
+	if (isdigit(*start) || ((length > 1) && (*start == '-') && isdigit(*(start + 1))))
+	{
+		// Number
+		int x;
+		parse_int(start, p - start, &x);
+		*out = make_int(x);
+	}
+	else
+	{
+		// Symbol
+		const char *name = string_intern(start, p - start);
+		*out = make_symbol(name);
+	}
+
+	return p - start;
 }
 
 int read_str (const char *start, int length, Cell **out);
@@ -523,8 +549,13 @@ char char_end_brace (char x)
 int read_list (const char *start, int length, Cell **out)
 {
 	// Validate arguments
-	if (!start || length <= 0 || !out)
+	if (!out)
 		return 0;
+	if (!start || length <= 0)
+	{
+		*out = NULL;
+		return 0;
+	}
 
 	const char *view = start;
 	int rem = length;
@@ -546,9 +577,11 @@ int read_list (const char *start, int length, Cell **out)
 		// Read the rest of the normal elements (don't handle the "dot")
 		while ((rem > 0) && (*view != end) && (*view != '|'))
 		{
+			// Read an element
 			Cell *e;
 			string_step(&view, &rem, read_str(view, rem, &e));
-			if (!e) break;
+			if (!e)
+				break;
 
 			p->val.as_pair.rest = make_pair(e, NULL);
 			p = p->val.as_pair.rest;
@@ -574,7 +607,7 @@ int read_list (const char *start, int length, Cell **out)
 	{
 		// Error: unexpected end of input
 		*out = NULL;
-		printf("read_list: error : unexpected end of input\n");
+		printf("read_list: error : error reading item or unexpected end of input\n");
 	}
 
 	return view - start;
@@ -585,8 +618,13 @@ int read_list (const char *start, int length, Cell **out)
 int read_str (const char *start, int length, Cell **out)
 {
 	// Validate arguments
-	if (!start || length <= 0 || !out)
+	if (!out)
 		return 0;
+	if (!start || length <= 0)
+	{
+		*out = NULL;
+		return 0;
+	}
 
 	const char *view = start;
 	int rem = length;
@@ -594,33 +632,29 @@ int read_str (const char *start, int length, Cell **out)
 	string_skip_white(&view, &rem);
 	switch (*view)
 	{
-		case '\0':
-			// Null terminator for strings
-			// ERROR: unexpected end of input
-			printf("read_str : error : unexpected end of input\n");
+		case '\0': // End of input
 			*out = NULL;
 			return 0;
 		case ']':
 		case ')':
-		case '}':
-			// Error, unmatched closing paren
+		case '}': // Error, unmatched closing paren
 			printf("read_str : error : unmatched closing paren\n");
 			*out = NULL;
 			return 0;
-		case '|':
-			// Error, "dot" should only be inside a list
-			// In Izak list '|' means what '.' does in other lisps
+		case '|': // Error, '|' for cons pairs should only be inside a list
 			printf("read_str : error : '|' should only be inside a list\n");
 			*out = NULL;
 			return 0;
 		case '[':
 		case '(':
-		case '{':
-			// Opening paren, for lists
+		case '{': // Opening paren, for lists
 			string_step(&view, &rem, read_list(view, rem, out));
 			break;
+		case '"': // Quoted string literal
+			string_step(&view, &rem, read_string_literal(view, rem, out));
+			break;
 		default:
-			// Read symbol, number, string
+			// Read symbol or number
 			string_step(&view, &rem, read_atom(view, rem, out));
 			break;
 	}
@@ -658,36 +692,29 @@ int print_cstr (char *s, char *out, int length)
 
 // Print out a string cell
 // returns number of chars written
-int print_string (const char *str, char *out, int length, int quoted)
+int print_string (const char *str, char *out, int length, int readable)
 {
 	// Validate inputs
 	if (!str || !out || (length < 0))
-	{
 		return 0;
-	}
 
-	char *p_out = out;
+	char *view = out;
+	int rem = length;
 
 	// Opening quote
-	if (quoted)
-	{
-		*p_out++ = '"';
-	}
+	if (readable)
+		string_step((const char**) &view, &rem, print_char('"', view, rem));
 
 	// String contents
-	for (int i = 0; *str && (i < length); i++)
-	{
-		*p_out++ = *str++;
-	}
+	while (*str && (rem > 0))
+		string_step((const char**) &view, &rem, print_char(*str++, view, rem));
 
 	// Closing quote
-	if (quoted)
-	{
-		*p_out++ = '"';
-	}
+	if (readable)
+		string_step((const char**) &view, &rem, print_char('"', view, rem));
 
 	// Return length, including quotes that were written
-	return p_out - out;
+	return view - out;
 }
 
 // returns number of chars written
@@ -768,14 +795,10 @@ int print_list (Cell *list, char *out, int length)
 int pr_str (Cell *x, char *out, int length)
 {
 	// Validate inputs
-	if (!out || length <= 0)
+	if (!out || !x || length <= 0)
 	{
 		return 0;
 	}
-
-	// Debug only, should be nil
-	if (!x)
-		return print_cstr("N.U.L.L.", out, length);
 
 	switch (x->kind)
 	{
@@ -871,6 +894,14 @@ int cell_eq (Cell *a, Cell *b)
 	}
 }
 
+Cell *make_bool_sym (int val)
+{
+	if (val)
+		return make_symbol(s_true);
+	else
+		return make_symbol(s_false);
+}
+
 Cell *eval_ast (Cell *ast, Cell *env)
 {
 	// Validate args
@@ -914,33 +945,26 @@ Cell *apply_native1 (enum Native_func fn, Cell *args)
 		printf("apply : error: invalid args\n");
 		return NULL;
 	}
+	Cell *a = args->val.as_pair.first;
 	switch (fn)
 	{
 		case NF_PRN:
-			PRINT(args->val.as_pair.first);
+			PRINT(a);
 			return NULL;
 		case NF_EMPTY_P:
-			return make_symbol(is_empty_list(args->val.as_pair.first)? s_true : s_false);
+			return make_symbol(is_empty_list(a)? s_true : s_false);
 		case NF_COUNT:
-			if (args->val.as_pair.first->kind != T_PAIR)
+			if (!is_kind(a, T_PAIR))
 				return NULL;
-			return make_int(list_length(args->val.as_pair.first));
+			return make_int(list_length(a));
 		case NF_LIST_P:
-			return make_symbol((args->val.as_pair.first && args->val.as_pair.first->kind == T_PAIR) ? s_true : s_false);
+			return make_bool_sym(is_kind(a, T_PAIR));
 		case NF_INT_P:
-			return make_symbol((args->val.as_pair.first && args->val.as_pair.first->kind == T_INT) ? s_true : s_false);
+			return make_bool_sym(is_kind(a, T_INT));
 		default:
-			printf("apply_native1 : error : invalid native fn\n");
+			assert(0);
 			return NULL;
 	}
-}
-
-Cell *make_bool_sym (int val)
-{
-	if (val)
-		return make_symbol(s_true);
-	else
-		return make_symbol(s_false);
 }
 
 // Do a native function which should have 2 args
@@ -1220,8 +1244,16 @@ void PRINT (Cell *expr)
 void rep (const char *start, int length, Cell *env)
 {
 	Cell * form = READ(start, length);
-	Cell * value = EVAL(form, env);
-	PRINT(value);
+	if (form)
+	{
+		Cell * value = EVAL(form, env);
+		if (value)
+		{
+			PRINT(value);
+			return;
+		}
+	}
+	PRINT(make_string("; ERROR\n"));
 }
 
 // Returns global environment
