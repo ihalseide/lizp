@@ -964,8 +964,7 @@ Cell *apply_native1 (enum Native_func fn, Cell *args, Cell *env)
 	switch (fn)
 	{
 		case NF_EVAL: // (eval ast) -> any value
-			// use env
-			return NULL;
+			return EVAL(a, env);
 		case NF_SLURP: // (slurp "file name") -> "file contents"
 			{
 				// Read all contents of the file...
@@ -1397,7 +1396,7 @@ Cell *init (int ncells, int nchars)
 int main (void)
 {
 	// Initialize the REPL environment symbols
-	Cell *repl_env = init(1024, 2048);
+	Cell *repl_env = init(4 * 1024, 8 * 1024);
 	if (!repl_env)
 	{
 		return 1;
