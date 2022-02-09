@@ -49,8 +49,8 @@ struct cell
 	} val;
 };
 
-// Debug forward declare for everything
 void PRINT (Cell *expr);
+int pr_str (Cell *x, char *out, int length);
 
 // Cell memory (holds the actual cell values):
 Cell *cell_pool = NULL;
@@ -76,7 +76,7 @@ const char *s_nil,
 
 int char_is_symbol (char c)
 {
-	return (c > ' ') && (c != '.') && (c != '[') && (c != ']')
+	return (c > ' ') && (c != '|') && (c != '[') && (c != ']')
 		&& (c != '(') && (c != ')') && (c != '{') && (c != '}');
 }
 
@@ -500,10 +500,7 @@ int read_atom (const char *start, int length, Cell **out)
 		{
 			// Symbol
 			const char *name = string_intern(start, p - start);
-			if (name == s_nil)
-				*out = NULL;
-			else
-				*out = make_symbol(name);
+			*out = make_symbol(name);
 		}
 
 		return p - start;
@@ -512,19 +509,28 @@ int read_atom (const char *start, int length, Cell **out)
 
 int read_str (const char *start, int length, Cell **out);
 
+char char_end_brace (char x)
+{
+	switch (x)
+	{
+		case '[': return ']';
+		case '(': return ')';
+		case '{': return '}';
+		default:  return 0;
+	}
+}
+
 int read_list (const char *start, int length, Cell **out)
 {
+	// Validate arguments
+	if (!start || length <= 0 || !out)
+		return 0;
+
 	const char *view = start;
 	int rem = length;
 
 	// Consume the opening paren
-	char end;
-	switch (*view)
-	{
-		case '[': end = ']'; break;
-		case '(': end = ')'; break;
-		case '{': end = '}'; break;
-	}
+	char end = char_end_brace(*view);
 	string_step(&view, &rem, 1);
 	string_skip_white(&view, &rem);
 
@@ -537,8 +543,8 @@ int read_list (const char *start, int length, Cell **out)
 		// Read the first element
 		string_step(&view, &rem, read_str(view, rem, &p->val.as_pair.first));
 
-		// Read the rest of the normal elements (don't handle the dot)
-		while ((rem > 0) && (*view != end) && (*view != '.'))
+		// Read the rest of the normal elements (don't handle the "dot")
+		while ((rem > 0) && (*view != end) && (*view != '|'))
 		{
 			Cell *e;
 			string_step(&view, &rem, read_str(view, rem, &e));
@@ -548,7 +554,7 @@ int read_list (const char *start, int length, Cell **out)
 			p = p->val.as_pair.rest;
 		}
 
-		if (*view == '.')
+		if (*view == '|')
 		{
 			// Dotted list
 			Cell *e;
@@ -578,6 +584,10 @@ int read_list (const char *start, int length, Cell **out)
 // Returns: the number of characters read
 int read_str (const char *start, int length, Cell **out)
 {
+	// Validate arguments
+	if (!start || length <= 0 || !out)
+		return 0;
+
 	const char *view = start;
 	int rem = length;
 
@@ -597,9 +607,10 @@ int read_str (const char *start, int length, Cell **out)
 			printf("read_str : error : unmatched closing paren\n");
 			*out = NULL;
 			return 0;
-		case '.':
-			// Error, dot should only be inside a list
-			printf("read_str : error : dot should only be inside a list\n");
+		case '|':
+			// Error, "dot" should only be inside a list
+			// In Izak list '|' means what '.' does in other lisps
+			printf("read_str : error : '|' should only be inside a list\n");
 			*out = NULL;
 			return 0;
 		case '[':
@@ -709,39 +720,40 @@ int print_int (int n, char *out, int length)
 	return len;
 }
 
-int pr_str (Cell *x, char *out, int length);
-
-int print_list (Cell *x, char *out, int length)
+int print_list (Cell *list, char *out, int length)
 {
+	// Validate arguments
+	if (!is_kind(list, T_PAIR) || !out || (length <= 0))
+		return 0;
+
 	char *view = out;
 	int rem = length;
 
 	// Print opening char
 	string_step((const char**)&view, &rem, print_char('[', view, rem));
 
-	// Print contents
-	while ((rem > 0) && x->val.as_pair.first)
+	// Print the first item with no leading space
+	if (!is_empty_list(list))
 	{
-		string_step((const char**)&view, &rem, pr_str(x->val.as_pair.first, view, rem));
+		string_step((const char**)&view, &rem, pr_str(list->val.as_pair.first, view, rem));
+		// Next item
+		list = list->val.as_pair.rest;
+	}
 
-		// See if the list continues with more pairs...
-		if (!x->val.as_pair.rest)
-		{
-			break;
-		}
-		else if (x->val.as_pair.rest->kind == T_PAIR)
-		{
-			// Next pair in the list
-			string_step((const char**)&view, &rem, print_char(' ', view, rem));
-			x = x->val.as_pair.rest;
-		}
-		else
-		{
-			// Dotted list because the rest of this pair is not a pair
-			string_step((const char**)&view, &rem, print_cstr(" . ", view, rem));
-			string_step((const char**)&view, &rem, pr_str(x->val.as_pair.rest, view, rem));
-			break;
-		}
+	// Print normal list elements
+	while (is_kind(list, T_PAIR) && !is_empty_list(list))
+	{
+		string_step((const char**)&view, &rem, print_char(' ', view, rem));
+		string_step((const char**)&view, &rem, pr_str(list->val.as_pair.first, view, rem));
+		// Next item
+		list = list->val.as_pair.rest;
+	}
+
+	// If there is a value (except nil) in the final rest slot, then print it dotted
+	if (list && !is_empty_list(list) && !(is_kind(list, T_SYMBOL) && list->val.as_str == s_nil))
+	{
+		string_step((const char**)&view, &rem, print_string(" | ", view, rem, 0));
+		string_step((const char**)&view, &rem, pr_str(list, view, rem));
 	}
 
 	// Print closing char
@@ -780,6 +792,7 @@ int pr_str (Cell *x, char *out, int length)
 		case T_NATIVE_FUNC:
 			return print_cstr("#<code>", out, length);
 	}
+
 	// Error: invalid cell kind
 	printf("pr_str : error : invalid cell kind\n");
 	return 0;
@@ -868,13 +881,16 @@ Cell *eval_ast (Cell *ast, Cell *env)
 	{
 		case T_SYMBOL:
 			{
-				// Self-evaluating symbols
-				if (ast->val.as_str == s_true || ast->val.as_str == s_false)
+				// These special symbols are self-evaluating
+				if (ast->val.as_str == s_nil || ast->val.as_str == s_true || ast->val.as_str == s_false)
 					return ast;
 				// Get the value out of the environment's slot
 				Cell *slot = env_get(env, ast);
 				if (!slot) // Error: undefined symbol
+				{
+					printf("eval_ast : error : undefined symbol `%s'\n", ast->val.as_str);
 					return NULL;
+				}
 				return slot->val.as_pair.rest;
 			}
 		case T_PAIR:
@@ -893,7 +909,7 @@ Cell *eval_ast (Cell *ast, Cell *env)
 // Do a native function which should have 1 args
 Cell *apply_native1 (enum Native_func fn, Cell *args)
 {
-	if (!args || is_empty_list(args) || !args->val.as_pair.first)
+	if (!is_kind(args, T_PAIR) || is_empty_list(args) || !args->val.as_pair.first)
 	{
 		printf("apply : error: invalid args\n");
 		return NULL;
@@ -919,42 +935,62 @@ Cell *apply_native1 (enum Native_func fn, Cell *args)
 	}
 }
 
+Cell *make_bool_sym (int val)
+{
+	if (val)
+		return make_symbol(s_true);
+	else
+		return make_symbol(s_false);
+}
+
 // Do a native function which should have 2 args
 Cell *apply_native2 (enum Native_func fn, Cell *args)
 {
-	if (!args || is_empty_list(args) || !args->val.as_pair.first || !args->val.as_pair.rest || !args->val.as_pair.rest->val.as_pair.first)
+	// Validate arguments
+	if (!is_kind(args, T_PAIR) || is_empty_list(args) || !args->val.as_pair.first
+			|| !args->val.as_pair.rest || !args->val.as_pair.rest->val.as_pair.first)
 	{
-		printf("apply : error: invalid args\n");
+		printf("apply : error : arguments have invalid form\n");
 		return NULL;
 	}
+
+	Cell *a = args->val.as_pair.first;
+	Cell *b = args->val.as_pair.rest->val.as_pair.first;
 	switch (fn)
 	{
-		case NF_EQ:
-			return make_int(cell_eq(args->val.as_pair.first, args->val.as_pair.rest->val.as_pair.first));
+		case NF_EQ: return make_bool_sym(cell_eq(a, b));
 		case NF_LT:
-			if (!args->val.as_pair.first->kind == T_INT || !args->val.as_pair.rest->val.as_pair.first->kind == T_INT)
+			if (!is_kind(a, T_INT) || !is_kind(b, T_INT))
 				return NULL;
-			return make_int(args->val.as_pair.first->val.as_int < args->val.as_pair.rest->val.as_pair.first->val.as_int);
+			return make_bool_sym(a->val.as_int < b->val.as_int);
 		case NF_GT:
-			if (!args->val.as_pair.first->kind == T_INT || !args->val.as_pair.rest->val.as_pair.first->kind == T_INT)
+			if (!is_kind(a, T_INT) || !is_kind(b, T_INT))
 				return NULL;
-			return make_int(args->val.as_pair.first->val.as_int > args->val.as_pair.rest->val.as_pair.first->val.as_int);
+			return make_bool_sym(a->val.as_int > b->val.as_int);
 		case NF_LTE:
-			if (!args->val.as_pair.first->kind == T_INT || !args->val.as_pair.rest->val.as_pair.first->kind == T_INT)
+			if (!is_kind(a, T_INT) || !is_kind(b, T_INT))
 				return NULL;
-			return make_int(args->val.as_pair.first->val.as_int <= args->val.as_pair.rest->val.as_pair.first->val.as_int);
+			return make_bool_sym(a->val.as_int <= b->val.as_int);
 		case NF_GTE:
-			if (!args->val.as_pair.first->kind == T_INT || !args->val.as_pair.rest->val.as_pair.first->kind == T_INT)
+			if (!is_kind(a, T_INT) || !is_kind(b, T_INT))
 				return NULL;
-			return make_int(args->val.as_pair.first->val.as_int >= args->val.as_pair.rest->val.as_pair.first->val.as_int);
+			return make_bool_sym(a->val.as_int >= b->val.as_int);
 		case NF_ADD:
-			return make_int(args->val.as_pair.first->val.as_int + args->val.as_pair.rest->val.as_pair.first->val.as_int);
+			if (!is_kind(a, T_INT) || !is_kind(b, T_INT))
+				return NULL;
+			return make_int(a->val.as_int + b->val.as_int);
 		case NF_SUB:
-			return make_int(args->val.as_pair.first->val.as_int - args->val.as_pair.rest->val.as_pair.first->val.as_int);
+			if (!is_kind(a, T_INT) || !is_kind(b, T_INT))
+				return NULL;
+			return make_int(a->val.as_int - b->val.as_int);
 		case NF_MUL:
-			return make_int(args->val.as_pair.first->val.as_int * args->val.as_pair.rest->val.as_pair.first->val.as_int);
+			if (!is_kind(a, T_INT) || !is_kind(b, T_INT))
+				return NULL;
+			return make_int(a->val.as_int * b->val.as_int);
 		case NF_DIV:
-			return make_int(args->val.as_pair.first->val.as_int / args->val.as_pair.rest->val.as_pair.first->val.as_int);
+			if (!is_kind(a, T_INT) || !is_kind(b, T_INT))
+				return NULL;
+			return make_int(a->val.as_int / b->val.as_int);
 		default:
 			printf("apply_native2 : error : invalid native fn\n");
 			return NULL;
@@ -963,18 +999,8 @@ Cell *apply_native2 (enum Native_func fn, Cell *args)
 
 Cell *EVAL (Cell *ast, Cell *env)
 {
-	// Debug
-	printf("EVAL(ast = ");
-	PRINT(ast);
-	printf(", env = %p);\n", (void*) env);
-
 	while (1)
 	{
-		// Debug
-		printf("  while(1) {ast = ");
-		PRINT(ast);
-		printf(", env = %p};\n", (void*) env);
-
 		if (!ast) // Error? ast is invalid
 		{
 			printf("EVAL : error? : ast is NULL\n");
@@ -1008,8 +1034,12 @@ Cell *EVAL (Cell *ast, Cell *env)
 						printf("def! : error : invalid args");
 						return NULL;
 					}
+					Cell *sym = args->val.as_pair.first;
 					Cell *val = EVAL(args->val.as_pair.rest->val.as_pair.first, env);
-					env_set(env, args->val.as_pair.first, val);
+					env_set(env, sym, val);
+					val = env_get(env, sym);
+					if (val)
+						return val->val.as_pair.rest;
 					return NULL;
 				}
 				else if (head->val.as_str == s_let_star) // (let* <list of symbols and values> expr)
