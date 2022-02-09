@@ -3,15 +3,27 @@
 #include <stdlib.h>
 #include <ctype.h>
 
-enum Native_func {
-	NF_ADD,    NF_SUB,     NF_MUL,
-	NF_DIV,    NF_COUNT,   NF_LIST,
-	NF_LIST_P, NF_EMPTY_P, NF_PRN,
-	NF_EQ,     NF_LT,      NF_GT,
-	NF_LTE,    NF_GTE,     NF_INT_P,
+enum Native_func
+{
+	NF_ADD,
+	NF_SUB,
+	NF_MUL,
+	NF_DIV,
+	NF_COUNT,
+	NF_LIST,
+	NF_LIST_P,
+	NF_EMPTY_P,
+	NF_PRN,
+	NF_EQ,
+	NF_LT,
+	NF_GT,
+	NF_LTE,
+	NF_GTE,
+	NF_INT_P,
 };
 
-enum Cell_kind {
+enum Cell_kind
+{
 	T_INT,
 	T_STRING,
 	T_SYMBOL,
@@ -21,13 +33,16 @@ enum Cell_kind {
 };
 
 typedef struct cell Cell;
-struct cell {
+struct cell
+{
 	enum Cell_kind kind;
-	union {
+	union
+	{
 		int as_int;
-		enum Native_func as_func;
 		const char *as_str;
-		struct {
+		enum Native_func as_func;
+		struct
+		{
 			Cell * first;
 			Cell * rest;
 		} as_pair;
@@ -150,20 +165,20 @@ Cell *make_fn (Cell *params, Cell *body, Cell *outer_env)
 	return x;
 }
 
-int is_list (Cell *x)
+int is_kind (Cell *x, enum Cell_kind kind)
 {
-	return x && (x->kind == T_PAIR);
+	return x && (x->kind == kind);
 }
 
 int is_empty_list (Cell *x)
 {
-	return is_list(x) && (x->val.as_pair.first == NULL);
+	return is_kind(x, T_PAIR) && (x->val.as_pair.first == NULL);
 }
 
 int list_length (Cell *list)
 {
 	int i;
-	for (i = 0; list && is_list(list) && !is_empty_list(list); i++)
+	for (i = 0; list && is_kind(list, T_PAIR) && !is_empty_list(list); i++)
 		list = list->val.as_pair.rest;
 	return i;
 }
@@ -287,7 +302,7 @@ Cell *env_find (Cell *env, const Cell *sym)
 	}
 
 	// Search up the environment hierarchy
-	while (env && is_list(env) && !is_empty_list(env))
+	while (env && is_kind(env, T_PAIR) && !is_empty_list(env))
 	{
 		if (alist_assoc(sym, env->val.as_pair.first))
 		{
@@ -847,7 +862,8 @@ int cell_eq (Cell *a, Cell *b)
 
 Cell *eval_ast (Cell *ast, Cell *env)
 {
-	if (!ast)
+	// Validate args
+	if (!ast || !env)
 		return NULL;
 
 	switch (ast->kind)
@@ -868,9 +884,12 @@ Cell *eval_ast (Cell *ast, Cell *env)
 		case T_INT:
 		case T_STRING:
 		case T_FUNC:
-		default:
+		case T_NATIVE_FUNC:
 			return ast;
 	}
+
+	// Invalid kind
+	return NULL;
 }
 
 // Do a native function which should have 1 args
@@ -944,210 +963,209 @@ Cell *apply_native2 (enum Native_func fn, Cell *args)
 	}
 }
 
-Cell *apply (Cell *head, Cell *args, Cell *env)
-{
-	if (!head)
-	{
-		// Error: not a function
-		printf("apply : error : not a function\n");
-		return NULL;
-	}
-
-	if (!args)
-		args = make_empty_list();
-
-	switch (head->kind)
-	{
-		case T_NATIVE_FUNC:
-			switch (head->val.as_func)
-			{
-				case NF_PRN:
-				case NF_EMPTY_P:
-				case NF_COUNT:
-				case NF_LIST_P:
-				case NF_INT_P:
-					return apply_native1(head->val.as_func, args);
-				case NF_EQ:
-				case NF_LT:
-				case NF_GT:
-				case NF_LTE:
-				case NF_GTE:
-				case NF_ADD:
-				case NF_SUB:
-				case NF_MUL:
-				case NF_DIV:
-					return apply_native2(head->val.as_func, args);
-				case NF_LIST:
-					if (!args)
-					{
-						return make_empty_list();
-					}
-					return args;
-			}
-		case T_FUNC:
-			{
-				// Lisp function (see comment before the definition of function make_fn)
-				Cell *params = head->val.as_pair.first;          // function parameter list
-				Cell *closure = head->val.as_pair.rest->val.as_pair.first; // function outer closure environment
-				Cell *body = head->val.as_pair.rest->val.as_pair.rest;     // function body
-				Cell *fn_env = env_create(closure, params, args);
-				return EVAL(body, fn_env);
-			}
-		default:
-			// Error: not a function
-			printf("apply : error : not a function\n");
-			return NULL;
-	}
-}
-
 Cell *EVAL (Cell *ast, Cell *env)
 {
 	while (1)
 	{
-		if (!ast)
+		if (!ast) // Error? ast is invalid
+		{
+			printf("EVAL : error? : ast is NULL\n");
 			return ast;
+		}
 
-		// Atom is passed to eval_ast
-		if (!is_list(ast))
+		if (!is_kind(ast, T_PAIR)) // ast is an Atom type
 			return eval_ast(ast, env);
 
-		// Empty list evals to itself
-		if (is_empty_list(ast))
+		if (is_empty_list(ast)) // Empty list evals to itself
 			return ast;
 
-		Cell *head = ast->val.as_pair.first;
-		Cell *args = ast->val.as_pair.rest;
-		if (!args)
-			args = make_empty_list();
+		// Check for a special form...
 
-		if (head && head->kind == T_SYMBOL)
 		{
-			// Special forms
-			if (head->val.as_str == s_def_bang) // (def! <symbol> value)
+			Cell *head = ast->val.as_pair.first;
+			if (is_kind(head, T_SYMBOL))
 			{
-				if (!args || !args->val.as_pair.first || !args->val.as_pair.rest
-						|| args->val.as_pair.first->kind != T_SYMBOL)
+				// Special forms...
+
+				Cell *args = ast->val.as_pair.rest;
+				if (!args)
+					args = make_empty_list();
+
+				if (head->val.as_str == s_def_bang) // (def! <symbol> value)
 				{
-					// Error: invalid args
-					printf("def! : error : invalid args");
-					return NULL;
-				}
-				Cell *val = EVAL(args->val.as_pair.rest->val.as_pair.first, env);
-				env_set(env, args->val.as_pair.first, val);
-				return NULL;
-			}
-			else if (head->val.as_str == s_let_star) // (let* <list of symbols and values> expr)
-			{
-				if (!args || !args->val.as_pair.first || !args->val.as_pair.rest)
-				{
-					// Error: invalid args
-					printf("let* : error : invalid args");
-					return NULL;
-				}
-				Cell *let_env = env_create(env, NULL, NULL);
-				// Go through the bindings list and add the
-				// bindings to the environment
-				Cell *p = args->val.as_pair.first; // pointer to bindings list
-				while (p)
-				{
-					if (!p->val.as_pair.rest)
+					if (!args || !args->val.as_pair.first || !args->val.as_pair.rest
+							|| args->val.as_pair.first->kind != T_SYMBOL)
 					{
-						// Error: odd amount of arguments in first list
-						printf("let* : error : odd amount of arguments in first list\n");
+						// Error: invalid args
+						printf("def! : error : invalid args");
 						return NULL;
 					}
-					if (!p->val.as_pair.first || p->val.as_pair.first->kind != T_SYMBOL)
+					Cell *val = EVAL(args->val.as_pair.rest->val.as_pair.first, env);
+					env_set(env, args->val.as_pair.first, val);
+					return NULL;
+				}
+				else if (head->val.as_str == s_let_star) // (let* <list of symbols and values> expr)
+				{
+					if (!args || !args->val.as_pair.first || !args->val.as_pair.rest)
 					{
-						// Error: even element in bindings list not a symbol
-						printf("let* : error : even element in bindings list not a symbol\n");
+						// Error: invalid args
+						printf("let* : error : invalid args");
 						return NULL;
+					}
+					Cell *let_env = env_create(env, NULL, NULL);
+					// Go through the bindings list and add the
+					// bindings to the environment
+					Cell *p = args->val.as_pair.first; // pointer to bindings list
+					while (p)
+					{
+						if (!p->val.as_pair.rest)
+						{
+							// Error: odd amount of arguments in first list
+							printf("let* : error : odd amount of arguments in first list\n");
+							return NULL;
+						}
+						if (!p->val.as_pair.first || p->val.as_pair.first->kind != T_SYMBOL)
+						{
+							// Error: even element in bindings list not a symbol
+							printf("let* : error : even element in bindings list not a symbol\n");
+							return NULL;
+						}
+
+						env_set(let_env, p->val.as_pair.first, EVAL(p->val.as_pair.rest->val.as_pair.first, let_env));
+
+						// Next-next
+						p = p->val.as_pair.rest->val.as_pair.rest;
 					}
 
-					env_set(let_env, p->val.as_pair.first, EVAL(p->val.as_pair.rest->val.as_pair.first, let_env));
-
-					// Next-next
-					p = p->val.as_pair.rest->val.as_pair.rest;
-				}
-
-				// TODO: discard env?
-				env = let_env;
-				ast = args->val.as_pair.rest->val.as_pair.first;
-				continue;
-			}
-			else if (head->val.as_str == s_fn_star) // (fn* (symbol1 symbol2 ...) expr)
-			{
-				if (!args || !args->val.as_pair.first || !args->val.as_pair.rest)
-				{
-					// Error: invalid args
-					printf("fn* : error : invalid args");
-					return NULL;
-				}
-				// Check that the parameter list is only symbols
-				Cell *p = args->val.as_pair.first;
-				while (p && !is_empty_list(p))
-				{
-					if (!p->val.as_pair.first || p->val.as_pair.first->kind != T_SYMBOL)
-					{
-						// Error: parameter list must be all symbols
-						printf("fn* : error : parameter list must be all symbols\n");
-						return NULL;
-					}
-					if (p->val.as_pair.rest && p->val.as_pair.rest->kind != T_PAIR)
-					{
-						// Something other than NULL or a list is next
-						printf("fn* : error : parameter list is not a proper list\n");
-						return NULL;
-					}
-					p = p->val.as_pair.rest;
-				}
-				return make_fn(args->val.as_pair.first, args->val.as_pair.rest->val.as_pair.first, env);
-			}
-			else if (head->val.as_str == s_if) // (if expr true {optional false?})
-			{
-				if (!args || !args->val.as_pair.first || !args->val.as_pair.rest || (args->val.as_pair.rest->val.as_pair.rest && args->val.as_pair.rest->val.as_pair.rest->val.as_pair.rest))
-				{
-					// Error: too few or too many arguments
-					printf("if : error : too few or too many arguments\n");
-					return NULL;
-				}
-				Cell *cond = EVAL(args->val.as_pair.first, env);
-				if (cond && !(cond->kind == T_SYMBOL && cond->val.as_str == s_false))
-				{
+					// TODO: discard env?
+					env = let_env;
 					ast = args->val.as_pair.rest->val.as_pair.first;
 					continue;
 				}
-				if (args->val.as_pair.rest->val.as_pair.rest)
+				else if (head->val.as_str == s_fn_star) // (fn* (symbol1 symbol2 ...) expr)
 				{
-					ast = args->val.as_pair.rest->val.as_pair.rest->val.as_pair.first;
-					continue;
+					if (!args || !args->val.as_pair.first || !args->val.as_pair.rest)
+					{
+						// Error: invalid args
+						printf("fn* : error : invalid args");
+						return NULL;
+					}
+					// Check that the parameter list is only symbols
+					Cell *p = args->val.as_pair.first;
+					while (p && !is_empty_list(p))
+					{
+						if (!p->val.as_pair.first || p->val.as_pair.first->kind != T_SYMBOL)
+						{
+							// Error: parameter list must be all symbols
+							printf("fn* : error : parameter list must be all symbols\n");
+							return NULL;
+						}
+						if (p->val.as_pair.rest && p->val.as_pair.rest->kind != T_PAIR)
+						{
+							// Something other than NULL or a list is next
+							printf("fn* : error : parameter list is not a proper list\n");
+							return NULL;
+						}
+						p = p->val.as_pair.rest;
+					}
+					return make_fn(args->val.as_pair.first, args->val.as_pair.rest->val.as_pair.first, env);
 				}
-				return NULL;
-			}
-			else if (head->val.as_str == s_do) // (do expr1 expr2 ...)
-			{
-				// Evaluate all but the last item
-				while (args && !is_empty_list(args) && args->kind == T_PAIR && args->val.as_pair.rest)
+				else if (head->val.as_str == s_if) // (if expr true {optional false?})
 				{
-					EVAL(args->val.as_pair.first, env);
-					args = args->val.as_pair.rest;
+					if (!args || !args->val.as_pair.first || !args->val.as_pair.rest || (args->val.as_pair.rest->val.as_pair.rest && args->val.as_pair.rest->val.as_pair.rest->val.as_pair.rest))
+					{
+						// Error: too few or too many arguments
+						printf("if : error : too few or too many arguments\n");
+						return NULL;
+					}
+					Cell *cond = EVAL(args->val.as_pair.first, env);
+					if (cond && !(cond->kind == T_SYMBOL && cond->val.as_str == s_false))
+					{
+						ast = args->val.as_pair.rest->val.as_pair.first;
+						continue;
+					}
+					if (args->val.as_pair.rest->val.as_pair.rest)
+					{
+						ast = args->val.as_pair.rest->val.as_pair.rest->val.as_pair.first;
+						continue;
+					}
+					return NULL;
 				}
+				else if (head->val.as_str == s_do) // (do expr1 expr2 ...)
+				{
+					// Evaluate all but the last item
+					while (args && !is_empty_list(args) && args->kind == T_PAIR && args->val.as_pair.rest)
+					{
+						EVAL(args->val.as_pair.first, env);
+						args = args->val.as_pair.rest;
+					}
 
-				// Has a last item, so do a tail call to evaluate that
-				if (args && args->kind == T_PAIR)
-				{
-					ast = args->val.as_pair.first;
-					continue;
-				}
+					// Has a last item, so do a tail call to evaluate that
+					if (args && args->kind == T_PAIR)
+					{
+						ast = args->val.as_pair.first;
+						continue;
+					}
 
-				// If this point is reached, there were no items
-				return NULL;
+					// If this point is reached, there were no items
+					return NULL;
+				}
 			}
 		}
 
-		// Normal function application
-		head = EVAL(head, env);
-		args = eval_ast(args, env);
-		return apply(head, args, env);
+		// Normal function application...
+
+		// Evaluate each part
+		ast = eval_ast(ast, env);
+
+		if (!ast) // Error? eval_ast somehow failed
+			return NULL;
+
+		Cell *f = ast->val.as_pair.first;
+		Cell *args = ast->val.as_pair.rest;
+		if (!f) // Error: not a function
+			return NULL;
+
+		args = ast->val.as_pair.rest;
+		if (!args) // Just in case the args is not properly an empty list
+			args = make_empty_list();
+
+		switch (f->kind)
+		{
+			case T_NATIVE_FUNC:
+				switch (f->val.as_func)
+				{
+					case NF_PRN:
+					case NF_EMPTY_P:
+					case NF_COUNT:
+					case NF_LIST_P:
+					case NF_INT_P: // Functions with 1 parameter
+						return apply_native1(f->val.as_func, args);
+					case NF_EQ:
+					case NF_LT:
+					case NF_GT:
+					case NF_LTE:
+					case NF_GTE:
+					case NF_ADD:
+					case NF_SUB:
+					case NF_MUL:
+					case NF_DIV: // Functions with 2 parameters
+						return apply_native2(f->val.as_func, args);
+					case NF_LIST: // [list ...] is a variadic function
+						return args;
+				}
+			case T_FUNC: // Lisp function created by fn* (see comment before the definition of function make_fn)
+				{
+					ast = f->val.as_pair.rest->val.as_pair.rest;             // ast = function body ast
+					env = env_create(f->val.as_pair.rest->val.as_pair.first, // function's outer env
+							f->val.as_pair.first,                            // function's parameters
+							args);                                           // function's arguments = args
+					continue;
+				}
+			default: // Error: not a function
+				printf("EVAL : error : not a function\n");
+				return NULL;
+		}
 	}
 }
 
