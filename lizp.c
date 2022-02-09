@@ -22,6 +22,8 @@ enum Native_func
 	NF_GTE,
 	NF_INT_P,
 	NF_READ_STR,
+	NF_SLURP,
+	NF_EVAL,
 };
 
 enum Cell_kind
@@ -951,7 +953,7 @@ Cell *eval_ast (Cell *ast, Cell *env)
 }
 
 // Do a native function which should have exactly 1 args
-Cell *apply_native1 (enum Native_func fn, Cell *args)
+Cell *apply_native1 (enum Native_func fn, Cell *args, Cell *env)
 {
 	if (!is_kind(args, T_PAIR) || is_empty_list(args) || is_kind(args->val.as_pair.rest, T_PAIR))
 	{
@@ -961,7 +963,42 @@ Cell *apply_native1 (enum Native_func fn, Cell *args)
 	Cell *a = args->val.as_pair.first;
 	switch (fn)
 	{
-		case NF_READ_STR: // (read-str "str")
+		case NF_EVAL: // (eval ast) -> any value
+			// use env
+			return NULL;
+		case NF_SLURP: // (slurp "file name") -> "file contents"
+			{
+				// Read all contents of the file...
+				// Open file
+				FILE *f = fopen(a->val.as_str, "r");
+				if (!f) // failed
+					return make_symbol(s_nil);
+
+				// Get file length
+				fseek(f, 0, SEEK_END);
+				long fsize = ftell(f);
+				fseek(f, 0, SEEK_SET);
+
+				// See if we have enough room for this string data
+				if (((char_free + fsize) - char_pool) >= char_pool_cap)
+				{
+					fclose(f);
+					return make_symbol(s_nil);
+				}
+
+				// Read the char data and null-terminate it
+				fread(char_free, fsize, 1, f);
+				fclose(f);
+				char_free[fsize] = 0;
+
+				// Move the character allocation pointer
+				const char *s = char_free;
+				char_free += fsize + 1;
+
+				return make_string(s);
+			}
+			return NULL;
+		case NF_READ_STR: // (read-str "str") -> any value
 			{
 				Cell *result = NULL;
 				if (is_kind(a, T_STRING))
@@ -970,12 +1007,12 @@ Cell *apply_native1 (enum Native_func fn, Cell *args)
 			}
 		case NF_PRN:
 			PRINT(a);
-			return NULL;
+			return make_symbol(s_nil);
 		case NF_EMPTY_P:
 			return make_symbol(is_empty_list(a)? s_true : s_false);
 		case NF_COUNT:
 			if (!is_kind(a, T_PAIR))
-				return NULL;
+				return make_symbol(s_nil);
 			return make_int(list_length(a));
 		case NF_LIST_P:
 			return make_bool_sym(is_kind(a, T_PAIR));
@@ -1221,13 +1258,15 @@ Cell *EVAL (Cell *ast, Cell *env)
 			case T_NATIVE_FUNC:
 				switch (f->val.as_func)
 				{
+					case NF_EVAL:
+					case NF_SLURP:
 					case NF_READ_STR:
 					case NF_PRN:
 					case NF_EMPTY_P:
 					case NF_COUNT:
 					case NF_LIST_P:
 					case NF_INT_P: // Functions with 1 parameter
-						return apply_native1(f->val.as_func, args);
+						return apply_native1(f->val.as_func, args, env);
 					case NF_EQ:
 					case NF_LT:
 					case NF_GT:
@@ -1349,6 +1388,8 @@ Cell *init (int ncells, int nchars)
 	env_set(env, make_symbol(string_intern_c("list?")), make_native_fn(NF_LIST_P));
 	env_set(env, make_symbol(string_intern_c("prn")), make_native_fn(NF_PRN));
 	env_set(env, make_symbol(string_intern_c("read-str")), make_native_fn(NF_READ_STR));
+	env_set(env, make_symbol(string_intern_c("slurp")), make_native_fn(NF_SLURP));
+	env_set(env, make_symbol(string_intern_c("eval")), make_native_fn(NF_EVAL));
 
 	return env;
 }
