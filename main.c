@@ -763,9 +763,7 @@ int pr_str (Cell *x, char *out, int length)
 
 	// Debug only, should be nil
 	if (!x)
-	{
-		return print_cstr("nil", out, length);
-	}
+		return print_cstr("N.U.L.L.", out, length);
 
 	switch (x->kind)
 	{
@@ -965,8 +963,18 @@ Cell *apply_native2 (enum Native_func fn, Cell *args)
 
 Cell *EVAL (Cell *ast, Cell *env)
 {
+	// Debug
+	printf("EVAL(ast = ");
+	PRINT(ast);
+	printf(", env = %p);\n", (void*) env);
+
 	while (1)
 	{
+		// Debug
+		printf("  while(1) {ast = ");
+		PRINT(ast);
+		printf(", env = %p};\n", (void*) env);
+
 		if (!ast) // Error? ast is invalid
 		{
 			printf("EVAL : error? : ast is NULL\n");
