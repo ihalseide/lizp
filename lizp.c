@@ -613,6 +613,14 @@ int read_list (const char *start, int length, Cell **out)
 	return view - start;
 }
 
+int read_until (const char *start, int length, char sentinel)
+{
+	int i;
+	for (i = 0; start[i] && (i < length) && (start[i] != sentinel); i++)
+		;
+	return i;
+}
+
 // Read a form from an input stream/string
 // Returns: the number of characters read
 int read_str (const char *start, int length, Cell **out)
@@ -620,9 +628,10 @@ int read_str (const char *start, int length, Cell **out)
 	// Validate arguments
 	if (!out)
 		return 0;
+	else
+		*out = NULL;
 	if (!start || length <= 0)
 	{
-		*out = NULL;
 		return 0;
 	}
 
@@ -633,17 +642,17 @@ int read_str (const char *start, int length, Cell **out)
 	switch (*view)
 	{
 		case '\0': // End of input
-			*out = NULL;
 			return 0;
+		case ';': // Line comment
+			string_step(&view, &rem, read_until(view, rem, '\n'));
+			break;
 		case ']':
 		case ')':
 		case '}': // Error, unmatched closing paren
 			printf("read_str : error : unmatched closing paren\n");
-			*out = NULL;
 			return 0;
 		case '|': // Error, '|' for cons pairs should only be inside a list
 			printf("read_str : error : '|' should only be inside a list\n");
-			*out = NULL;
 			return 0;
 		case '[':
 		case '(':
@@ -831,6 +840,7 @@ Cell *READ (const char *start, int length)
 
 	Cell *x;
 	read_str(start, length, &x);
+
 	return x;
 }
 
@@ -937,10 +947,11 @@ Cell *eval_ast (Cell *ast, Cell *env)
 	return NULL;
 }
 
-// Do a native function which should have 1 args
+// Do a native function which should have exactly 1 args
 Cell *apply_native1 (enum Native_func fn, Cell *args)
 {
-	if (!is_kind(args, T_PAIR) || is_empty_list(args) || !args->val.as_pair.first)
+	if (!is_kind(args, T_PAIR) || is_empty_list(args) || !args->val.as_pair.first
+			|| is_kind(args->val.as_pair.rest, T_PAIR));
 	{
 		printf("apply : error: invalid args\n");
 		return NULL;
@@ -967,12 +978,13 @@ Cell *apply_native1 (enum Native_func fn, Cell *args)
 	}
 }
 
-// Do a native function which should have 2 args
+// Do a native function which should have exactly 2 args
 Cell *apply_native2 (enum Native_func fn, Cell *args)
 {
 	// Validate arguments
 	if (!is_kind(args, T_PAIR) || is_empty_list(args) || !args->val.as_pair.first
-			|| !args->val.as_pair.rest || !args->val.as_pair.rest->val.as_pair.first)
+			|| !args->val.as_pair.rest || !args->val.as_pair.rest->val.as_pair.first
+			|| is_kind(args->val.as_pair.rest->val.as_pair.rest, T_PAIR))
 	{
 		printf("apply : error : arguments have invalid form\n");
 		return NULL;
@@ -1253,7 +1265,7 @@ void rep (const char *start, int length, Cell *env)
 			return;
 		}
 	}
-	PRINT(make_string("; ERROR\n"));
+	PRINT(make_string("no value"));
 }
 
 // Returns global environment
