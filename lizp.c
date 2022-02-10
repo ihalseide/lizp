@@ -4,6 +4,8 @@
 #include <ctype.h>
 #include <assert.h>
 
+// TODO: make def! work in file loading
+
 enum Cell_kind
 {
 	CK_INT,
@@ -26,6 +28,11 @@ struct cell
 		Cell *as_atom;
 		struct
 		{
+			Cell *first;
+			Cell *rest;
+		} as_pair;
+		struct
+		{
 			int n_params;
 			Cell *(*func)(Cell *);
 		} as_native_fn;
@@ -35,14 +42,10 @@ struct cell
 			const Cell *ast;
 			Cell *env;
 		} as_fn;
-		struct
-		{
-			Cell * first;
-			Cell * rest;
-		} as_pair;
 	} val;
 };
 
+Cell *EVAL (Cell *, Cell *env); 
 void PRINT (const Cell *expr);
 int pr_str (const Cell *x, char *out, int length, int readable);
 
@@ -474,12 +477,29 @@ int read_string_literal (const char *start, int length, Cell **out)
 
 	const char *view = start;
 
+	char *write = char_free;
+
 	// Read opening quote
 	string_step(&view, &length, 1);
 
-	// String
-	while (length > 0 && *view != '"')
+	// Read string contents, with escaping
+	while (*view && (*view != '"') && length && (char_free - char_pool) < char_pool_cap)
+	{
+		char c = *view;
+		if (c == '\\')
+		{
+			string_step(&view, &length, 1);
+			c = *view;
+			switch (c)
+			{
+				case 'n': c = '\n'; break;
+				case 't': c = '\t'; break;
+			}
+		}
+
+		*write++ = c;
 		string_step(&view, &length, 1);
+	}
 
 	if (*view != '"')
 	{
@@ -487,13 +507,21 @@ int read_string_literal (const char *start, int length, Cell **out)
 		printf("read_string_literal : error : unexpected end of string\n");
 		*out = NULL;
 	}
+	else if ((char_free - char_pool) >= char_pool_cap)
+	{
+		printf("read_string_literal : error : not enough room to read string\n");
+		*out = NULL;
+	}
 	else
 	{
 		// Read closing quote
 		string_step(&view, &length, 1);
 
+		// Write null terminator
+		*write++ = '\0';
+
 		// Intern string, remove quotes
-		*out = make_string(string_intern(start + 1, view - start - 2));
+		*out = make_string(string_intern(char_free, write - char_free));
 	}
 
 	// Keep the quotes in the length,
@@ -652,7 +680,7 @@ int read_str (const char *start, int length, Cell **out)
 	switch (*view)
 	{
 		case '\0': // End of input
-			return 0;
+			break;
 		case ';': // Line comment
 			string_step(&view, &rem, read_until(view, rem, '\n'));
 			break;
@@ -660,10 +688,10 @@ int read_str (const char *start, int length, Cell **out)
 		case ')':
 		case '}': // Error, unmatched closing paren
 			printf("read_str : error : unmatched closing paren\n");
-			return 0;
+			break;
 		case '|': // Error, '|' for cons pairs should only be inside a list
 			printf("read_str : error : '|' should only be inside a list\n");
-			return 0;
+			break;
 		case '[':
 		case '(':
 		case '{': // Opening paren, for lists
@@ -709,7 +737,7 @@ int print_cstr (char *s, char *out, int length)
 	return i;
 }
 
-// Print out a string cell
+// Print out a string
 // returns number of chars written
 int print_string (const char *str, char *out, int length, int readable)
 {
@@ -727,20 +755,30 @@ int print_string (const char *str, char *out, int length, int readable)
 	// String contents
 	while (*str && (rem > 0))
 	{
-		if (readable && (*str == '\\') && (rem > 1))
+		char c = *str++;
+		if (readable)
 		{
-			string_step((const char**) &view, &rem, print_char(*str++, view, rem));
-			char p = *str;
-			switch (p)
+			// Do string escaping...
+
+			// We may need room for 2 characters
+			if (rem < 2)
+				break;
+
+			char next_c = 0;
+			switch (c)
 			{
-				case 'n': p = '\n';
-				case 't': p = '\t';
+				case '\n': next_c = 'n';  break;
+				case '\t': next_c = 't';  break;
+				case '"':  next_c = '"';  break;
+				case '\\': next_c = '\\'; break;
+			}
+			if (next_c)
+			{
+				string_step((const char**) &view, &rem, print_char('\\', view, rem));
+				c = next_c;
 			}
 		}
-		else
-		{
-			string_step((const char**) &view, &rem, print_char(*str++, view, rem));
-		}
+		string_step((const char**) &view, &rem, print_char(c, view, rem));
 	}
 
 	// Closing quote
@@ -853,7 +891,13 @@ int pr_str (const Cell *x, char *out, int length, int readable)
 				return view - out;
 			}
 		case CK_NATIVE_FUNC:
-			return print_cstr("#<code>", out, length);
+			{
+				char *view = out;
+				string_step((const char**) &view, &length, print_cstr("#<code ", view, length));
+				string_step((const char**) &view, &length, print_int(x->val.as_native_fn.n_params, view, length));
+				string_step((const char**) &view, &length, print_cstr(">", view, length));
+				return view - out;
+			}
 		case CK_ATOM:
 			return print_cstr("#<atom>", out, length);
 	}
@@ -876,8 +920,6 @@ Cell *READ (const char *start, int length)
 
 	return x;
 }
-
-Cell *EVAL (Cell *, Cell *env); 
 
 // Evaluate each item of list x.
 // Does not modify x.
@@ -944,53 +986,6 @@ Cell *make_bool_sym (int val)
 		return make_symbol(s_true);
 	else
 		return make_symbol(s_false);
-}
-
-// For tail-call recursion for lisp fn* functions,
-// the next ast and env is returned as a pair.
-// Native functions return the result value and the same env.
-// --> NULL (when error)
-// --> (ast . env)
-Cell *apply (Cell *fn, Cell *args, Cell *env)
-{
-	// Validate arguments
-	if (!fn || !args || !is_kind(args, CK_PAIR) || !env)
-		return NULL;
-
-	Cell *result_val = NULL;
-	Cell *result_env = NULL;
-	switch (fn->kind)
-	{
-		case CK_NATIVE_FUNC:
-			// Built-in native C function
-			// Validate arguments
-			if (fn->val.as_native_fn.n_params && (list_length(args) != fn->val.as_native_fn.n_params))
-			{
-				printf("apply : error : length of actual arguments does not match the native function's formal parameters\n");
-				return NULL;
-			}
-
-			// Call
-			result_val = fn->val.as_native_fn.func(args);
-			break;
-
-		case CK_FUNC:
-			// Lisp function created by fn* (see comment before the definition of function make_fn)
-			result_val = fn->val.as_fn.ast;
-			result_env = env_create(fn->val.as_fn.env, fn->val.as_fn.params, args);
-			if (!result_env)
-			{
-				printf("apply : error : length of actual arguments does not match the function's formal parameters\n");
-				return NULL;
-			}
-			break;
-
-		default: // Error: not a function
-			printf("apply : error : first item in list is not a function\n");
-			return NULL;
-	}
-
-	return make_pair(result_val, result_env);
 }
 
 // Print to char_free pointer and return length written
@@ -1120,11 +1115,10 @@ Cell *fn_atom (Cell *args)
 	return make_atom(args->val.as_pair.first);
 }
 
-// [eval ast] -> any value
 Cell *fn_eval (Cell *args)
 {
-	// TODO: not implemented
-	assert(0);
+	assert(0 && "Not implemented. This function is only needed for its pointer value.");
+	return NULL;
 }
 
 // (slurp "file name") -> "file contents"
@@ -1163,7 +1157,7 @@ Cell *fn_slurp (Cell *args)
 	return NULL;
 }
 
-// (read-string "str") -> any value
+// [read-string "str"] -> any value
 Cell *fn_read_str (Cell *args)
 {
 	Cell *a = args->val.as_pair.first;
@@ -1313,6 +1307,68 @@ Cell *fn_swap_bang (Cell *args)
 	return NULL;
 }
 
+// For tail-call recursion for lisp fn* functions,
+// the next ast and env is returned as a pair.
+// Native functions return the result value and the same env.
+// --> NULL (when error)
+// --> (ast . env)
+Cell *apply (Cell *fn, Cell *args, Cell *env)
+{
+	// Validate arguments
+	if (!fn || !args || !is_kind(args, CK_PAIR) || !env)
+	{
+		printf("apply : error : invalid arguments\n");
+		return NULL;
+	}
+
+	Cell *result_val;
+	Cell *result_env;
+	switch (fn->kind)
+	{
+		case CK_NATIVE_FUNC:
+			// Built-in native C function
+			// Validate arguments
+			if (fn->val.as_native_fn.n_params && (list_length(args) != fn->val.as_native_fn.n_params))
+			{
+				printf("apply : error : length of actual arguments does not match the native function's formal parameters\n");
+				return NULL;
+			}
+
+			// Call...
+
+			// Special case for eval, because it needs the environment
+			// Don't evan call eval because it's a dummy value.
+			if (fn->val.as_native_fn.func == fn_eval)
+			{
+				result_val = args->val.as_pair.first;
+				result_env = env;
+			}
+			else
+			{
+				result_val = fn->val.as_native_fn.func(args);
+				result_env = NULL;
+			}
+			break;
+
+		case CK_FUNC:
+			// Lisp function created by fn* (see comment before the definition of function make_fn)
+			result_val = fn->val.as_fn.ast;
+			result_env = env_create(fn->val.as_fn.env, fn->val.as_fn.params, args);
+			if (!result_env)
+			{
+				printf("apply : error : length of actual arguments does not match the function's formal parameters\n");
+				return NULL;
+			}
+			break;
+
+		default: // Error: not a function
+			printf("apply : error : first item in list is not a function\n");
+			return NULL;
+	}
+
+	return make_pair(result_val, result_env);
+}
+
 Cell *EVAL (Cell *ast, Cell *env)
 {
 	while (1)
@@ -1451,7 +1507,7 @@ Cell *EVAL (Cell *ast, Cell *env)
 				}
 				return make_symbol(s_nil);
 			}
-			else if (head->val.as_str == s_do) // (do expr1 expr2 ...)
+			else if (head->val.as_str == s_do) // [do exprs...]
 			{
 				// Evaluate all but the last item
 				while (is_kind(args, CK_PAIR) && !is_empty_list(args) && args->val.as_pair.rest)
@@ -1508,7 +1564,7 @@ void PRINT (const Cell *expr)
 
 	int p_len = pr_str(expr, buffer, sizeof(buffer), 1);
 
-	printf("%.*s\n", p_len, buffer);
+	printf("%.*s", p_len, buffer);
 }
 
 // Do one read, eval, and print cycle on a string.
@@ -1620,15 +1676,17 @@ Cell *init (int ncells, int nchars)
 int main (void)
 {
 	// Initialize the REPL environment symbols
-	Cell *repl_env = init(4 * 1024, 8 * 1024);
+	Cell *repl_env = init(2000, 8 * 1024);
 	if (!repl_env)
 	{
 		return 1;
 	}
 
 	// Initialization code
-	//rep("[def! load-file [fn* [f] [eval [read-string [str \"[do \" [slurp f] \"\nnil]\"]]]]]", -1, repl_env);
-	//rep("[println \"LIZP\"]", -1, repl_env);
+	rep("[do [def! load-file [fn* [f] [eval [read-string [str \"[do \" [slurp f] \"\nnil]\"]]]]] nil]", -1, repl_env);
+
+	// Debug:
+	PRINT(repl_env);
 
 	// REPL
 	char buffer[1024];
