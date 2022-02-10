@@ -27,6 +27,11 @@ enum Native_func
 	NF_PR_STR,
 	NF_PRINTLN,
 	NF_EVAL,
+	NF_ATOM,
+	NF_ATOM_P,
+	NF_DEREF,
+	NF_RESET_BANG,
+	NF_SWAP_BANG,
 };
 
 enum Cell_kind
@@ -996,7 +1001,15 @@ Cell *apply_native1 (enum Native_func fn, Cell *args, Cell *env)
 	Cell *a = args->val.as_pair.first;
 	switch (fn)
 	{
-		case NF_EVAL: // (eval ast) -> any value
+		case NF_DEREF: // [deref atom]
+			if (!is_kind(a, CK_ATOM)) // error
+				return NULL;
+			return a->val.as_atom;
+		case NF_ATOM_P: // [atom? x] -> bool
+			return make_bool_sym(is_kind(a, CK_ATOM));
+		case NF_ATOM: // [atom x] -> #<atom x>
+			return make_atom(a);
+		case NF_EVAL: // [eval ast] -> any value
 			return EVAL(a, env);
 		case NF_SLURP: // (slurp "file name") -> "file contents"
 			{
@@ -1069,7 +1082,13 @@ Cell *apply_native2 (enum Native_func fn, Cell *args)
 	Cell *b = args->val.as_pair.rest->val.as_pair.first;
 	switch (fn)
 	{
-		case NF_EQ: return make_bool_sym(cell_eq(a, b));
+		case NF_RESET_BANG: // [reset! atom value] -> value
+			if (!is_kind(a, CK_ATOM))
+				return NULL;
+			a->val.as_atom = b;
+			return b;
+		case NF_EQ:
+			return make_bool_sym(cell_eq(a, b));
 		case NF_LT:
 			if (!is_kind(a, CK_INT) || !is_kind(b, CK_INT))
 				return NULL;
@@ -1167,13 +1186,13 @@ Cell *EVAL (Cell *ast, Cell *env)
 				if (!args)
 					args = make_empty_list();
 
-				if (head->val.as_str == s_def_bang) // (def! <symbol> value)
+				if (head->val.as_str == s_def_bang) // [def! <symbol> value]
 				{
 					if (!args || !args->val.as_pair.first || !args->val.as_pair.rest
 							|| args->val.as_pair.first->kind != CK_SYMBOL)
 					{
 						// Error: invalid args
-						printf("def! : error : invalid args");
+						printf("def! : error : invalid args\n");
 						return NULL;
 					}
 					Cell *sym = args->val.as_pair.first;
@@ -1182,6 +1201,7 @@ Cell *EVAL (Cell *ast, Cell *env)
 					val = env_get(env, sym);
 					if (val)
 						return val->val.as_pair.rest;
+					printf("def! : error : cannot define symbol\n");
 					return NULL;
 				}
 				else if (head->val.as_str == s_let_star) // (let* <list of symbols and values> expr)
@@ -1189,7 +1209,7 @@ Cell *EVAL (Cell *ast, Cell *env)
 					if (!args || !args->val.as_pair.first || !args->val.as_pair.rest)
 					{
 						// Error: invalid args
-						printf("let* : error : invalid args");
+						printf("let* : error : invalid args\n");
 						return NULL;
 					}
 					Cell *let_env = env_create(env, NULL, NULL);
@@ -1318,6 +1338,9 @@ Cell *EVAL (Cell *ast, Cell *env)
 			case CK_NATIVE_FUNC:
 				switch (f->val.as_func)
 				{
+					case NF_DEREF:
+					case NF_ATOM_P:
+					case NF_ATOM:
 					case NF_EVAL:
 					case NF_SLURP:
 					case NF_READ_STR:
@@ -1326,6 +1349,7 @@ Cell *EVAL (Cell *ast, Cell *env)
 					case NF_LIST_P:
 					case NF_INT_P: // Functions with 1 parameter
 						return apply_native1(f->val.as_func, args, env);
+					case NF_RESET_BANG:
 					case NF_EQ:
 					case NF_LT:
 					case NF_GT:
@@ -1334,29 +1358,33 @@ Cell *EVAL (Cell *ast, Cell *env)
 					case NF_ADD:
 					case NF_SUB:
 					case NF_MUL:
-					case NF_DIV: // Functions with 2 parameters
+					case NF_DIV:       // Functions with 2 parameters
 						return apply_native2(f->val.as_func, args);
-					case NF_LIST: // [list a ...] -> [a ...] (variadic)
+					case NF_SWAP_BANG: // [swap! atom fn args...] (variadic)
+						/* Takes an atom, a function, and zero or more function arguments. The atom's value is modified to the result of applying the function with the atom's value as the first argument and the optionally given function arguments as the rest of the arguments. The new atom's value is returned.*/
+						assert(0 && "swap! is not implemented yet");
+						return NULL;
+					case NF_LIST:      // [list a ...] -> [a ...] (variadic)
 						return args;
-					case NF_PR_STR: // [pr-str "a" "b" "c" ...] -> "a b c ..." (prints readably)
+					case NF_PR_STR:    // [pr-str a b c ...] -> "a b c ..." (prints readably)
 						{
 							int len = print_scratch(args, ' ', 1);
 							Cell *s = make_string(char_free);
 							char_free += len;
 							return s;
 						}
-					case NF_STR: // [str "a" "b" "c" ...] -> "abc..." (prints non-readably)
+					case NF_STR: // [str a b c ...] -> "abc..." (prints non-readably)
 						{
 							int len = print_scratch(args, 0, 0);
 							Cell *s = make_string(char_free);
 							char_free += len;
 							return s;
 						}
-					case NF_PRN: // [prn "a" "b" "c" ...] -> nil (prints readably)
+					case NF_PRN: // [prn a b c ...] -> nil (prints readably)
 						print_scratch(args, ' ', 1);
 						printf("%s", char_free);
 						return make_symbol(s_nil);
-					case NF_PRINTLN: // [println "a" "b" "c" ...] -> nil (prints non-readably)
+					case NF_PRINTLN: // [println a b c ...] -> nil (prints non-readably)
 						print_scratch(args, ' ', 0);
 						printf("%s\n", char_free);
 						return make_symbol(s_nil);
@@ -1478,6 +1506,11 @@ Cell *init (int ncells, int nchars)
 	env_set(env, make_symbol(string_intern_c("str")), make_native_fn(NF_STR));
 	env_set(env, make_symbol(string_intern_c("pr-str")), make_native_fn(NF_PR_STR));
 	env_set(env, make_symbol(string_intern_c("println")), make_native_fn(NF_PRINTLN));
+	env_set(env, make_symbol(string_intern_c("atom")), make_native_fn(NF_ATOM));
+	env_set(env, make_symbol(string_intern_c("atom?")), make_native_fn(NF_ATOM_P));
+	env_set(env, make_symbol(string_intern_c("deref")), make_native_fn(NF_DEREF));
+	env_set(env, make_symbol(string_intern_c("reset!")), make_native_fn(NF_RESET_BANG));
+	env_set(env, make_symbol(string_intern_c("swap!")), make_native_fn(NF_SWAP_BANG));
 
 	return env;
 }
@@ -1492,7 +1525,8 @@ int main (void)
 	}
 
 	// Initialization code
-	rep("[def! load-file [fn* [f] [eval [read-string [str \"[do \" [slurp f] \"\nnil]\"]]]]]", -1, repl_env);
+	//rep("[def! load-file [fn* [f] [eval [read-string [str \"[do \" [slurp f] \"\nnil]\"]]]]]", -1, repl_env);
+	//rep("[println \"LIZP\"]", -1, repl_env);
 
 	// REPL
 	char buffer[1024];
