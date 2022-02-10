@@ -23,12 +23,18 @@ struct cell
 	{
 		int as_int;
 		const char *as_str;
+		Cell *as_atom;
 		struct
 		{
 			int n_params;
 			Cell *(*func)(Cell *);
-		} as_func;
-		Cell *as_atom;
+		} as_native_fn;
+		struct
+		{
+			const Cell *params;
+			const Cell *ast;
+			Cell *env;
+		} as_fn;
 		struct
 		{
 			Cell * first;
@@ -37,8 +43,8 @@ struct cell
 	} val;
 };
 
-void PRINT (Cell *expr);
-int pr_str (Cell *x, char *out, int length, int readable);
+void PRINT (const Cell *expr);
+int pr_str (const Cell *x, char *out, int length, int readable);
 
 // Cell memory (holds the actual cell values):
 Cell *cell_pool = NULL;
@@ -92,6 +98,11 @@ Cell *cell_init (enum Cell_kind k)
 	return x;
 }
 
+int is_kind (const Cell *x, enum Cell_kind kind)
+{
+	return x && (x->kind == kind);
+}
+
 Cell *make_int (int n)
 {
 	Cell *x = cell_init(CK_INT);
@@ -108,8 +119,8 @@ Cell *make_native_fn (int n_params, Cell *(*func)(Cell *))
 	Cell *x = cell_init(CK_NATIVE_FUNC);
 	if (x)
 	{
-		x->val.as_func.n_params = n_params;
-		x->val.as_func.func = func;
+		x->val.as_native_fn.n_params = n_params;
+		x->val.as_native_fn.func = func;
 	}
 	return x;
 }
@@ -135,11 +146,6 @@ Cell *make_atom (Cell *ref)
 	return x;
 }
 
-Cell *make_empty_list ()
-{
-	return make_pair(NULL, NULL);
-}
-
 Cell *make_symbol (const char *str)
 {
 	Cell *x = cell_init(CK_SYMBOL);
@@ -158,28 +164,32 @@ Cell *make_string (const char *str)
 
 // A custom lisp function is a really just a list.
 // The form of that list is: (params env . body)
-Cell *make_fn (Cell *params, Cell *body, Cell *outer_env)
+Cell *make_fn (const Cell *params, const Cell *body, Cell *outer_env)
 {
+	if (!is_kind(params, CK_PAIR) || !body || !is_kind(outer_env, CK_PAIR))
+		return NULL;
+
 	Cell *x = cell_init(CK_FUNC);
 	if (x)
 	{
-		x->val.as_pair.first = params;
-		x->val.as_pair.rest = make_pair(outer_env, body);
+		x->val.as_fn.params = params;
+		x->val.as_fn.ast = body;
+		x->val.as_fn.env = outer_env;
 	}
 	return x;
 }
 
-int is_kind (Cell *x, enum Cell_kind kind)
+Cell *make_empty_list ()
 {
-	return x && (x->kind == kind);
+	return make_pair(NULL, NULL);
 }
 
-int is_empty_list (Cell *x)
+int is_empty_list (const Cell *x)
 {
 	return is_kind(x, CK_PAIR) && (x->val.as_pair.first == NULL);
 }
 
-int list_length (Cell *list)
+int list_length (const Cell *list)
 {
 	int i;
 	for (i = 0; is_kind(list, CK_PAIR) && !is_empty_list(list); i++)
@@ -272,19 +282,15 @@ int symbol_eq (const Cell *s1, const Cell *s2)
 Cell *alist_assoc (const Cell *sym, Cell *alist)
 {
 	// Validate inputs
-	if (!sym || !alist || (sym->kind != CK_SYMBOL) || (alist->kind != CK_PAIR))
-	{
+	if (!is_kind(sym, CK_SYMBOL) || !is_kind(alist, CK_PAIR))
 		return NULL;
-	}
 
 	// Iterate through the list
 	while (alist && !is_empty_list(alist))
 	{
+		// Check if it found a a slot with the symbol, and if so return the slot
 		if (alist->val.as_pair.first && symbol_eq(alist->val.as_pair.first->val.as_pair.first, sym))
-		{
-			// Found a a slot with the symbol, return the slot
 			return alist->val.as_pair.first;
-		}
 
 		// Next
 		alist = alist->val.as_pair.rest;
@@ -300,18 +306,15 @@ Cell *alist_assoc (const Cell *sym, Cell *alist)
 Cell *env_find (Cell *env, const Cell *sym)
 {
 	// Validate inputs
-	if (!env || (env->kind != CK_PAIR) || !sym || (sym->kind != CK_SYMBOL))
-	{
+	if (!is_kind(env, CK_PAIR) || !is_kind(sym, CK_SYMBOL))
 		return NULL;
-	}
 
 	// Search up the environment hierarchy
 	while (env && is_kind(env, CK_PAIR) && !is_empty_list(env))
 	{
+		// Search current environment
 		if (alist_assoc(sym, env->val.as_pair.first))
-		{
 			return env;
-		}
 
 		// Move on to the outer environment
 		env = env->val.as_pair.rest;
@@ -328,63 +331,55 @@ Cell *env_find (Cell *env, const Cell *sym)
 Cell *env_get (Cell *env, Cell *sym)
 {
 	// Validate inputs
-	if (!env || (env->kind != CK_PAIR) || !sym || (sym->kind != CK_SYMBOL))
-	{
+	if (!is_kind(env, CK_PAIR) || !is_kind(sym, CK_SYMBOL))
 		return NULL;
-	}
 
 	// Find the environment which contains the symbol
 	Cell *containing_env = env_find(env, sym);
-	if (!containing_env)
-	{
-		// Symbol not found
-		printf("env_get : error : symbol undefined\n");
-		return NULL;
-	}
+	// Return the slot if environment was found
+	if (containing_env)
+		return alist_assoc(sym, containing_env->val.as_pair.first);
 
-	// Fetch the symbol from the environment it's in
-	return alist_assoc(sym, containing_env->val.as_pair.first);
+	// Symbol not found
+	printf("env_get : error : symbol undefined\n");
+	return NULL;
 }
 
 void env_set (Cell *env, Cell *sym, Cell *val)
 {
 	// Validate inputs.
-	if (!env || (env->kind != CK_PAIR) || !sym || (sym->kind != CK_SYMBOL))
-	{
+	if (!is_kind(env, CK_PAIR) || !is_kind(sym, CK_SYMBOL))
 		return;
-	}
 
 	// If there is already a symbol defined, change the value,
 	// otherwise add the new symbol with the value.
 	Cell *slot = alist_assoc(sym, env->val.as_pair.first);
-	if (slot == NULL)
-	{
-		// Symbol undefined.
-		// Push the new (symbol . value) pair to the env
-		slot = make_pair(sym, val);
-		if (is_empty_list(env->val.as_pair.first))
-		{
-			env->val.as_pair.first->val.as_pair.first = slot;
-		}
-		else
-		{
-			env->val.as_pair.first = make_pair(slot, env->val.as_pair.first);
-		}
-	}
-	else
+	if (slot)
 	{
 		// Symbol already defined.
 		// Change the value of the already present slot.
 		slot->val.as_pair.rest = val;
+	}
+	else
+	{
+		// Symbol undefined.
+		// Push the new (symbol . value) pair to the env
+		slot = make_pair(sym, val);
+		// Handle special case of pushing to empty list
+		// TODO: move to function for pushing to a list
+		if (is_empty_list(env->val.as_pair.first))
+			env->val.as_pair.first->val.as_pair.first = slot;
+		else
+			env->val.as_pair.first = make_pair(slot, env->val.as_pair.first);
 	}
 }
 
 // An environment is a list of the form (alist . outer-env).
 // Create an environment with each item of the
 // "binds" list set to the corresponding item in the "exprs" list.
-Cell *env_create (Cell *env_outer, Cell *binds, Cell *exprs)
+Cell *env_create (Cell *env_outer, const Cell *binds, Cell *exprs)
 {
-	// Validate args
+	// Validate args (env_outer is allowed to be NULL)
 	if (env_outer && !is_kind(env_outer, CK_PAIR))
 	{
 		printf("env_create : error : invalid outer environment\n");
@@ -392,18 +387,20 @@ Cell *env_create (Cell *env_outer, Cell *binds, Cell *exprs)
 	}
 
 	Cell *env = make_pair(make_empty_list(), env_outer);
-	if (!env) // Could be NULL
+	if (!env)
 		return NULL;
 
 	// Create the bindings by iterating both lists
-	while (binds && exprs && !is_empty_list(binds) && !is_empty_list(exprs))
+	while (is_kind(binds, CK_PAIR) && is_kind(exprs, CK_PAIR) && !is_empty_list(binds) && !is_empty_list(exprs))
 	{
 		// Bind 1 pair
 		Cell *sym = binds->val.as_pair.first;
 		Cell *val = exprs->val.as_pair.first;
-		if (!sym || sym->kind != CK_SYMBOL)
+
+		// Make sure it only binds symbols
+		if (!is_kind(sym, CK_SYMBOL))
 		{
-			printf("env_create : error : member of the bindings list is not a symbol\n");
+			printf("env_create : error : a member of the bindings list is not a symbol\n");
 			return NULL;
 		}
 		env_set(env, sym, val);
@@ -433,30 +430,33 @@ Cell *env_create (Cell *env_outer, Cell *binds, Cell *exprs)
 int parse_int (const char *start, int length, int *out)
 {
 	// Validate inputs
-	if ((start == NULL) || out == NULL)
-	{
+	if (!out)
 		return 0;
-	}
+	*out = 0;
+	if (!start || !out || length <= 0)
+		return 0;
 
-	int start_length = length;
+	const char *view = start;
 
+	// Read optional minus sign
 	int sign = 1;
-	if (*start == '-')
+	if (*view == '-')
 	{
 		sign = -sign;
-		start++;
-		length--;
+		string_step(&view, &length, 1);
 	}
 
+	// Result n
 	int n = 0;
-	while (isdigit(*start) && (length > 0))
+
+	// Read all the digits
+	while (isdigit(*view) && (length > 0))
 	{
-		n = (n * 10) + ((*start) - '0');
-		start++;
-		length--;
+		n = (n * 10) + ((*view) - '0');
+		string_step(&view, &length, 1);
 	}
 
-	int num_len = start_length - length;
+	int num_len = view - start;
 	*out = n * sign;
 	return num_len;
 }
@@ -525,7 +525,12 @@ int read_item (const char *start, int length, Cell **out)
 	{
 		// Number
 		int x;
-		parse_int(start, p - start, &x);
+		int n = parse_int(start, p - start, &x);
+		if (!n)
+		{
+			*out = NULL;
+			return 0;
+		}
 		*out = make_int(x);
 	}
 	else
@@ -776,7 +781,7 @@ int print_int (int n, char *out, int length)
 	return len;
 }
 
-int print_list (Cell *list, char *out, int length, int readable)
+int print_list (const Cell *list, char *out, int length, int readable)
 {
 	// Validate arguments
 	if (!is_kind(list, CK_PAIR) || !out || (length <= 0))
@@ -821,7 +826,7 @@ int print_list (Cell *list, char *out, int length, int readable)
 
 // Prints form X to output stream
 // Returns: number of chars written
-int pr_str (Cell *x, char *out, int length, int readable)
+int pr_str (const Cell *x, char *out, int length, int readable)
 {
 	// Validate inputs
 	if (!out || !x || length <= 0)
@@ -840,7 +845,13 @@ int pr_str (Cell *x, char *out, int length, int readable)
 		case CK_PAIR:
 			return print_list(x, out, length, readable);
 		case CK_FUNC:
-			return print_cstr("#<fn>", out, length);
+			{
+				char *view = out;
+				string_step((const char**) &view, &length, print_cstr("#<fn", view, length));
+				string_step((const char**) &view, &length, print_list(x->val.as_fn.params, view, length, readable));
+				string_step((const char**) &view, &length, print_cstr(">", view, length));
+				return view - out;
+			}
 		case CK_NATIVE_FUNC:
 			return print_cstr("#<code>", out, length);
 		case CK_ATOM:
@@ -917,8 +928,8 @@ int cell_eq (Cell *a, Cell *b)
 			// TODO: implement
 			return 0;
 		case CK_NATIVE_FUNC:
-			return (a->val.as_func.func == b->val.as_func.func)
-				&& (a->val.as_func.n_params == b->val.as_func.n_params);
+			return (a->val.as_native_fn.func == b->val.as_native_fn.func)
+				&& (a->val.as_native_fn.n_params == b->val.as_native_fn.n_params);
 		case CK_PAIR:
 			return cell_eq(a->val.as_pair.first, b->val.as_pair.first)
 				&& cell_eq(a->val.as_pair.rest, b->val.as_pair.rest);
@@ -953,22 +964,20 @@ Cell *apply (Cell *fn, Cell *args, Cell *env)
 		case CK_NATIVE_FUNC:
 			// Built-in native C function
 			// Validate arguments
-			if (fn->val.as_func.n_params && (list_length(args) != fn->val.as_func.n_params))
+			if (fn->val.as_native_fn.n_params && (list_length(args) != fn->val.as_native_fn.n_params))
 			{
 				printf("apply : error : length of actual arguments does not match the native function's formal parameters\n");
 				return NULL;
 			}
 
 			// Call
-			result_val = fn->val.as_func.func(args);
+			result_val = fn->val.as_native_fn.func(args);
 			break;
 
 		case CK_FUNC:
 			// Lisp function created by fn* (see comment before the definition of function make_fn)
-			result_val = fn->val.as_pair.rest->val.as_pair.rest;
-			result_env = env_create(fn->val.as_pair.rest->val.as_pair.first,
-					fn->val.as_pair.first,
-					args);
+			result_val = fn->val.as_fn.ast;
+			result_env = env_create(fn->val.as_fn.env, fn->val.as_fn.params, args);
 			if (!result_env)
 			{
 				printf("apply : error : length of actual arguments does not match the function's formal parameters\n");
@@ -1493,7 +1502,7 @@ Cell *EVAL (Cell *ast, Cell *env)
 	}
 }
 
-void PRINT (Cell *expr)
+void PRINT (const Cell *expr)
 {
 	char buffer[2 * 1024];
 
@@ -1579,32 +1588,32 @@ Cell *init (int ncells, int nchars)
 
 	// Setup the global environment now
 	Cell *env = env_create(NULL, NULL, NULL);
-	env_set_native_fn(env, "*", 2, fn_mul);
-	env_set_native_fn(env, "+", 2, fn_add);
-	env_set_native_fn(env, "-", 2, fn_sub);
-	env_set_native_fn(env, "/", 2, fn_div);
-	env_set_native_fn(env, "<", 2, fn_lt);
-	env_set_native_fn(env, "<=", 2, fn_lte);
-	env_set_native_fn(env, "=", 2, fn_eq);
-	env_set_native_fn(env, ">", 2, fn_gt);
-	env_set_native_fn(env, ">=", 2, fn_gte);
-	env_set_native_fn(env, "atom", 1, fn_atom);
-	env_set_native_fn(env, "atom?", 1, fn_atom_p);
-	env_set_native_fn(env, "count", 1, fn_count);
-	env_set_native_fn(env, "deref", 1, fn_deref);
-	env_set_native_fn(env, "empty?", 1, fn_empty_p);
-	env_set_native_fn(env, "eval", 1, fn_eval);
-	env_set_native_fn(env, "int?", 1, fn_int_p);
-	env_set_native_fn(env, "list", 1, fn_list);
-	env_set_native_fn(env, "list?", 1, fn_list_p);
-	env_set_native_fn(env, "pr-str", 0, fn_pr_str);
-	env_set_native_fn(env, "println", 0, fn_println);
-	env_set_native_fn(env, "prn", 0, fn_prn);
+	env_set_native_fn(env, "*",           2, fn_mul);
+	env_set_native_fn(env, "+",           2, fn_add);
+	env_set_native_fn(env, "-",           2, fn_sub);
+	env_set_native_fn(env, "/",           2, fn_div);
+	env_set_native_fn(env, "<",           2, fn_lt);
+	env_set_native_fn(env, "<=",          2, fn_lte);
+	env_set_native_fn(env, "=",           2, fn_eq);
+	env_set_native_fn(env, ">",           2, fn_gt);
+	env_set_native_fn(env, ">=",          2, fn_gte);
+	env_set_native_fn(env, "atom",        1, fn_atom);
+	env_set_native_fn(env, "atom?",       1, fn_atom_p);
+	env_set_native_fn(env, "count",       1, fn_count);
+	env_set_native_fn(env, "deref",       1, fn_deref);
+	env_set_native_fn(env, "empty?",      1, fn_empty_p);
+	env_set_native_fn(env, "eval",        1, fn_eval);
+	env_set_native_fn(env, "int?",        1, fn_int_p);
+	env_set_native_fn(env, "list",        0, fn_list);
+	env_set_native_fn(env, "list?",       1, fn_list_p);
+	env_set_native_fn(env, "pr-str",      0, fn_pr_str);
+	env_set_native_fn(env, "println",     0, fn_println);
+	env_set_native_fn(env, "prn",         0, fn_prn);
 	env_set_native_fn(env, "read-string", 1, fn_read_str);
-	env_set_native_fn(env, "reset!", 2, fn_reset_bang);
-	env_set_native_fn(env, "slurp", 1, fn_slurp);
-	env_set_native_fn(env, "str", 0, fn_str);
-	env_set_native_fn(env, "swap!", 0, fn_swap_bang);
+	env_set_native_fn(env, "reset!",      2, fn_reset_bang);
+	env_set_native_fn(env, "slurp",       1, fn_slurp);
+	env_set_native_fn(env, "str",         0, fn_str);
+	env_set_native_fn(env, "swap!",       0, fn_swap_bang);
 	return env;
 }
 
