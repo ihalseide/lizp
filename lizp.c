@@ -1307,82 +1307,119 @@ Cell *fn_swap_bang (Cell *args)
 	return NULL;
 }
 
-// For tail-call recursion for lisp fn* functions,
-// the next ast and env is returned as a pair.
-// Native functions return the result value and the same env.
-// --> NULL (when error)
-// --> (ast . env)
-Cell *apply (Cell *fn, Cell *args, Cell *env)
+// [pair x y] -> [x | y]
+Cell *fn_pair (Cell *args)
 {
-	// Validate arguments
-	if (!fn || !is_kind(args, CK_PAIR) || !env)
+	return make_pair(args->val.as_pair.first, args->val.as_pair.rest->val.as_pair.first);
+}
+
+// [concat l1 l2 ...] -> list
+Cell *fn_concat (Cell *args)
+{
+	Cell *list = make_empty_list();
+	Cell *p = list;
+
+	while (is_kind(args, CK_PAIR) && !is_empty_list(args))
 	{
-		printf("apply : error : invalid arguments\n");
-		return NULL;
+		// Current list from arguments
+		Cell *a = args->val.as_pair.first;
+		if (!is_kind(a, CK_PAIR))
+		{
+			printf("fn_concat : error : arguments must be lists\n");
+			return NULL;
+		}
+
+		// Add all of the items from the current list
+		while (is_kind(a, CK_PAIR) && !is_empty_list(a))
+		{
+			// Put item into the list
+			p->val.as_pair.first = a->val.as_pair.first;
+			p->val.as_pair.rest = make_empty_list();
+			p = p->val.as_pair.rest;
+
+			// Next argument
+			a = a->val.as_pair.rest;
+		}
+		// The list should end with null instead of an empty list
+		p->val.as_pair.rest = NULL;
+
+		// Next argument
+		args = args->val.as_pair.rest;
 	}
 
-	Cell *result_val;
-	Cell *result_env;
+	return list;
+}
+
+// For proper tail-call recursion, the next ast and env are both returned for EVAL to use.
+// Null environment indicates that no further evaluation is needed
+void apply (Cell *fn, Cell *args, Cell *env, Cell **val_out, Cell **env_out)
+{
+	// Validate arguments
+	if (!fn || !is_kind(args, CK_PAIR) || !env || !val_out || !env_out)
+	{
+		printf("apply : error : invalid arguments\n");
+		return;
+	}
+
+	*val_out = NULL;
+	*env_out = NULL;
+
 	switch (fn->kind)
 	{
 		case CK_NATIVE_FUNC:
-			// Built-in native C function
-			// Validate arguments
+			// Apply a built-in native C function
 			if (fn->val.as_native_fn.n_params && (list_length(args) != fn->val.as_native_fn.n_params))
 			{
 				printf("apply : error : length of actual arguments does not match the native function's formal parameters\n");
-				return NULL;
+				return;
 			}
 
-			// Call...
-
-			// Special case for eval, because it needs the environment
-			// Don't evan call eval because it's a dummy value.
 			if (fn->val.as_native_fn.func == fn_eval)
 			{
-				result_val = args->val.as_pair.first;
-				result_env = env;
+				// Special case for eval, because
+				// it only needs to do what EVAL already does.
+				// Don't even call eval because it's a dummy value.
+				*val_out = args->val.as_pair.first;
+				*env_out = env;
 			}
 			else
 			{
-				result_val = fn->val.as_native_fn.func(args);
-				result_env = NULL;
+				*val_out = fn->val.as_native_fn.func(args);
 			}
 			break;
-
 		case CK_FUNC:
-			// Lisp function created by fn*
-			result_val = fn->val.as_fn.ast;
-			result_env = env_create(fn->val.as_fn.env, fn->val.as_fn.params, args);
-			if (!result_env)
+			// Apply lisp function created by fn*
 			{
-				printf("apply : error : length of actual arguments does not match the function's formal parameters\n");
-				return NULL;
+				Cell *env_new = env_create(fn->val.as_fn.env, fn->val.as_fn.params, args);
+				if (!env_new)
+					return;
+				*val_out = fn->val.as_fn.ast;
+				*env_out = env_new;
+				break;
 			}
-			break;
-
 		default: // Error: not a function
 			printf("apply : error : first item in list is not a function\n");
-			return NULL;
+			break;
 	}
-
-	return make_pair(result_val, result_env);
 }
 
 Cell *EVAL (Cell *ast, Cell *env)
 {
+	if (!env)
+	{
+		printf("EVAL : error : NULL environment\n");
+		return NULL;
+	}
+
 	while (1)
 	{
-		if (!ast) // Error? ast is invalid
-		{
-			printf("EVAL : error : ast is NULL\n");
-			return NULL;
-		}
+		if (!ast)
+			break;
 
 		if (!is_kind(ast, CK_PAIR))
 			return eval_ast(ast, env);
 
-		// Empty list evals to itself [] -> []
+		// Empty list -> itself
 		if (is_empty_list(ast))
 			return ast;
 
@@ -1414,6 +1451,7 @@ Cell *EVAL (Cell *ast, Cell *env)
 				val = env_get(env, sym);
 				if (val)
 					return val->val.as_pair.rest;
+
 				printf("def! : error : cannot define symbol\n");
 				return NULL;
 			}
@@ -1530,7 +1568,7 @@ Cell *EVAL (Cell *ast, Cell *env)
 				}
 
 				// If this point is reached, there were no items
-				return NULL;
+				return make_symbol(s_nil);
 			}
 		}
 
@@ -1539,8 +1577,7 @@ Cell *EVAL (Cell *ast, Cell *env)
 		// Evaluate all list items
 		ast = eval_ast(ast, env);
 		if (!ast)
-			return NULL;
-
+			break;
 		Cell *fn = ast->val.as_pair.first;
 		Cell *args = ast->val.as_pair.rest;
 
@@ -1549,26 +1586,23 @@ Cell *EVAL (Cell *ast, Cell *env)
 			args = make_empty_list();
 
 		// Apply the function
-		Cell *pair = apply(fn, args, env);
-		if (!pair)
-			return NULL;
+		apply(fn, args, env, &ast, &env);
 
-		// Tail call using the pair's values
-		// if the pair's environment is valid
-		ast = pair->val.as_pair.first;
-		env = pair->val.as_pair.rest;
-		if (env)
-			continue;
-
-		return ast;
+		// A null environment signals that a tail call is not necessary.
+		// Otherwise, continue the loop with the new ast and the new env.
+		if (!env)
+			return ast;
 	}
+
+	printf("EVAL : error : ast is NULL\n");
+	return NULL;
 }
 
 void PRINT (const Cell *expr)
 {
 	char buffer[2 * 1024];
 	int p_len = pr_str(expr, buffer, sizeof(buffer), 1);
-	printf("%.*s", p_len, buffer);
+	printf("%.*s\n", p_len, buffer);
 }
 
 // Do one read, eval, and print cycle on a string.
@@ -1669,6 +1703,8 @@ Cell *init (int ncells, int nchars)
 	env_set_native_fn(env, "slurp",       1, fn_slurp);
 	env_set_native_fn(env, "str",         0, fn_str);
 	env_set_native_fn(env, "swap!",       0, fn_swap_bang);
+	env_set_native_fn(env, "pair",        2, fn_pair);
+	env_set_native_fn(env, "concat",      0, fn_concat);
 	return env;
 }
 
@@ -1677,15 +1713,11 @@ int main (void)
 	// Initialize the REPL environment symbols
 	Cell *repl_env = init(2000, 8 * 1024);
 	if (!repl_env)
-	{
 		return 1;
-	}
 
 	// Initialization code
-	rep("[do [def! load-file [fn* [f] [eval [read-string [str \"[do \" [slurp f] \"\nnil]\"]]]]] nil]", -1, repl_env);
-
-	// Debug:
-	PRINT(repl_env);
+	rep("[do [def! load-file [fn* [f] [eval [read-string [str \"[do \" [slurp f] \"\nnil]\n\"]]]]] nil]", -1, repl_env);
+	rep("[load-file \"lizp.lizp\"]", -1, repl_env);
 
 	// REPL
 	char buffer[1024];

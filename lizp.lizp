@@ -1,4 +1,4 @@
 [def! not [fn* [x] [if x #f #t]]]
+
 [def! bool [fn* [x] [if x #t #f]]]
-[println "Hello, world!"]
 
