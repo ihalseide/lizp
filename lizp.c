@@ -4,8 +4,6 @@
 #include <ctype.h>
 #include <assert.h>
 
-// TODO: make def! work in file loading
-
 enum Cell_kind
 {
 	CK_INT,
