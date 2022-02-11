@@ -1315,7 +1315,7 @@ Cell *fn_swap_bang (Cell *args)
 Cell *apply (Cell *fn, Cell *args, Cell *env)
 {
 	// Validate arguments
-	if (!fn || !args || !is_kind(args, CK_PAIR) || !env)
+	if (!fn || !is_kind(args, CK_PAIR) || !env)
 	{
 		printf("apply : error : invalid arguments\n");
 		return NULL;
@@ -1351,7 +1351,7 @@ Cell *apply (Cell *fn, Cell *args, Cell *env)
 			break;
 
 		case CK_FUNC:
-			// Lisp function created by fn* (see comment before the definition of function make_fn)
+			// Lisp function created by fn*
 			result_val = fn->val.as_fn.ast;
 			result_env = env_create(fn->val.as_fn.env, fn->val.as_fn.params, args);
 			if (!result_env)
@@ -1451,14 +1451,13 @@ Cell *EVAL (Cell *ast, Cell *env)
 					p = p->val.as_pair.rest->val.as_pair.rest;
 				}
 
-				// TODO: discard env?
 				env = let_env;
 				ast = args->val.as_pair.rest->val.as_pair.first;
 				continue;
 			}
 			else if (head->val.as_str == s_fn_star)
 			{
-				// (fn* (symbol1 symbol2 ...) expr)
+				// [fn* [symbol1 symbol2 ...] expr]
 				if (!args || !args->val.as_pair.first || !args->val.as_pair.rest)
 				{
 					// Error: invalid args
@@ -1467,31 +1466,36 @@ Cell *EVAL (Cell *ast, Cell *env)
 				}
 				// Check that the parameter list is only symbols
 				Cell *p = args->val.as_pair.first;
-				while (p && !is_empty_list(p))
+				while (is_kind(p, CK_PAIR) && !is_empty_list(p))
 				{
-					if (!p->val.as_pair.first || p->val.as_pair.first->kind != CK_SYMBOL)
+					if (!is_kind(p->val.as_pair.first, CK_SYMBOL))
 					{
 						// Error: parameter list must be all symbols
-						printf("fn* : error : parameter list must be all symbols\n");
+						printf("fn* : error : items of parameter list must be symbols\n");
 						return NULL;
 					}
-					if (p->val.as_pair.rest && p->val.as_pair.rest->kind != CK_PAIR)
+					if (p->val.as_pair.rest && !is_kind(p->val.as_pair.rest, CK_PAIR))
 					{
 						// Something other than NULL or a list is next
 						printf("fn* : error : parameter list is not a proper list\n");
 						return NULL;
 					}
+
+					// Next
 					p = p->val.as_pair.rest;
 				}
+
+				// New function closure
 				return make_fn(args->val.as_pair.first, args->val.as_pair.rest->val.as_pair.first, env);
 			}
 			else if (head->val.as_str == s_if)
 			{
-				// [if expr true {optional false?}]
-				if (!args || !args->val.as_pair.first || !args->val.as_pair.rest || (args->val.as_pair.rest->val.as_pair.rest && args->val.as_pair.rest->val.as_pair.rest->val.as_pair.rest))
+				// [if expr t-expr f-expr] OR [if expr t-expr]
+				int len = list_length(args);
+				if (!is_kind(args, CK_PAIR) || (len != 2 && len != 3))
 				{
 					// Error: too few or too many arguments
-					printf("if : error : too few or too many arguments\n");
+					printf("if : error : must have 2 or 3 arguments\n");
 					return NULL;
 				}
 				Cell *cond = EVAL(args->val.as_pair.first, env);
@@ -1507,8 +1511,10 @@ Cell *EVAL (Cell *ast, Cell *env)
 				}
 				return make_symbol(s_nil);
 			}
-			else if (head->val.as_str == s_do) // [do exprs...]
+			else if (head->val.as_str == s_do)
 			{
+				// [do exprs...]
+
 				// Evaluate all but the last item
 				while (is_kind(args, CK_PAIR) && !is_empty_list(args) && args->val.as_pair.rest)
 				{
@@ -1561,9 +1567,7 @@ Cell *EVAL (Cell *ast, Cell *env)
 void PRINT (const Cell *expr)
 {
 	char buffer[2 * 1024];
-
 	int p_len = pr_str(expr, buffer, sizeof(buffer), 1);
-
 	printf("%.*s", p_len, buffer);
 }
 
@@ -1602,32 +1606,27 @@ Cell *init (int ncells, int nchars)
 	// Allocate the cell array
 	cell_pool = malloc(ncells * sizeof(*cell_pool));
 	if (!cell_pool)
-	{
 		return NULL;
-	}
 
 	// Set the capacities
 	cell_pool_cap = ncells;
 
 	// Link the free cells together in a list
 	for (int i = 0; i < (cell_pool_cap - 1); i++)
-	{
 		cell_pool[i].val.as_pair.rest = &cell_pool[i + 1];
-	}
 	cell_pool[cell_pool_cap - 1].val.as_pair.rest = NULL;
 
 	// Init strings/chars...
 	char_pool = malloc(nchars);
 	if (!char_pool)
-	{
 		return NULL;
-	}
 
 	char_free = char_pool;
 	char_pool_cap = nchars;
 
 	// Set up the internal string list with one item,
 	// the empty string.
+	// TODO: fix string interning
 	string_list = make_pair(make_string(""), NULL);
 
 	// Intern important strings
