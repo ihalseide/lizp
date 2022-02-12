@@ -1541,7 +1541,7 @@ int truthy (Cell *x)
 		return 1;
 
 	const char *name = x->as_str;
-	return name != s_nil && name != s_true && name != s_false;
+	return name != s_nil && name != s_false;
 }
 
 // Returns 1 or 0 for if it is a special form or not
