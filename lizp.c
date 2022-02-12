@@ -1741,11 +1741,6 @@ Cell *EVAL (Cell *ast, Cell *env)
 
 	while (1)
 	{
-
-		// DEBUG
-		printf("EVAL : ");
-		PRINT(ast);
-
 		if (!ast)
 			break;
 
