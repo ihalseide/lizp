@@ -4,6 +4,8 @@
 #include <ctype.h>
 #include <assert.h>
 
+// TODO: fix string interning
+
 enum Cell_kind
 {
 	CK_INT,
