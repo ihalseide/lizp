@@ -1,8 +1,48 @@
+;;;; This file can be loaded by the main program
+
+
 [def! not [fn* [x] [if x #f #t]]]
 
-[def! bool [fn* [x] [if x #t #f]]]
+;; Not equal
+[def! /= [fn* [x y] [not [= x y]]]]
 
-[def! hello-world [fn* [] [println "Hello, world!\n"]]]
+;; Assert true. Used for making sure that a quoted form is true
+[def! assert
+  [fn* [x]
+    [if [not [eval x]]
+        [println "Assertion failed:" x "\n"]
+        #t]]]
 
-[hello-world]
+;;; Do some tests...
+
+[assert #t]
+[assert ""]
+[assert assert]
+[assert [quote [not #f]]]
+[assert [quote [not nil]]]
+
+[assert [quote [/= #t #f]]]
+[assert [quote [/= #f nil]]]
+[assert [quote [/= #t nil]]]
+[assert [quote [/= "" nil]]]
+[assert [quote [/= "" "str"]]]
+[assert [quote [= "" ""]]]
+
+[assert [quote [= 0 0]]]
+[assert [quote [= = =]]]
+[assert [quote [= 3 [+ 1 2]]]]
+[assert [quote [= 3 [- 6 3]]]]
+[assert [quote [= 48 [* 6 8]]]]
+[assert [quote [= -3 [/ 9 -3]]]]
+
+[assert [quote [= [] []]]]
+[assert [quote [= [] [list]]]]
+[assert [quote [/= [] nil]]]
+[assert [quote [= + +]]]
+[assert [quote [= "string" "string"]]]
+[assert [quote [/= "string" "stringbig"]]]
+[assert [quote [/= "string" "stringbig"]]]
+
+;; Welcome message
+[println "LIZP loaded!\n"]
 

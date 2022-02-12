@@ -4,6 +4,9 @@
 #include <ctype.h>
 #include <assert.h>
 
+// TODO: tail calls still create a bunch of new cells and environments,
+//       so add garbage collection?
+
 enum Cell_kind
 {
 	CK_INT,
@@ -74,7 +77,8 @@ const char *s_nil = "nil",
 	  *s_let_star = "let*",
 	  *s_if       = "if",
 	  *s_fn_star  = "fn*",
-	  *s_do       = "do";
+	  *s_do       = "do",
+	  *s_quote    = "quote";
 
 int char_is_symbol (char c)
 {
@@ -87,13 +91,18 @@ int char_is_symbol (char c)
 Cell *cell_alloc ()
 {
 	if (!cell_pool)
+	{
+		printf("cell_alloc : error : cells not initialized\n");
 		return NULL;
+	}
 
 	Cell *x = cell_pool->as_pair.rest;
 
 	// Remove the cell from the free list
 	if (x)
 		cell_pool->as_pair.rest = x->as_pair.rest;
+	else
+		printf("cell_alloc : warning : out of cells!\n");
 
 	return x;
 }
@@ -705,6 +714,8 @@ int read_list (const char *start, int length, Cell **out)
 	string_skip_white(&view, &rem);
 
 	Cell *list = make_empty_list();
+	if (!list)
+		return view - start;
 
 	if (*view != end)
 	{
@@ -781,14 +792,16 @@ int read_str (const char *start, int length, Cell **out)
 	switch (*view)
 	{
 		case '\0': // End of input
+			*out = make_symbol(s_nil);
 			break;
 		case ';': // Line comment
 			string_step(&view, &rem, read_until(view, rem, '\n'));
+			*out = make_symbol(s_nil);
 			break;
 		case ']':
 		case ')':
 		case '}': // Error, unmatched closing paren
-			printf("read_str : error : unmatched closing paren\n");
+			printf("read_str : error : unmatched closing delimiter\n");
 			break;
 		case '|': // Error, '|' for cons pairs should only be inside a list
 			printf("read_str : error : '|' should only be inside a list\n");
@@ -1730,8 +1743,23 @@ int eval_special (Cell *head, Cell *ast, Cell *env, Cell **ast_out, Cell **env_o
 
 		return 1;
 	}
+	else if (name == s_quote)
+	{
+		// [quote expr]
+		if (list_length(ast) != 1)
+		{
+			printf("quote : error : requires 1 expression");
+			return 1;
+		}
 
-	return 0;
+		*ast_out = ast->as_pair.first;
+		return 1;
+	}
+	else
+	{
+		// Not a known name for a special form
+		return 0;
+	}
 }
 
 Cell *EVAL (Cell *ast, Cell *env)
@@ -1871,6 +1899,7 @@ Cell *init (int ncells, int nchars)
 	insert_string(s_let_star);
 	insert_string(s_do);
 	insert_string(s_if);
+	insert_string(s_quote);
 
 	// Setup the global environment now
 	Cell *env = env_create(NULL, NULL, NULL);
@@ -1914,8 +1943,8 @@ int main (void)
 
 	// Initialization code
 	const char *code1 = "[def! load-file [fn* [f] [eval [read-string [str \"[do \" [slurp f] \"\nnil]\n\"]]]]]";
-	const char *code2 = "[load-file \"lizp.lizp\"]";
 	EVAL(READ(code1, strlen(code1)), repl_env);
+	const char *code2 = "[load-file \"lizp.lizp\"]";
 	EVAL(READ(code2, strlen(code2)), repl_env);
 
 	// REPL
