@@ -1071,8 +1071,11 @@ int cell_eq (Cell *a, Cell *b)
 			return (a->as_native_fn.func == b->as_native_fn.func)
 				&& (a->as_native_fn.n_params == b->as_native_fn.n_params);
 		case CK_PAIR:
-			return cell_eq(a->as_pair.first, b->as_pair.first)
-				&& cell_eq(a->as_pair.rest, b->as_pair.rest);
+			if (is_empty_list(a))
+				return is_empty_list(b);
+			else
+				return cell_eq(a->as_pair.first, b->as_pair.first)
+					&& cell_eq(a->as_pair.rest, b->as_pair.rest);
 		default:
 			assert(0 && "invalid cell kind");
 			return 0;
