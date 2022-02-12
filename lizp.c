@@ -1425,11 +1425,7 @@ Cell *EVAL (Cell *ast, Cell *env)
 		Cell *head = ast->val.as_pair.first;
 		if (is_kind(head, CK_SYMBOL))
 		{
-			// Special forms...
-
 			Cell *args = ast->val.as_pair.rest;
-
-			// Make sure that args is a list
 			if (!args)
 				args = make_empty_list();
 
@@ -1623,6 +1619,7 @@ void rep (const char *start, int length, Cell *env)
 	PRINT(make_string("no value"));
 }
 
+// For adding C functions to the environment
 void env_set_native_fn (Cell *env, const char *name, int n_params, Cell *(*func)(Cell *))
 {
 	if (!env || !name || n_params < 0 || !func)
