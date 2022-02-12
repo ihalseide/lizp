@@ -1,13 +1,13 @@
-COpts = -std=c99 -Wall
+CC = gcc
+COpts = -std=c99 -Wall -Wunused
+
+default: main
 
 all: debug main
 
 debug: lizp.c
-	gcc $(COpts) -o debug -g lizp.c
+	$(CC) $(COpts) -o d_lizp -g lizp.c
 
 main: lizp.c
-	gcc $(COpts) -o main lizp.c
-
-run: main
-	./main
+	$(CC) $(COpts) -o m_lizp lizp.c
 
