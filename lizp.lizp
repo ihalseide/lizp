@@ -2,3 +2,7 @@
 
 [def! bool [fn* [x] [if x #t #f]]]
 
+[def! hello-world [fn* [] [println "Hello, world!\n"]]]
+
+[hello-world]
+

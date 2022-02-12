@@ -59,6 +59,9 @@ int char_pool_cap = 0;
 // Strings interned
 Cell *string_list = NULL;
 
+// REPL environment
+Cell *repl_env = NULL;
+
 // Useful string values
 const char *s_nil = "nil",
 	  *s_false    = "#f",
@@ -199,11 +202,16 @@ int list_length (const Cell *list)
 	return i;
 }
 
+int string_can_alloc (int length)
+{
+	return char_free && (char_free + length) < (char_pool + char_pool_cap);
+}
+
 // Get space for a string of certain length
 char *string_alloc (int length)
 {
 	// Make sure there is enough memory
-	if (!char_free || (char_free + length) >= (char_pool + char_pool_cap))
+	if (!string_can_alloc(length))
 		return NULL;
 
 	char *v = char_free;
@@ -418,6 +426,20 @@ Cell *env_get (Cell *env, Cell *sym)
 	return NULL;
 }
 
+// Push an item in front of a list (which may be empty)
+void push_list (Cell *item, Cell **list)
+{
+	// Validate arguments
+	if (!item || !is_kind(*list, CK_PAIR))
+		return;
+
+	if (is_empty_list(*list))
+		// An empty list has nothing in the first slot yet
+		(*list)->val.as_pair.first = item;
+	else
+		*list = make_pair(item, *list);
+}
+
 void env_set (Cell *env, Cell *sym, Cell *val)
 {
 	// Validate inputs.
@@ -438,12 +460,7 @@ void env_set (Cell *env, Cell *sym, Cell *val)
 		// Symbol undefined.
 		// Push the new (symbol . value) pair to the env
 		slot = make_pair(sym, val);
-		// Handle special case of pushing to empty list
-		// TODO: move to function for pushing to a list
-		if (is_empty_list(env->val.as_pair.first))
-			env->val.as_pair.first->val.as_pair.first = slot;
-		else
-			env->val.as_pair.first = make_pair(slot, env->val.as_pair.first);
+		push_list(slot, &(env->val.as_pair.first));
 	}
 }
 
@@ -926,15 +943,13 @@ int print_list (const Cell *list, char *out, int length, int readable)
 	return len;
 }
 
-// Prints form X to output stream
+// Does: Prints form X to output stream
 // Returns: number of chars written
 int pr_str (const Cell *x, char *out, int length, int readable)
 {
 	// Validate inputs
-	if (!out || !x || length <= 0)
-	{
+	if (!out || !x || (length <= 0))
 		return 0;
-	}
 
 	switch (x->kind)
 	{
@@ -947,69 +962,62 @@ int pr_str (const Cell *x, char *out, int length, int readable)
 		case CK_PAIR:
 			return print_list(x, out, length, readable);
 		case CK_FUNC:
-			{
-				char *view = out;
-				string_step((const char**) &view, &length, print_cstr("#<fn", view, length));
-				string_step((const char**) &view, &length, print_list(x->val.as_fn.params, view, length, readable));
-				string_step((const char**) &view, &length, print_cstr(">", view, length));
-				return view - out;
-			}
+			return print_cstr("#<function>", out, length);
 		case CK_NATIVE_FUNC:
-			{
-				char *view = out;
-				string_step((const char**) &view, &length, print_cstr("#<code ", view, length));
-				string_step((const char**) &view, &length, print_int(x->val.as_native_fn.n_params, view, length));
-				string_step((const char**) &view, &length, print_cstr(">", view, length));
-				return view - out;
-			}
+			return print_cstr("#<code>", out, length);
 		case CK_ATOM:
 			return print_cstr("#<atom>", out, length);
+		default:
+			// Error: invalid cell kind
+			printf("pr_str : error : invalid cell kind\n");
+			return 0;
 	}
-
-	// Error: invalid cell kind
-	printf("pr_str : error : invalid cell kind\n");
-	return 0;
 }
 
+// Does: Read a form from the stream
+// Returns: the form, which may be NULL
 Cell *READ (const char *start, int length)
 {
 	// Validate inputs
 	if (!start || (length < 0))
-	{
 		return NULL;
-	}
 
 	Cell *x;
 	read_str(start, length, &x);
-
 	return x;
 }
 
-// Evaluate each item of list x.
-// Does not modify x.
-// Returns: new list.
-Cell *eval_each (Cell *x, Cell *env)
+// Does: evaluate each item of list x, without modifying x.
+// Returns: a new list.
+Cell *eval_each (Cell *list, Cell *env)
 {
+	// Validate arguments
+	if (!is_kind(list, CK_PAIR) || !is_kind(env, CK_PAIR))
+		return NULL;
+
+	if (is_empty_list(list))
+		return list;
+
 	// Eval the first element
-	Cell *y = make_pair(EVAL(x->val.as_pair.first, env), NULL);
+	Cell *y = make_pair(EVAL(list->val.as_pair.first, env), NULL);
 	Cell *p_y = y;
 
 	// eval the rest of the elements
-	x = x->val.as_pair.rest;
-	while (x != NULL && p_y != NULL)
+	list = list->val.as_pair.rest;
+	while (list && p_y)
 	{
-		if (x->kind != CK_PAIR)
+		if (!is_kind(list, CK_PAIR))
 		{
 			// dotted list
-			p_y->val.as_pair.rest = EVAL(x, env);
+			p_y->val.as_pair.rest = EVAL(list, env);
 			break;
 		}
 
 		// Fill in next slot of y
-		p_y->val.as_pair.rest = make_pair(EVAL(x->val.as_pair.first, env), NULL);
+		p_y->val.as_pair.rest = make_pair(EVAL(list->val.as_pair.first, env), NULL);
 
 		// next
-		x = x->val.as_pair.rest;
+		list = list->val.as_pair.rest;
 		p_y = p_y->val.as_pair.rest;
 	}
 
@@ -1018,20 +1026,26 @@ Cell *eval_each (Cell *x, Cell *env)
 
 int cell_eq (Cell *a, Cell *b)
 {
+	// Nothing equals NULL
 	if (!a || !b)
-		return a == b;
+		return 0;
+
+	// Compare pointers
 	if (a == b)
 		return 1;
+
+	// Must be the same kind
 	if (a->kind != b->kind)
 		return 0;
+
 	switch (a->kind)
 	{
 		case CK_INT:
 			return a->val.as_int == b->val.as_int;
-		case CK_STRING:
 		case CK_SYMBOL:
+		case CK_STRING:
+			return a->val.as_str == b->val.as_str;
 		case CK_FUNC:
-			// TODO: implement
 			return 0;
 		case CK_NATIVE_FUNC:
 			return (a->val.as_native_fn.func == b->val.as_native_fn.func)
@@ -1040,6 +1054,7 @@ int cell_eq (Cell *a, Cell *b)
 			return cell_eq(a->val.as_pair.first, b->val.as_pair.first)
 				&& cell_eq(a->val.as_pair.rest, b->val.as_pair.rest);
 		default:
+			assert(0 && "invalid cell kind");
 			return 0;
 	}
 }
@@ -1190,11 +1205,15 @@ Cell *fn_slurp (Cell *args)
 {
 	Cell *a = args->val.as_pair.first;
 
+	// Validate arguments
+	if (!is_kind(a, CK_STRING))
+		return NULL;
+
 	// Read all contents of the file...
 	// Open file
 	FILE *f = fopen(a->val.as_str, "r");
 	if (!f) // failed
-		return make_symbol(s_nil);
+		return NULL;
 
 	// Get file length
 	fseek(f, 0, SEEK_END);
@@ -1202,23 +1221,18 @@ Cell *fn_slurp (Cell *args)
 	fseek(f, 0, SEEK_SET);
 
 	// See if we have enough room for this string data
-	if (((char_free + fsize) - char_pool) >= char_pool_cap)
+	if (!string_can_alloc(fsize + 1))
 	{
 		fclose(f);
-		return make_symbol(s_nil);
+		return NULL;
 	}
 
 	// Read the char data and null-terminate it
 	fread(char_free, fsize, 1, f);
 	fclose(f);
-	char_free[fsize] = 0;
 
 	// Move the character allocation pointer
-	const char *s = char_free;
-	char_free += fsize + 1;
-
-	return make_string(s);
-	return NULL;
+	return intern_string(char_free, fsize);
 }
 
 // [read-string "str"] -> any value
@@ -1236,7 +1250,7 @@ Cell *fn_read_str (Cell *args)
 // [empty? x]
 Cell *fn_empty_p (Cell *args)
 {
-	return make_symbol(is_empty_list(args->val.as_pair.first)? s_true : s_false);
+	return make_bool_sym(is_empty_list(args->val.as_pair.first));
 }
 
 // [count list]
@@ -1444,7 +1458,7 @@ void apply (Cell *fn, Cell *args, Cell *env, Cell **val_out, Cell **env_out)
 				// it only needs to do what EVAL already does.
 				// Don't even call eval because it's a dummy value.
 				*val_out = args->val.as_pair.first;
-				*env_out = env;
+				*env_out = repl_env; // Use the REPL environment instead of the current one?
 			}
 			else
 			{
@@ -1641,6 +1655,8 @@ Cell *EVAL (Cell *ast, Cell *env)
 		Cell *fn = ast->val.as_pair.first;
 		Cell *args = ast->val.as_pair.rest;
 
+		// TODO: check what happens if you call a dotted list [Func | x] 
+
 		// Make sure that the arguments are a list
 		if (!is_kind(args, CK_PAIR))
 			args = make_empty_list();
@@ -1767,7 +1783,7 @@ Cell *init (int ncells, int nchars)
 int main (void)
 {
 	// Initialize the REPL environment symbols
-	Cell *repl_env = init(2000, 8 * 1024);
+	repl_env = init(2000, 8 * 1024);
 	if (!repl_env)
 		return 1;
 
