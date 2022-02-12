@@ -4,8 +4,6 @@
 #include <ctype.h>
 #include <assert.h>
 
-// TODO: fix string interning
-
 enum Cell_kind
 {
 	CK_INT,
@@ -61,24 +59,25 @@ int char_pool_cap = 0;
 // Strings interned
 Cell *string_list = NULL;
 
-// Interned strings for special use
-const char *s_nil,
-	  *s_false,
-	  *s_true,
-	  *s_def_bang,
-	  *s_let_star,
-	  *s_if,
-	  *s_fn_star,
-	  *s_do;
+// Useful string values
+const char *s_nil = "nil",
+	  *s_false    = "#f",
+	  *s_true     = "#t",
+	  *s_def_bang = "def!",
+	  *s_let_star = "let*",
+	  *s_if       = "if",
+	  *s_fn_star  = "fn*",
+	  *s_do       = "do";
 
 int char_is_symbol (char c)
 {
-	return (c > ' ') && (c != '"') && (c != '|') && (c != '[') && (c != ']')
+	return (c > ' ')
+		&& (c != '"') && (c != '|') && (c != '[') && (c != ']')
 		&& (c != '(') && (c != ')') && (c != '{') && (c != '}');
 }
 
 // Get a new cell
-Cell *cell_get ()
+Cell *cell_alloc ()
 {
 	if (!cell_pool)
 		return NULL;
@@ -94,7 +93,7 @@ Cell *cell_get ()
 
 Cell *cell_init (enum Cell_kind k)
 {
-	Cell *x = cell_get();
+	Cell *x = cell_alloc();
 	if (x)
 		x->kind = k;
 
@@ -200,60 +199,131 @@ int list_length (const Cell *list)
 	return i;
 }
 
+// Get space for a string of certain length
+char *string_alloc (int length)
+{
+	// Make sure there is enough memory
+	if (!char_free || (char_free + length) >= (char_pool + char_pool_cap))
+		return NULL;
+
+	char *v = char_free;
+	char_free += length;
+	return v;
+}
+
 // Add string to the char_pool.
-// Helper function for use by string_intern and string_intern_c
-const char *string_create (const char *start, int length)
+// Does not modify the char_free pointer.
+char *string_pool_write (const char *start, int length)
 {
 	// Validate inputs
-	if (start == NULL || length < 0)
+	if (!start || length < 0 || !char_free)
 		return NULL;
 
-	// Check memory space
-	if ((char_free - char_pool) >= char_pool_cap)
-	{
-		fprintf(stderr, "string_create: out of string character memory\n");
+	// +1 becuase there needs to be room for
+	// the extra null terminator char too
+	char *new = string_alloc(length + 1);
+	if (!new)
 		return NULL;
+
+	// Copy string unless its already in the pool
+	// because the start already points there.
+	if (start != char_free)
+		// Only return the new string if memcpy succeeds
+		if (!memcpy(new, start, length))
+			return NULL;
+
+	// Add null terminator
+	new[length] = '\0';
+
+	return new;
+}
+
+// For writing C strings
+char *string_pool_write_c (const char *str)
+{
+	return string_pool_write(str, strlen(str));
+}
+
+// See if a string cells string is equal to the given str
+int string_equal (const Cell *string_cell, const char *str, int length)
+{
+	// Validate arguments
+	if (!string_cell || !str || length < 0)
+		return 0;
+
+	// Compare pointer addresses
+	const char *str2 = string_cell->val.as_str;
+	if (str2 == str)
+		return 1;
+
+	// Compare lengths
+	int cs_length = strlen(str2);
+	if (length != cs_length)
+		return 0;
+
+	// Compare contents
+	return strncmp(string_cell->val.as_str, str, length) == 0;
+}
+
+Cell *find_string (const char *start, int length)
+{
+	// Search whole string list for equivalent string
+	Cell *p = string_list;
+	while (is_kind(p, CK_PAIR) && !is_empty_list(p))
+	{
+		Cell *string = p->val.as_pair.first;
+		assert(is_kind(string, CK_STRING));
+
+		// Found?
+		if (string_equal(string, start, length))
+			return string;
+
+		// Next
+		p = p->val.as_pair.rest;
 	}
 
-	// Copy string, with null terminator
-	char *s = memcpy(char_free, start, length);
-	char_free += length;
-	*char_free++ = '\0';
+	// Not found
+	return NULL;
+}
+
+// Add a C string to string list
+Cell *insert_string (const char *str)
+{
+	// Validate arguments
+	if (!str)
+		return NULL;
+
+	// Make string cell
+	Cell *s = make_string(str);
+	if (!s)
+		return NULL;
+
+	// Insert new node to string list
+	Cell *node = make_pair(s, string_list->val.as_pair.rest);
+	if (!node)
+		return NULL;
+	string_list->val.as_pair.rest = node;
 
 	return s;
 }
 
-// Use this when creating new strings from short-lived char pointers
-// returns a string cell
-const char *string_intern (const char *start, int length)
+// Returns internal string cell
+Cell *intern_string (const char *start, int length)
 {
-	if ((start == NULL) || (length < 0))
+	// If string is already interned, return that value
+	Cell *result = find_string(start, length);
+	if (result)
+		return result;
+
+	// Make (C string) copy of the string
+	char *i_string = string_pool_write(start, length);
+	if (!i_string)
 		return NULL;
 
-	// Linear search through the string list
-	char *p = char_pool;
-	while (p < char_free)
-	{
-		int p_len = strlen(p);
-
-		// Comapre with an internal string, (so return that)
-		if (p_len == length && strncmp(p, start, p_len) == 0)
-			return p;
-
-		// Next string
-		p += p_len + 1;
-	}
-
-	// Did not find an internal string, so make new one
-	return string_create(start, length);
+	return insert_string(i_string);
 }
 
-// For C strings
-const char *string_intern_c (const char *start)
-{
-	return string_intern(start, strlen(start));
-}
-
+// For string reading and writing
 void string_step (const char **stream, int *length, int n)
 {
 	*stream += n;
@@ -464,29 +534,34 @@ int parse_int (const char *start, int length, int *out)
 	return num_len;
 }
 
+// Create a string cell that has the string value from reading a quoted string
 int read_string_literal (const char *start, int length, Cell **out)
 {
 	// Validate inputs
 	if (!out)
 		return 0;
-	if (!start || length <= 0)
+	if (!start || length <= 0 || !char_free)
 	{
 		*out = NULL;
 		return 0;
 	}
 
+	// Is the current part of input string
 	const char *view = start;
 
-	char *write = char_free;
+	// Is the current part of the output buffer (char pool)
+	// Write to the char_pool, but do not move the char_free pointer.
+	char *pad = char_free;
+	int pad_len = char_pool_cap - (char_free - char_pool);
 
 	// Read opening quote
 	string_step(&view, &length, 1);
 
-	// Read string contents, with escaping
-	while (*view && (*view != '"') && length && (char_free - char_pool) < char_pool_cap)
+	// Read contents and process escape codes
+	while (*view && (*view != '"') && (length > 0) && (pad_len > 0))
 	{
 		char c = *view;
-		if (c == '\\')
+		if (*view == '\\')
 		{
 			string_step(&view, &length, 1);
 			c = *view;
@@ -496,39 +571,25 @@ int read_string_literal (const char *start, int length, Cell **out)
 				case 't': c = '\t'; break;
 			}
 		}
-
-		*write++ = c;
+		*pad = c;
+		string_step((const char**) &pad, &pad_len, 1);
 		string_step(&view, &length, 1);
 	}
 
-	if (*view != '"')
-	{
-		// Error: unexpected end of string
-		printf("read_string_literal : error : unexpected end of string\n");
-		*out = NULL;
-	}
-	else if ((char_free - char_pool) >= char_pool_cap)
-	{
-		printf("read_string_literal : error : not enough room to read string\n");
-		*out = NULL;
-	}
-	else
-	{
-		// Read closing quote
-		string_step(&view, &length, 1);
+	// Read closing quote
+	string_step(&view, &length, 1);
 
-		// Write null terminator
-		*write++ = '\0';
+	// Intern the string, which will handle the case that
+	// this string is already in the char_pool.
+	// May or may not cause string allocation.
+	int result_length = pad - char_free;
+	*out = intern_string(char_free, result_length);
 
-		// Intern string, remove quotes
-		*out = make_string(string_intern(char_free, write - char_free));
-	}
-
-	// Keep the quotes in the length,
-	// because those characters were actually read.
+	// Return the number of chars written
 	return view - start;
 }
 
+// Read in a symbol or number
 int read_item (const char *start, int length, Cell **out)
 {
 	// Validate arguments
@@ -541,11 +602,10 @@ int read_item (const char *start, int length, Cell **out)
 	}
 
 	const char *p = start;
-	int rem = length;
 
 	// Symbol or number
-	while (rem > 0 && char_is_symbol(*p))
-		string_step(&p, &rem, 1);
+	while (length > 0 && char_is_symbol(*p))
+		string_step(&p, &length, 1);
 
 	// Symbols or numbers can start with a '-', so we need to distinguish them by 
 	// what the next character is.
@@ -557,15 +617,19 @@ int read_item (const char *start, int length, Cell **out)
 		if (!n)
 		{
 			*out = NULL;
-			return 0;
+			return p - start;
 		}
 		*out = make_int(x);
 	}
 	else
 	{
 		// Symbol
-		const char *name = string_intern(start, p - start);
-		*out = make_symbol(name);
+		Cell *name = intern_string(start, p - start);
+		if (!name)
+			*out = NULL;
+
+		assert(is_kind(name, CK_STRING));
+		*out = make_symbol(name->val.as_str);
 	}
 
 	return p - start;
@@ -988,21 +1052,24 @@ Cell *make_bool_sym (int val)
 		return make_symbol(s_false);
 }
 
-// Print to char_free pointer and return length written
-// Does do null termination
-int print_scratch (Cell *args, char sep, int readable)
+// Create new string by joining together the
+// string representation of all of the arguments
+//   sep = character separator (no separator if it is 0)
+//   readable = whether to print readably
+Cell *string_join (Cell *args, char sep, int readable)
 {
 	// Validate arguments
 	if (!args)
 		return 0;
 
-	char *p = char_free;
+	// Use the char pool as a space to write in (like reading string literals)
+	char *pad = char_free;
 	int len = char_pool_cap - (char_free - char_pool);
 
 	// Print first item with no separator
 	if ((len > 1) && is_kind(args, CK_PAIR) && !is_empty_list(args))
 	{
-		string_step((const char**) &p, &len, pr_str(args->val.as_pair.first, p, len, readable));
+		string_step((const char**) &pad, &len, pr_str(args->val.as_pair.first, pad, len, readable));
 		args = args->val.as_pair.rest;
 	}
 
@@ -1010,13 +1077,14 @@ int print_scratch (Cell *args, char sep, int readable)
 	while ((len > 1) && is_kind(args, CK_PAIR) && !is_empty_list(args))
 	{
 		if (sep)
-			string_step((const char**) &p, &len, print_char(sep, p, len));
-		string_step((const char**) &p, &len, pr_str(args->val.as_pair.first, p, len, readable));
+			string_step((const char**) &pad, &len, print_char(sep, pad, len));
+		string_step((const char**) &pad, &len, pr_str(args->val.as_pair.first, pad, len, readable));
 		args = args->val.as_pair.rest;
 	}
-	print_char('\0', p, len);
 
-	return p - char_free;
+	// This will use the characters we already
+	// wrote without re-copying them
+	return intern_string(char_free, pad - char_free);
 }
 
 Cell *eval_ast (Cell *ast, Cell *env)
@@ -1058,41 +1126,37 @@ Cell *eval_ast (Cell *ast, Cell *env)
 // [str a b c ...] -> "abc..." (prints non-readably)
 Cell *fn_str (Cell *args)
 {
-	int len = print_scratch(args, 0, 0);
-	Cell *s = make_string(char_free);
-	char_free += len;
-	return s;
-}
-
-// [list a ...] -> [a ...] (variadic)
-Cell *fn_list (Cell *args)
-{
-	return args;
+	return string_join(args, 0, 0);
 }
 
 // [pr-str a b c ...] -> "a b c ..." (prints readably)
 Cell *fn_pr_str (Cell *args)
 {
-	int len = print_scratch(args, ' ', 1);
-	Cell *s = make_string(char_free);
-	char_free += len;
-	return s;
+	return string_join(args, ' ', 1);
 }
 
 // [prn a b c ...] -> nil (prints readably)
 Cell *fn_prn (Cell *args)
 {
-	print_scratch(args, ' ', 1);
-	printf("%s", char_free);
+	Cell *s = string_join(args, ' ', 1);
+	if (s)
+		printf("%s", s->val.as_str);
 	return make_symbol(s_nil);
 }
 
 // [println a b c ...] -> nil (prints non-readably)
 Cell *fn_println (Cell *args)
 {
-	print_scratch(args, ' ', 0);
-	printf("%s\n", char_free);
+	Cell *s = string_join(args, ' ', 0);
+	if (s)
+		printf("%s", s->val.as_str);
 	return make_symbol(s_nil);
+}
+
+// [list a ...] -> [a ...] (variadic)
+Cell *fn_list (Cell *args)
+{
+	return args;
 }
 
 // [deref atom]
@@ -1626,7 +1690,8 @@ void env_set_native_fn (Cell *env, const char *name, int n_params, Cell *(*func)
 {
 	if (!env || !name || n_params < 0 || !func)
 		return;
-	env_set(env, make_symbol(string_intern_c(name)), make_native_fn(n_params, func));
+	Cell *str = insert_string(name);
+	env_set(env, make_symbol(str->val.as_str), make_native_fn(n_params, func));
 }
 
 // Returns global environment
@@ -1655,22 +1720,16 @@ Cell *init (int ncells, int nchars)
 	char_free = char_pool;
 	char_pool_cap = nchars;
 
-	// Set up the internal string list with one item,
-	// the empty string.
-	// TODO: fix string interning
+	// Set up the internal string list
 	string_list = make_pair(make_string(""), NULL);
-
-	// Intern important strings
-	// Self-evaluating symbols,
-	s_nil      = string_intern_c("nil");
-	s_true     = string_intern_c("#t");
-	s_false    = string_intern_c("#f");
-	// Special symbols
-	s_def_bang = string_intern_c("def!");
-	s_fn_star  = string_intern_c("fn*");
-	s_let_star = string_intern_c("let*");
-	s_do       = string_intern_c("do");
-	s_if       = string_intern_c("if");
+	insert_string(s_nil);
+	insert_string(s_true);
+	insert_string(s_false);
+	insert_string(s_def_bang);
+	insert_string(s_fn_star);
+	insert_string(s_let_star);
+	insert_string(s_do);
+	insert_string(s_if);
 
 	// Setup the global environment now
 	Cell *env = env_create(NULL, NULL, NULL);
