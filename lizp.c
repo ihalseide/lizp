@@ -118,14 +118,8 @@ Cell *cell_alloc ()
 	}
 	else
 	{
-		// Try to free up some cells
-		garbage();
-		x = cell_pool->as_pair.rest;
-		if (!x)
-		{
-			printf("cell_alloc : error : out of memory for cells\n");
-			return NULL;
-		}
+		printf("cell_alloc : error : out of memory for cells\n");
+		return NULL;
 	}
 
 	return x;
@@ -263,11 +257,18 @@ int is_nonempty_list (const Cell *x)
 	return is_kind(x, CK_PAIR) && !is_empty_list(x);
 }
 
-int list_length (const Cell *list)
+int list_length (Cell *list)
 {
-	int i;
-	for (i = 0; is_kind(list, CK_PAIR) && !is_empty_list(list); i++)
-		list = list->as_pair.rest;
+	int i = 0;
+	if (list_iter_begin(list))
+	{
+		while (!list_iter_endp())
+		{
+			i++;
+			list_iter_next();
+		}
+		list_iter_finish();
+	}
 	return i;
 }
 
@@ -1111,28 +1112,31 @@ int print_list (Cell *list, char *out, int length, int readable)
 	string_step((const char**)&view, &rem, print_char('[', view, rem));
 
 	// Print the first item with no leading space
-	if (list_iter_begin(list) && !list_iter_endp())
+	if (list_iter_begin(list))
 	{
-		string_step((const char**)&view, &rem, pr_str(list_iter_peek(), view, rem, readable));
-		list_iter_next();
-
-		// Print the rest of the normal list elements
-		while (!list_iter_endp())
+		if (!list_iter_endp())
 		{
-			string_step((const char**)&view, &rem, print_char(' ', view, rem));
 			string_step((const char**)&view, &rem, pr_str(list_iter_peek(), view, rem, readable));
 			list_iter_next();
-		}
-		Cell *last_rest = iter_node;
 
-		// If there is a value (except nil) in the final rest slot, then print it dotted
-		if (last_rest && !(is_kind(last_rest, CK_SYMBOL) && list->as_str == s_nil))
-		{
-			string_step((const char**)&view, &rem, print_string(" | ", view, rem, 0));
-			string_step((const char**)&view, &rem, pr_str(last_rest, view, rem, readable));
+			// Print the rest of the normal list elements
+			while (!list_iter_endp())
+			{
+				string_step((const char**)&view, &rem, print_char(' ', view, rem));
+				string_step((const char**)&view, &rem, pr_str(list_iter_peek(), view, rem, readable));
+				list_iter_next();
+			}
+
+			// If there is a value (except nil) in the final rest slot, then print it dotted
+			Cell *last_rest = iter_node;
+			if (last_rest && !(is_kind(last_rest, CK_SYMBOL) && list->as_str == s_nil))
+			{
+				string_step((const char**)&view, &rem, print_string(" | ", view, rem, 0));
+				string_step((const char**)&view, &rem, pr_str(last_rest, view, rem, readable));
+			}
 		}
+		list_iter_finish();
 	}
-	list_iter_finish();
 
 	// Print closing char
 	string_step((const char**)&view, &rem, print_char(']', view, rem));
