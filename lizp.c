@@ -48,11 +48,24 @@ struct cell
 	};
 };
 
-// Forward declarations
+
+/* Forward declarations */
+
 Cell *EVAL (Cell *, Cell *env); 
-void PRINT (const Cell *expr);
-int pr_str (const Cell *x, char *out, int length, int readable);
+void PRINT (Cell *expr);
+int pr_str (Cell *x, char *out, int length, int readable);
 void apply (Cell *fn, Cell *args, Cell *env, Cell **val_out, Cell **env_out);
+
+void list_push (Cell *item, Cell **list);
+Cell *list_pop (Cell **list);
+
+Cell *list_iter_next (void);
+Cell *list_iter_peek (void);
+int list_iter_endp (void);
+int list_iter_begin (Cell *list);
+void list_iter_finish ();
+
+/* Global state */
 
 // Cell memory (holds the actual cell values):
 Cell *cell_pool = NULL;
@@ -100,11 +113,43 @@ Cell *cell_alloc ()
 
 	// Remove the cell from the free list
 	if (x)
+	{
 		cell_pool->as_pair.rest = x->as_pair.rest;
+	}
 	else
-		printf("cell_alloc : warning : out of cells!\n");
+	{
+		// Try to free up some cells
+		garbage();
+		x = cell_pool->as_pair.rest;
+		if (!x)
+		{
+			printf("cell_alloc : error : out of memory for cells\n");
+			return NULL;
+		}
+	}
 
 	return x;
+}
+
+void cell_free (Cell *x)
+{
+	if (!x)
+	{
+		printf("cell_free : error : cannot free NULL\n");
+		return;
+	}
+
+	if (!cell_pool)
+	{
+		printf("cell_free : error : cells not initialized\n");
+		return;
+	}
+
+	// Turn x into a pair and put it into the free list
+	x->kind = CK_PAIR;
+	x->as_pair.first = NULL;
+	x->as_pair.rest = cell_pool->as_pair.rest;
+	cell_pool->as_pair.rest = x;
 }
 
 Cell *cell_init (enum Cell_kind k)
@@ -207,9 +252,15 @@ Cell *make_empty_list ()
 	return make_pair(NULL, NULL);
 }
 
+// Note: NULL is not considered a list
 int is_empty_list (const Cell *x)
 {
 	return is_kind(x, CK_PAIR) && (x->as_pair.first == NULL);
+}
+
+int is_nonempty_list (const Cell *x)
+{
+	return is_kind(x, CK_PAIR) && !is_empty_list(x);
 }
 
 int list_length (const Cell *list)
@@ -219,6 +270,103 @@ int list_length (const Cell *list)
 		list = list->as_pair.rest;
 	return i;
 }
+
+/* List iteration code */
+
+// Current stuff
+Cell *iter_list = NULL;
+Cell *iter_node = NULL;
+Cell *iter_stack = NULL;
+
+// Returns:
+//   1 : success
+//   0 : fail
+int iter_remember (void)
+{
+	// Needs a valid list for the stack
+	if (!iter_stack)
+		iter_stack = make_empty_list();
+	if (!iter_stack)
+		return 0;
+
+	// Needs to be able to create a new entry
+	if (iter_list)
+	{
+		Cell *record = make_pair(iter_list, iter_node);
+		if (!record)
+			return 0;
+		list_push(record, &iter_stack);
+	}
+
+	return 1;
+}
+
+Cell *list_iter_get_node (void)
+{
+	if (!iter_list)
+		return NULL;
+	return iter_node;
+}
+
+// Returns:
+//   1 : success
+//   0 : fail
+int list_iter_begin (Cell *with_list)
+{
+	if (!is_kind(with_list, CK_PAIR))
+		return 0;
+	
+	// Maintain a stack of lists that are being iterated
+	if (!iter_remember())
+		return 0;
+
+	iter_list = with_list;
+	iter_node = with_list;
+	return 1;
+}
+
+int list_iter_endp (void)
+{
+	return !is_nonempty_list(iter_node);
+}
+
+Cell *list_iter_next (void)
+{
+	if (list_iter_endp())
+		return NULL;
+	Cell *val = iter_node->as_pair.first;
+	iter_node = iter_node->as_pair.rest;
+	return val;
+}
+
+Cell *list_iter_peek (void)
+{
+	if (list_iter_endp())
+		return NULL;
+	return iter_node->as_pair.first;
+}
+
+// Finish iterating the current list
+void list_iter_finish (void)
+{
+	// Pop the list stack (if any)
+	if (is_kind(iter_stack, CK_PAIR) && !is_empty_list(iter_stack))
+	{
+		Cell *record = list_pop(&iter_stack);
+
+		iter_list = record->as_pair.first;
+		iter_node = record->as_pair.rest;
+
+		// Done with this pair
+		cell_free(record);
+	}
+	else
+	{
+		iter_list = NULL;
+		iter_node = NULL;
+	}
+}
+
 
 int string_can_alloc (int length)
 {
@@ -384,43 +532,55 @@ Cell *alist_assoc (const Cell *sym, Cell *alist)
 	if (!is_kind(sym, CK_SYMBOL) || !is_kind(alist, CK_PAIR))
 		return NULL;
 
+	Cell *result = NULL;
+
 	// Iterate through the list
-	while (alist && !is_empty_list(alist))
+	list_iter_begin(alist);
+	while (!list_iter_endp())
 	{
-		// Check if it found a a slot with the symbol, and if so return the slot
-		if (alist->as_pair.first && symbol_eq(alist->as_pair.first->as_pair.first, sym))
-			return alist->as_pair.first;
+		// Check if slot has same symbol name
+		Cell *slot = list_iter_peek();
+		if (symbol_eq(slot->as_pair.first, sym))
+		{
+			result = slot;
+			break;
+		}
 
-		// Next
-		alist = alist->as_pair.rest;
+		list_iter_next();
 	}
+	list_iter_finish();
 
-	return NULL;
+	return result;
 }
 
 // Find the innermost env which contains symbol
 // Returns:
 //   if found -> environment Cell 
-//   not found -> nil
+//   not found -> NULL
 Cell *env_find (Cell *env, const Cell *sym)
 {
-	// Validate inputs
-	if (!is_kind(env, CK_PAIR) || !is_kind(sym, CK_SYMBOL))
-		return NULL;
+	assert(is_kind(env, CK_PAIR) && is_kind(sym, CK_SYMBOL));
+
+	// Default result is "not found"
+	Cell *result = NULL;
 
 	// Search up the environment hierarchy
-	while (env && is_kind(env, CK_PAIR) && !is_empty_list(env))
+	// Note: env = [alist | outer]
+	list_iter_begin(env);
+	while (!list_iter_endp())
 	{
 		// Search current environment
-		if (alist_assoc(sym, env->as_pair.first))
-			return env;
+		if (alist_assoc(sym, list_iter_peek()))
+		{
+			result = list_iter_get_node();
+			break;
+		}
 
-		// Move on to the outer environment
-		env = env->as_pair.rest;
+		list_iter_next();
 	}
+	list_iter_finish();
 
-	// Not found
-	return NULL;
+	return result;
 }
 
 // Get the innermost definition for the symbol.
@@ -429,19 +589,13 @@ Cell *env_find (Cell *env, const Cell *sym)
 //   when not found -> nil
 Cell *env_get (Cell *env, Cell *sym)
 {
-	// Validate inputs
-	if (!is_kind(env, CK_PAIR) || !is_kind(sym, CK_SYMBOL))
-		return NULL;
-
-	// Do not allow nil, true, or false to be defined
-	if (sym->as_str == s_nil || sym->as_str == s_false || sym->as_str == s_true)
-		return NULL;
+	assert(is_kind(env, CK_PAIR) && is_kind(sym, CK_SYMBOL));
 
 	// Find the environment which contains the symbol
-	Cell *containing_env = env_find(env, sym);
-	// Return the slot if environment was found
-	if (containing_env)
-		return alist_assoc(sym, containing_env->as_pair.first);
+	env = env_find(env, sym);
+	if (env)
+		// Return the slot if environment was found
+		return alist_assoc(sym, env->as_pair.first);
 
 	// Symbol not found
 	printf("env_get : error : symbol undefined\n");
@@ -449,7 +603,7 @@ Cell *env_get (Cell *env, Cell *sym)
 }
 
 // Push an item in front of a list (which may be empty)
-void push_list (Cell *item, Cell **list)
+void list_push (Cell *item, Cell **list)
 {
 	// Validate arguments
 	if (!item || !is_kind(*list, CK_PAIR))
@@ -460,6 +614,17 @@ void push_list (Cell *item, Cell **list)
 		(*list)->as_pair.first = item;
 	else
 		*list = make_pair(item, *list);
+}
+
+// Remove and return the item in the front of a list
+Cell *list_pop (Cell **list)
+{
+	if (!is_kind(*list, CK_PAIR) || is_empty_list(*list))
+		return NULL;
+
+	Cell *val = (*list)->as_pair.first;
+	*list = (*list)->as_pair.rest;
+	return val;
 }
 
 // Returns whether it succeeded (1) or not (0)
@@ -487,7 +652,7 @@ int env_set (Cell *env, Cell *sym, Cell *val)
 		// Symbol undefined.
 		// Push the new (symbol . value) pair to the env
 		slot = make_pair(sym, val);
-		push_list(slot, &(env->as_pair.first));
+		list_push(slot, &(env->as_pair.first));
 	}
 
 	return 1;
@@ -933,7 +1098,7 @@ int print_int (int n, char *out, int length)
 	return len;
 }
 
-int print_list (const Cell *list, char *out, int length, int readable)
+int print_list (Cell *list, char *out, int length, int readable)
 {
 	// Validate arguments
 	if (!is_kind(list, CK_PAIR) || !out || (length <= 0))
@@ -946,39 +1111,38 @@ int print_list (const Cell *list, char *out, int length, int readable)
 	string_step((const char**)&view, &rem, print_char('[', view, rem));
 
 	// Print the first item with no leading space
-	if (!is_empty_list(list))
+	if (list_iter_begin(list) && !list_iter_endp())
 	{
-		string_step((const char**)&view, &rem, pr_str(list->as_pair.first, view, rem, readable));
-		// Next item
-		list = list->as_pair.rest;
-	}
+		string_step((const char**)&view, &rem, pr_str(list_iter_peek(), view, rem, readable));
+		list_iter_next();
 
-	// Print normal list elements
-	while (is_kind(list, CK_PAIR) && !is_empty_list(list))
-	{
-		string_step((const char**)&view, &rem, print_char(' ', view, rem));
-		string_step((const char**)&view, &rem, pr_str(list->as_pair.first, view, rem, readable));
-		// Next item
-		list = list->as_pair.rest;
-	}
+		// Print the rest of the normal list elements
+		while (!list_iter_endp())
+		{
+			string_step((const char**)&view, &rem, print_char(' ', view, rem));
+			string_step((const char**)&view, &rem, pr_str(list_iter_peek(), view, rem, readable));
+			list_iter_next();
+		}
+		Cell *last_rest = iter_node;
 
-	// If there is a value (except nil) in the final rest slot, then print it dotted
-	if (list && !is_empty_list(list) && !(is_kind(list, CK_SYMBOL) && list->as_str == s_nil))
-	{
-		string_step((const char**)&view, &rem, print_string(" | ", view, rem, 0));
-		string_step((const char**)&view, &rem, pr_str(list, view, rem, readable));
+		// If there is a value (except nil) in the final rest slot, then print it dotted
+		if (last_rest && !(is_kind(last_rest, CK_SYMBOL) && list->as_str == s_nil))
+		{
+			string_step((const char**)&view, &rem, print_string(" | ", view, rem, 0));
+			string_step((const char**)&view, &rem, pr_str(last_rest, view, rem, readable));
+		}
 	}
+	list_iter_finish();
 
 	// Print closing char
 	string_step((const char**)&view, &rem, print_char(']', view, rem));
 
-	int len = length - rem;
-	return len;
+	return length - rem;
 }
 
 // Does: Prints form X to output stream
 // Returns: number of chars written
-int pr_str (const Cell *x, char *out, int length, int readable)
+int pr_str (Cell *x, char *out, int length, int readable)
 {
 	// Validate inputs
 	if (!out || !x || (length <= 0))
@@ -1146,12 +1310,18 @@ Cell *eval_ast (Cell *ast, Cell *env)
 
 	switch (ast->kind)
 	{
-		case CK_SYMBOL: // Look up symbol's value
+		case CK_PAIR:
+			// Evaluate each element in a list
+			return eval_each(ast, env);
+		case CK_SYMBOL:
+			// Look up symbol's value...
+			if (ast->as_str == s_nil || ast->as_str == s_true || ast->as_str == s_false)
 			{
 				// These special symbols are self-evaluating
-				if (ast->as_str == s_nil || ast->as_str == s_true || ast->as_str == s_false)
-					return ast;
-
+				return ast;
+			}
+			else
+			{
 				// Get the value out of the environment's slot
 				Cell *slot = env_get(env, ast);
 				if (slot)
@@ -1160,13 +1330,12 @@ Cell *eval_ast (Cell *ast, Cell *env)
 				printf("eval_ast : error : undefined symbol '%s'\n", ast->as_str);
 				return NULL;
 			}
-		case CK_PAIR:
-			return eval_each(ast, env);
-		case CK_INT: // Self-evaluating values
+		case CK_INT:
 		case CK_STRING:
 		case CK_FUNC:
 		case CK_NATIVE_FUNC:
 		case CK_ATOM:
+			// Self-evaluating values
 			return ast;
 	}
 
@@ -1443,7 +1612,7 @@ void fn_swap_bang (Cell *args, Cell *env, Cell **val_out)
 	Cell *args2 = args->as_pair.rest->as_pair.rest;
 	if (!args2)
 		args2 = make_empty_list();
-	push_list(atom->as_atom, &args2);
+	list_push(atom->as_atom, &args2);
 
 	// Apply the function by evaluating a list as [fn args]
 	*val_out = EVAL(make_pair(fn, args2), env);
@@ -1827,7 +1996,7 @@ Cell *EVAL (Cell *ast, Cell *env)
 	return NULL;
 }
 
-void PRINT (const Cell *expr)
+void PRINT (Cell *expr)
 {
 	char buffer[2 * 1024];
 	int p_len = pr_str(expr, buffer, sizeof(buffer), 1);
