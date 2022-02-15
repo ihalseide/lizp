@@ -15,7 +15,7 @@ make
 
 Lists can be written with any of the 3 bracket types below.
 
-* Lists: [...], {...}, or (...), the '|' symbol is used for making "dotted" lists
+* Lists are delimited by square brackets: [...], and the '|' symbol is used for making "dotted" lists. I decided to only allow square brackets because they are easier to type than any other bracket (no shift key required).
 * special symbols: nil, #f, and #t
 * "quoted strings"
 * numbers: 3, 0, -1
