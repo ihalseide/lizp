@@ -1,12 +1,14 @@
-CC = gcc
-COpts = -std=c99 -Wall -Wunused
+CC = clang
+COpts = -std=c99 -Wall -g
 
 default: lizp
 
-lizp: main.c lizp.o cells.o
-	$(CC) -o $@ $^
+lizp: main.c lizp_string.o cell.o function.o reader.o printer.o lizp.o
+	$(CC) $(COpts) -o $@ $^
 
-%.o: %.c %.h
+%.c: %.h
+
+%.o: %.c
 	$(CC) $(COpts) -c $^
 
 clean:
