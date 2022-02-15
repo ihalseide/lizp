@@ -1,13 +1,15 @@
 CC = gcc
 COpts = -std=c99 -Wall -Wunused
 
-default: main
+default: lizp
 
-all: debug main
+lizp: main.c lizp.o cells.o
+	$(CC) -o $@ $^
 
-debug: lizp.c
-	$(CC) $(COpts) -o d_lizp -g lizp.c
+%.o: %.c %.h
+	$(CC) $(COpts) -c $^
 
-main: lizp.c
-	$(CC) $(COpts) -o m_lizp lizp.c
+clean:
+	rm *.o
+	rm lizp
 

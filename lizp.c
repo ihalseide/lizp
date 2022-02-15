@@ -4,72 +4,11 @@
 #include <ctype.h>
 #include <assert.h>
 
+#include "cells.h"
+#include "lizp.h"
+
 // TODO: tail calls still create a bunch of new cells and environments,
 //       so add garbage collection?
-
-enum Cell_kind
-{
-	CK_INT,
-	CK_STRING,
-	CK_SYMBOL,
-	CK_FUNC,
-	CK_NATIVE_FUNC,
-	CK_PAIR,
-	CK_ATOM,
-};
-
-typedef struct cell Cell;
-typedef void (*Native_fn)(Cell* args, Cell *env, Cell **out);
-
-struct cell
-{
-	enum Cell_kind kind;
-	union
-	{
-		int as_int;
-		const char *as_str;
-		Cell *as_atom;
-		struct
-		{
-			Cell *first;
-			Cell *rest;
-		} as_pair;
-		struct
-		{
-			int n_params;
-			Native_fn func;
-		} as_native_fn;
-		struct
-		{
-			const Cell *params;
-			const Cell *ast;
-			Cell *env;
-		} as_fn;
-	};
-};
-
-
-/* Forward declarations */
-
-Cell *EVAL (Cell *, Cell *env); 
-void PRINT (Cell *expr);
-int pr_str (Cell *x, char *out, int length, int readable);
-void apply (Cell *fn, Cell *args, Cell *env, Cell **val_out, Cell **env_out);
-
-void list_push (Cell *item, Cell **list);
-Cell *list_pop (Cell **list);
-
-Cell *list_iter_next (void);
-Cell *list_iter_peek (void);
-int list_iter_endp (void);
-int list_iter_begin (Cell *list);
-void list_iter_finish ();
-
-/* Global state */
-
-// Cell memory (holds the actual cell values):
-Cell *cell_pool = NULL;
-int cell_pool_cap = 0;
 
 // String memory (holds the actual characters):
 char *char_pool = NULL;
@@ -93,279 +32,13 @@ const char *s_nil = "nil",
 	  *s_do       = "do",
 	  *s_quote    = "quote";
 
+/* Code */
+
 int char_is_symbol (char c)
 {
 	return (c > ' ')
 		&& (c != '"') && (c != '|') && (c != '[') && (c != ']')
 		&& (c != '(') && (c != ')') && (c != '{') && (c != '}');
-}
-
-// Get a new cell
-Cell *cell_alloc ()
-{
-	if (!cell_pool)
-	{
-		printf("cell_alloc : error : cells not initialized\n");
-		return NULL;
-	}
-
-	Cell *x = cell_pool->as_pair.rest;
-
-	// Remove the cell from the free list
-	if (x)
-	{
-		cell_pool->as_pair.rest = x->as_pair.rest;
-	}
-	else
-	{
-		printf("cell_alloc : error : out of memory for cells\n");
-		return NULL;
-	}
-
-	return x;
-}
-
-void cell_free (Cell *x)
-{
-	if (!x)
-	{
-		printf("cell_free : error : cannot free NULL\n");
-		return;
-	}
-
-	if (!cell_pool)
-	{
-		printf("cell_free : error : cells not initialized\n");
-		return;
-	}
-
-	// Turn x into a pair and put it into the free list
-	x->kind = CK_PAIR;
-	x->as_pair.first = NULL;
-	x->as_pair.rest = cell_pool->as_pair.rest;
-	cell_pool->as_pair.rest = x;
-}
-
-Cell *cell_init (enum Cell_kind k)
-{
-	Cell *x = cell_alloc();
-	if (x)
-		x->kind = k;
-
-	return x;
-}
-
-int is_kind (const Cell *x, enum Cell_kind kind)
-{
-	return x && (x->kind == kind);
-}
-
-int is_function (const Cell *x)
-{
-	return is_kind(x, CK_FUNC) || is_kind(x, CK_NATIVE_FUNC);
-}
-
-Cell *make_int (int n)
-{
-	Cell *x = cell_init(CK_INT);
-	if (x)
-		x->as_int = n;
-	return x;
-}
-
-Cell *make_native_fn (int n_params, Native_fn func)
-{
-	if (n_params < 0 || !func)
-		return NULL;
-
-	Cell *x = cell_init(CK_NATIVE_FUNC);
-	if (x)
-	{
-		x->as_native_fn.n_params = n_params;
-		x->as_native_fn.func = func;
-	}
-	return x;
-}
-
-Cell *make_pair (Cell *first, Cell *rest)
-{
-	Cell *x = cell_init(CK_PAIR);
-	if (x)
-	{
-		x->as_pair.first = first;
-		x->as_pair.rest = rest;
-	}
-	return x;
-}
-
-Cell *make_atom (Cell *ref)
-{
-	Cell *x = cell_init(CK_ATOM);
-	if (x)
-	{
-		x->as_atom = ref;
-	}
-	return x;
-}
-
-Cell *make_symbol (const char *str)
-{
-	Cell *x = cell_init(CK_SYMBOL);
-	if (x)
-		x->as_str = str;
-	return x;
-}
-
-Cell *make_string (const char *str)
-{
-	Cell *x = cell_init(CK_STRING);
-	if (x)
-		x->as_str = str;
-	return x;
-}
-
-// A custom lisp function is a really just a list.
-// The form of that list is: (params env . body)
-Cell *make_fn (const Cell *params, const Cell *body, Cell *outer_env)
-{
-	if (!is_kind(params, CK_PAIR) || !body || !is_kind(outer_env, CK_PAIR))
-		return NULL;
-
-	Cell *x = cell_init(CK_FUNC);
-	if (x)
-	{
-		x->as_fn.params = params;
-		x->as_fn.ast = body;
-		x->as_fn.env = outer_env;
-	}
-	return x;
-}
-
-Cell *make_empty_list ()
-{
-	return make_pair(NULL, NULL);
-}
-
-// Note: NULL is not considered a list
-int is_empty_list (const Cell *x)
-{
-	return is_kind(x, CK_PAIR) && (x->as_pair.first == NULL);
-}
-
-int is_nonempty_list (const Cell *x)
-{
-	return is_kind(x, CK_PAIR) && !is_empty_list(x);
-}
-
-int list_length (Cell *list)
-{
-	int i = 0;
-	if (list_iter_begin(list))
-	{
-		while (!list_iter_endp())
-		{
-			i++;
-			list_iter_next();
-		}
-		list_iter_finish();
-	}
-	return i;
-}
-
-/* List iteration code */
-
-// Current stuff
-Cell *iter_list = NULL;
-Cell *iter_node = NULL;
-Cell *iter_stack = NULL;
-
-// Returns:
-//   1 : success
-//   0 : fail
-int iter_remember (void)
-{
-	// Needs a valid list for the stack
-	if (!iter_stack)
-		iter_stack = make_empty_list();
-	if (!iter_stack)
-		return 0;
-
-	// Needs to be able to create a new entry
-	if (iter_list)
-	{
-		Cell *record = make_pair(iter_list, iter_node);
-		if (!record)
-			return 0;
-		list_push(record, &iter_stack);
-	}
-
-	return 1;
-}
-
-Cell *list_iter_get_node (void)
-{
-	if (!iter_list)
-		return NULL;
-	return iter_node;
-}
-
-// Returns:
-//   1 : success
-//   0 : fail
-int list_iter_begin (Cell *with_list)
-{
-	if (!is_kind(with_list, CK_PAIR))
-		return 0;
-	
-	// Maintain a stack of lists that are being iterated
-	if (!iter_remember())
-		return 0;
-
-	iter_list = with_list;
-	iter_node = with_list;
-	return 1;
-}
-
-int list_iter_endp (void)
-{
-	return !is_nonempty_list(iter_node);
-}
-
-Cell *list_iter_next (void)
-{
-	if (list_iter_endp())
-		return NULL;
-	Cell *val = iter_node->as_pair.first;
-	iter_node = iter_node->as_pair.rest;
-	return val;
-}
-
-Cell *list_iter_peek (void)
-{
-	if (list_iter_endp())
-		return NULL;
-	return iter_node->as_pair.first;
-}
-
-// Finish iterating the current list
-void list_iter_finish (void)
-{
-	// Pop the list stack (if any)
-	if (is_kind(iter_stack, CK_PAIR) && !is_empty_list(iter_stack))
-	{
-		Cell *record = list_pop(&iter_stack);
-
-		iter_list = record->as_pair.first;
-		iter_node = record->as_pair.rest;
-
-		// Done with this pair
-		cell_free(record);
-	}
-	else
-	{
-		iter_list = NULL;
-		iter_node = NULL;
-	}
 }
 
 
@@ -601,31 +274,6 @@ Cell *env_get (Cell *env, Cell *sym)
 	// Symbol not found
 	printf("env_get : error : symbol undefined\n");
 	return NULL;
-}
-
-// Push an item in front of a list (which may be empty)
-void list_push (Cell *item, Cell **list)
-{
-	// Validate arguments
-	if (!item || !is_kind(*list, CK_PAIR))
-		return;
-
-	if (is_empty_list(*list))
-		// An empty list has nothing in the first slot yet
-		(*list)->as_pair.first = item;
-	else
-		*list = make_pair(item, *list);
-}
-
-// Remove and return the item in the front of a list
-Cell *list_pop (Cell **list)
-{
-	if (!is_kind(*list, CK_PAIR) || is_empty_list(*list))
-		return NULL;
-
-	Cell *val = (*list)->as_pair.first;
-	*list = (*list)->as_pair.rest;
-	return val;
 }
 
 // Returns whether it succeeded (1) or not (0)
@@ -1128,7 +776,7 @@ int print_list (Cell *list, char *out, int length, int readable)
 			}
 
 			// If there is a value (except nil) in the final rest slot, then print it dotted
-			Cell *last_rest = iter_node;
+			Cell *last_rest = list_iter_get_node();
 			if (last_rest && !(is_kind(last_rest, CK_SYMBOL) && list->as_str == s_nil))
 			{
 				string_step((const char**)&view, &rem, print_string(" | ", view, rem, 0));
@@ -2039,20 +1687,7 @@ void env_set_native_fn (Cell *env, const char *name, int n_params, Native_fn fun
 // Returns global environment
 Cell *init (int ncells, int nchars)
 {
-	// Init cell pool...
-
-	// Allocate the cell array
-	cell_pool = malloc(ncells * sizeof(*cell_pool));
-	if (!cell_pool)
-		return NULL;
-
-	// Set the capacities
-	cell_pool_cap = ncells;
-
-	// Link the free cells together in a list
-	for (int i = 0; i < (cell_pool_cap - 1); i++)
-		cell_pool[i].as_pair.rest = &cell_pool[i + 1];
-	cell_pool[cell_pool_cap - 1].as_pair.rest = NULL;
+	init_cells(ncells);
 
 	// Init strings/chars...
 	char_pool = malloc(nchars);
@@ -2107,29 +1742,3 @@ Cell *init (int ncells, int nchars)
 	return env;
 }
 
-int main (void)
-{
-	// Initialize the REPL environment symbols
-	repl_env = init(2000, 8 * 1024);
-	if (!repl_env)
-		return 1;
-
-	// Initialization code
-	const char *code1 = "[def! load-file [fn* [f] [eval [read-string [str \"[do \" [slurp f] \"\nnil]\n\"]]]]]";
-	EVAL(READ(code1, strlen(code1)), repl_env);
-	const char *code2 = "[load-file \"lizp.lizp\"]";
-	EVAL(READ(code2, strlen(code2)), repl_env);
-
-	// REPL
-	char buffer[1024];
-	while (1)
-	{
-		printf("LZP> ");
-		if(!fgets(buffer, sizeof(buffer), stdin))
-			break;
-		rep(buffer, strlen(buffer), repl_env);
-		printf("\n");
-	}
-
-	return 0;
-}

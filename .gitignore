@@ -1,3 +1,4 @@
-m_lizp
-d_lizp
+# Object files
+*.o
+lizp
 
