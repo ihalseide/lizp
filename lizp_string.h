@@ -39,7 +39,7 @@ Cell *find_string (const char *start, int length);
 
 Cell *intern_string (const char *start, int length);
 
-void string_step (const char **stream, int *length, int n);
+int string_step (const char **stream, int *length, int n);
 
 void string_skip_white(const char **stream, int *length);
 

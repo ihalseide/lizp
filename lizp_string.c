@@ -222,10 +222,15 @@ Cell *intern_string (const char *start, int length)
 }
 
 // For string reading and writing
-void string_step (const char **stream, int *length, int n)
+int string_step (const char **stream, int *length, int n)
 {
-	*stream += n;
-	*length -= n;
+	if (n <= *length)
+	{
+		*stream += n;
+		*length -= n;
+		return n;
+	}
+	return 0;
 }
 
 void string_skip_white(const char **stream, int *length)

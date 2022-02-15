@@ -3,8 +3,6 @@
 
 #include "cell.h"
 
-char char_end_brace (char x);
-
 int char_is_symbol (char c);
 
 int parse_int (const char *start, int length, int *out);

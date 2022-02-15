@@ -129,26 +129,26 @@ int print_list (const Cell *list, char *out, int length, int readable)
 	// Print the first item with no leading space
 	if (is_nonempty_list(list))
 	{
+		string_step((const char**)&view, &rem, pr_str(list->as_pair.first, view, rem, readable));
+		list = list->as_pair.rest;
+
+		// Print the rest of the normal list elements
+		while (is_nonempty_list(list))
+		{
+			string_step((const char**)&view, &rem, print_char(' ', view, rem));
 			string_step((const char**)&view, &rem, pr_str(list->as_pair.first, view, rem, readable));
+
+			// Next
 			list = list->as_pair.rest;
+		}
 
-			// Print the rest of the normal list elements
-			while (is_nonempty_list(list))
-			{
-				string_step((const char**)&view, &rem, print_char(' ', view, rem));
-				string_step((const char**)&view, &rem, pr_str(list->as_pair.first, view, rem, readable));
-
-				// Next
-				list = list->as_pair.rest;
-			}
-
-			// List will be the last item in the 'rest' slot of the list at this point
-			// If there is a value (except nil) in the final rest slot, then print it dotted
-			if (list && !(is_kind(list, CK_SYMBOL) && list->as_str == s_nil))
-			{
-				string_step((const char**)&view, &rem, print_string(" | ", view, rem, 0));
-				string_step((const char**)&view, &rem, pr_str(list, view, rem, readable));
-			}
+		// List will be the last item in the 'rest' slot of the list at this point
+		// If there is a value (except nil) in the final rest slot, then print it dotted
+		if (list && !(is_kind(list, CK_SYMBOL) && list->as_str == s_nil))
+		{
+			string_step((const char**)&view, &rem, print_string(" | ", view, rem, 0));
+			string_step((const char**)&view, &rem, pr_str(list, view, rem, readable));
+		}
 	}
 
 	// Print closing char

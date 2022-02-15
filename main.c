@@ -4,27 +4,26 @@
 #include <string.h>
 #include "lizp.h"
 
-void lizp_c_rep (const char *src)
-{
-	EVAL(READ(src, strlen(src)), repl_env);
-}
-
 int main (void)
 {
 	// Initialize the REPL environment symbols
-	repl_env = init(2000, 8 * 1024);
+	repl_env = init(8000, 8 * 1024);
 	if (!repl_env)
 		return 1;
 
 	// Initialization lizp code
-	lizp_c_rep("[def! load-file [fn* [f] [eval [read-string [str \"[do \" [slurp f] \"\nnil]\n\"]]]]]");
-	lizp_c_rep("[load-file \"lizp.lizp\"]");
+	const char *code = "[do\n"
+					   "  [def! load-file\n"
+					   "    [fn* [f]\n"
+					   "      [eval [read-string [str \"[do \" [slurp f] \"\nnil]\n\"]]]]]\n"
+	                   "  [load-file \"lizp.lizp\"]]\n";
+	EVAL(READ(code, strlen(code)), repl_env);
 
 	// REPL
 	char buffer[2 * 1024];
 	while (1)
 	{
-		printf("LZP> ");
+		printf("LIZP> ");
 		if(!fgets(buffer, sizeof(buffer), stdin))
 			break;
 
