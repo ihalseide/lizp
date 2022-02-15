@@ -308,16 +308,12 @@ void apply (Cell *fn, Cell *args, Cell *env, Cell **val_out, Cell **env_out)
 	}
 }
 
+// The only false values are NULL, "nil" and "#f"
 int truthy (Cell *x)
 {
 	if (!x)
 		return 0;
-
-	if (!is_kind(x, CK_SYMBOL))
-		return 1;
-
-	const char *name = x->as_str;
-	return name != s_nil && name != s_false;
+	return !(is_kind(x, CK_SYMBOL) && (x->as_str == s_nil || x->as_str == s_false));
 }
 
 // Returns 1 or 0 for if it is a special form or not
