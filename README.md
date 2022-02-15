@@ -4,7 +4,7 @@ This is my own (work-in-progress) implementation of a Lisp programming language.
 
 ## Quick Start
 
-To get right into the REPL you just need 2 commands
+To get right into the REPL you just need Make and a C compiler:
 
 ```shell
 make
@@ -25,26 +25,27 @@ Lists can be written with any of the 3 bracket types below.
 The impemented special forms are:
 
 * [def! symbol expr]
-* [let\* [...] body]
-* [if condition then-do (optional else-do)]
-* [fn\* [...] body]
 * [do ...]
+* [fn\* [...] body]
+* [if condition then-do (optional else-do)]
+* [let\* [...] body]
 * [quote expr]
 
 ## Functions
 
-The built-in functions are:
-* [= x y]
-* [\* n1 n2]
+The built-in functions (defined by C code) are:
 * [+ n1 n2]
 * [- n1 n2]
 * [/ n1 n2]
 * [< n1 n2]
 * [<= n1 n2]
+* [= x y]
 * [> n1 n2]
 * [>= n1 n2]
+* [\* n1 n2]
 * [atom x]
 * [atom? x]
+* [concat ...]
 * [count list]
 * [deref atom]
 * [empty? x]
@@ -52,6 +53,7 @@ The built-in functions are:
 * [int? x]
 * [list ...]
 * [list? x]
+* [pair x y]
 * [pr-str ...]
 * [println ...]
 * [prn ...]
@@ -60,9 +62,8 @@ The built-in functions are:
 * [slurp file-name]
 * [str ...]
 * [swap! atom fn ...]
-* [pair x y]
-* [concat ...]
 
+The built-in fuctions (defined by lisp code) are:
 * [not x]
 * [/= x y]
 * [assert form]
