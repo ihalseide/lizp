@@ -1,40 +1,38 @@
 ;;;; This file can be loaded by the main program
 
+[def! *features* [quote [LIZP]]]
 
+;;; Boolean not
 [def! not [fn* [x] [if x #f #t]]]
 
-;; Not equal
+;;; Not equal
 [def! /= [fn* [x y] [not [= x y]]]]
 
-;; Assert true. Used for making sure that a quoted form is true
+;;; Assert true. Used for making sure that a quoted form is true
 [def! assert
   [fn* [x]
     [if [not [eval x]]
         [println "Assertion failed:" x "\n"]
         #t]]]
 
-;;; Do some tests...
-
+;; Do some assertion tests
 [assert #t]
 [assert ""]
 [assert assert]
 [assert [quote [not #f]]]
 [assert [quote [not nil]]]
-
 [assert [quote [/= #t #f]]]
 [assert [quote [/= #f nil]]]
 [assert [quote [/= #t nil]]]
 [assert [quote [/= "" nil]]]
 [assert [quote [/= "" "str"]]]
 [assert [quote [= "" ""]]]
-
 [assert [quote [= 0 0]]]
 [assert [quote [= = =]]]
 [assert [quote [= 3 [+ 1 2]]]]
 [assert [quote [= 3 [- 6 3]]]]
 [assert [quote [= 48 [* 6 8]]]]
 [assert [quote [= -3 [/ 9 -3]]]]
-
 [assert [quote [= [] []]]]
 [assert [quote [= [] [list]]]]
 [assert [quote [/= [] nil]]]
@@ -44,5 +42,6 @@
 [assert [quote [/= "string" "stringbig"]]]
 
 ;; Welcome message
-[println "LIZP loaded!\n"]
+[println "Welcome to the LIZP read-eval-print-loop\n"]
+[println "Theses *features* are available:" *features* "\n"]
 
