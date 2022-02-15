@@ -349,3 +349,37 @@ void fn_assoc (Cell *args, Cell *env, Cell **val_out)
 	}
 }
 
+void fn_first (Cell *args, Cell *env, Cell **val_out)
+{
+	Cell *a = args->as_pair.first;
+	if (is_kind(a, CK_PAIR))
+	{
+		if (is_empty_list(a))
+			*val_out = make_symbol(s_nil);
+		else
+			*val_out = a->as_pair.first;
+	}
+	else
+	{
+		printf("first : error : not a list\n");
+		*val_out = NULL;
+	}
+}
+
+void fn_rest (Cell *args, Cell *env, Cell **val_out)
+{
+	Cell *a = args->as_pair.first;
+	if (is_kind(a, CK_PAIR))
+	{
+		if (is_empty_list(a))
+			*val_out = make_symbol(s_nil);
+		else
+			*val_out = a->as_pair.rest;
+	}
+	else
+	{
+		printf("rest : error : not a list\n");
+		*val_out = NULL;
+	}
+}
+

@@ -666,6 +666,8 @@ Cell *init (int ncells, int nchars)
 	env_set_native_fn(env, "pair",        2, fn_pair);
 	env_set_native_fn(env, "concat",      0, fn_concat);
 	env_set_native_fn(env, "assoc",       2, fn_assoc);
+	env_set_native_fn(env, "first",       1, fn_first);
+	env_set_native_fn(env, "rest",        1, fn_rest);
 	return env;
 }
 

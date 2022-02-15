@@ -61,4 +61,8 @@ void fn_concat (Cell *args, Cell *env, Cell **val_out);
 
 void fn_assoc (Cell *args, Cell *env, Cell **val_out);
 
+void fn_first (Cell *args, Cell *env, Cell **val_out);
+
+void fn_rest (Cell *args, Cell *env, Cell **val_out);
+
 #endif /* _FUNCTION_H */

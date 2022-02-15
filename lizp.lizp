@@ -15,14 +15,23 @@
         [println `Assertion failed:' x `\n']
         #t]]]
 
+
+;;; Non-empty list predicate
+[def! some-list?
+  [fn* [x]
+    [if [list? x]
+        [not [empty? x]]
+		#f]]]
+
 ;;; See if an item, x, is in a list, lst
+;;; TODO: fix bug with nested lists
 [def! member?
   [fn* [x lst]
-    [if [empty? lst]
-	    #f
+    [if [some-list? lst]
 		[if [= x [first lst]]
 		    #t
-			[member? x [rest lst]]]]]]
+			[member? x [rest lst]]]
+		#f]]]
 
 ;; Do some assertion tests
 [assert #t]
