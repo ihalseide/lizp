@@ -50,13 +50,6 @@ int init_strings (int nchars)
 	return 0;
 }
 
-int symbol_eq (const Cell *s1, const Cell *s2)
-{
-	return s1 && (s1->kind == CK_SYMBOL) && s1->as_str
-		&& s2 && (s2->kind == CK_SYMBOL) && s2->as_str
-		&& (strcmp(s1->as_str, s2->as_str) == 0);
-}
-
 // Create new string by joining together the
 // string representation of all of the arguments
 //   sep = character separator (no separator if it is 0)
@@ -72,14 +65,14 @@ Cell *string_join (const Cell *args, char sep, int readable)
 	int len = char_pool_cap - (char_free - char_pool);
 
 	// Print first item with no separator
-	if ((len > 1) && is_kind(args, CK_PAIR) && !is_empty_list(args))
+	if ((len > 1) && is_nonempty_list(args))
 	{
 		string_step((const char**) &pad, &len, pr_str(args->as_pair.first, pad, len, readable));
 		args = args->as_pair.rest;
 	}
 
 	// Print the remaining items with separators
-	while ((len > 1) && is_kind(args, CK_PAIR) && !is_empty_list(args))
+	while ((len > 1) && is_nonempty_list(args))
 	{
 		if (sep)
 			string_step((const char**) &pad, &len, print_char(sep, pad, len));

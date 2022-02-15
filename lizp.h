@@ -5,8 +5,6 @@
 
 extern Cell *repl_env;
 
-int symbol_eq (const Cell *s1, const Cell *s2);
-
 Cell *alist_assoc (const Cell *sym, Cell *alist);
 
 Cell *env_find (Cell *env, const Cell *sym);

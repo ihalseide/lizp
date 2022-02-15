@@ -156,7 +156,7 @@ Cell *make_string (const char *str)
 
 // A custom lisp function is a really just a list.
 // The form of that list is: (params env . body)
-Cell *make_fn (const Cell *params, const Cell *body, Cell *outer_env)
+Cell *make_fn (Cell *params, Cell *body, Cell *outer_env)
 {
 	if (!is_kind(params, CK_PAIR) || !body || !is_kind(outer_env, CK_PAIR))
 		return NULL;
@@ -228,7 +228,7 @@ Cell *make_bool_sym (int val)
 		return make_symbol(s_false);
 }
 
-int cell_eq (Cell *a, Cell *b)
+int cell_eq (const Cell *a, const Cell *b)
 {
 	// Nothing equals NULL
 	if (!a || !b)

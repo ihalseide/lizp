@@ -11,41 +11,33 @@
 #include "reader.h"
 #include "lizp_string.h"
 
-// TODO: tail calls still create a bunch of new cells and environments,
-//       so add garbage collection?
-
 // REPL environment
 Cell *repl_env = NULL;
 
-/* Code */
-
 // Find a symbol in an alist.
-// An alist is a list of the form ((symbol . value) (symbol . value) ....)
-Cell *alist_assoc (const Cell *sym, Cell *alist)
+// Returns the slot with [symbol | value]
+// An alist is a list of the form [[symbol . value] [symbol . value] ....]
+Cell *alist_assoc (const Cell *key, Cell *alist)
 {
 	// Validate inputs
-	if (!is_kind(sym, CK_SYMBOL) || !is_kind(alist, CK_PAIR))
+	if (!key || !is_kind(alist, CK_PAIR))
 		return NULL;
-
-	Cell *result = NULL;
 
 	// Iterate through the list
 	Cell *p = alist;
 	while (is_nonempty_list(p))
 	{
-		// Check if slot has same symbol name
+		// Check if slot has same key
 		Cell *slot = p->as_pair.first;
-		if (symbol_eq(slot->as_pair.first, sym))
-		{
-			result = slot;
-			break;
-		}
+		if (is_kind(slot, CK_PAIR) && cell_eq(slot->as_pair.first, key))
+			return slot;
 
 		// Next
 		p = p->as_pair.rest;
 	}
 
-	return result;
+	// Not found
+	return NULL;
 }
 
 // Find the innermost env which contains symbol
@@ -667,6 +659,7 @@ Cell *init (int ncells, int nchars)
 	env_set_native_fn(env, "swap!",       0, fn_swap_bang);
 	env_set_native_fn(env, "pair",        2, fn_pair);
 	env_set_native_fn(env, "concat",      0, fn_concat);
+	env_set_native_fn(env, "assoc",       2, fn_assoc);
 	return env;
 }
 

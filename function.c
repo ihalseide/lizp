@@ -328,3 +328,24 @@ void fn_concat (Cell *args, Cell *env, Cell **val_out)
 	*val_out = list;
 }
 
+void fn_assoc (Cell *args, Cell *env, Cell **val_out)
+{
+	if (!is_kind(args->as_pair.rest->as_pair.first, CK_PAIR))
+	{
+		printf("assoc : error : second argument must be a list\n");
+		*val_out = make_symbol(s_nil);
+		return;
+	}
+
+	Cell *slot = alist_assoc(args->as_pair.first, args->as_pair.rest->as_pair.first);
+	if (slot)
+	{
+		assert(is_kind(slot, CK_PAIR));
+		*val_out = slot;
+	}
+	else
+	{
+		*val_out = make_symbol(s_nil);
+	}
+}
+

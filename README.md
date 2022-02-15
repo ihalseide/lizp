@@ -68,3 +68,6 @@ The built-in fuctions (defined by lisp code) are:
 * [/= x y]
 * [assert form]
 
+// TODO: tail calls still create a bunch of new cells and environments,
+//       so add garbage collection?
+

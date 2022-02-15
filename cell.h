@@ -35,8 +35,8 @@ struct cell
 		} as_native_fn;
 		struct
 		{
-			const Cell *params;
-			const Cell *ast;
+			Cell *params;
+			Cell *ast;
 			Cell *env;
 		} as_fn;
 	};
@@ -66,7 +66,7 @@ Cell *make_symbol (const char *str);
 
 Cell *make_string (const char *str);
 
-Cell *make_fn (const Cell *params, const Cell *body, Cell *outer_env);
+Cell *make_fn (Cell *params, Cell *body, Cell *outer_env);
 
 Cell *make_empty_list ();
 
@@ -82,6 +82,6 @@ Cell *list_pop (Cell **list);
 
 Cell *make_bool_sym (int val);
 
-int cell_eq (Cell *a, Cell *b);
+int cell_eq (const Cell *a, const Cell *b);
 
 #endif /* _CELL_H */

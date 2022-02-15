@@ -20,15 +20,11 @@ int print_cstr (char *s, char *out, int length)
 {
 	// Validate inputs
 	if ((s == NULL) || (out == NULL) || (length <= 0))
-	{
 		return 0;
-	}
 
 	int i;
 	for (i = 0; s[i] && i < length; i++)
-	{
 		out[i] = s[i];
-	}
 	return i;
 }
 
