@@ -1,5 +1,5 @@
-#ifndef _CELLS_H
-#define _CELLS_H
+#ifndef _CELL_H
+#define _CELL_H
 
 enum Cell_kind
 {
@@ -74,24 +74,14 @@ int is_empty_list (const Cell *x);
 
 int is_nonempty_list (const Cell *x);
 
-int list_length (Cell *list);
+int list_length (const Cell *list);
 
 void list_push (Cell *item, Cell **list);
 
 Cell *list_pop (Cell **list);
 
-int iter_remember (void);
+Cell *make_bool_sym (int val);
 
-Cell *list_iter_get_node (void);
+int cell_eq (Cell *a, Cell *b);
 
-int list_iter_begin (Cell *with_list);
-
-int list_iter_endp (void);
-
-Cell *list_iter_next (void);
-
-Cell *list_iter_peek (void);
-
-void list_iter_finish (void);
-
-#endif /* _CELLS_H */
+#endif /* _CELL_H */

@@ -4,12 +4,8 @@
 #include <ctype.h>
 #include <assert.h>
 
-#include "cells.h"
-
-/* List iteration state */
-static Cell *iter_list = NULL;
-static Cell *iter_node = NULL;
-static Cell *iter_stack = NULL;
+#include "cell.h"
+#include "lizp_string.h"
 
 /* Cell allocator */
 static Cell *cell_pool = NULL;
@@ -86,7 +82,6 @@ Cell *cell_init (enum Cell_kind k)
 	Cell *x = cell_alloc();
 	if (x)
 		x->kind = k;
-
 	return x;
 }
 
@@ -192,19 +187,12 @@ int is_nonempty_list (const Cell *x)
 	return is_kind(x, CK_PAIR) && !is_empty_list(x);
 }
 
-int list_length (Cell *list)
+int list_length (const Cell *list)
 {
-	int i = 0;
-	if (list_iter_begin(list))
-	{
-		while (!list_iter_endp())
-		{
-			i++;
-			list_iter_next();
-		}
-		list_iter_finish();
-	}
-	return i;
+	int n;
+	for (n = 0; is_nonempty_list(list); n++)
+		list = list->as_pair.rest;
+	return n;
 }
 
 // Push an item in front of a list (which may be empty)
@@ -232,92 +220,49 @@ Cell *list_pop (Cell **list)
 	return val;
 }
 
-// Returns:
-//   1 : success
-//   0 : fail
-int iter_remember (void)
+Cell *make_bool_sym (int val)
 {
-	// Needs a valid list for the stack
-	if (!iter_stack)
-		iter_stack = make_empty_list();
-	if (!iter_stack)
-		return 0;
-
-	// Needs to be able to create a new entry
-	if (iter_list)
-	{
-		Cell *record = make_pair(iter_list, iter_node);
-		if (!record)
-			return 0;
-		list_push(record, &iter_stack);
-	}
-
-	return 1;
-}
-
-Cell *list_iter_get_node (void)
-{
-	if (!iter_list)
-		return NULL;
-	return iter_node;
-}
-
-// Returns:
-//   1 : success
-//   0 : fail
-int list_iter_begin (Cell *with_list)
-{
-	if (!is_kind(with_list, CK_PAIR))
-		return 0;
-	
-	// Maintain a stack of lists that are being iterated
-	if (!iter_remember())
-		return 0;
-
-	iter_list = with_list;
-	iter_node = with_list;
-	return 1;
-}
-
-int list_iter_endp (void)
-{
-	return !is_nonempty_list(iter_node);
-}
-
-Cell *list_iter_next (void)
-{
-	if (list_iter_endp())
-		return NULL;
-	Cell *val = iter_node->as_pair.first;
-	iter_node = iter_node->as_pair.rest;
-	return val;
-}
-
-Cell *list_iter_peek (void)
-{
-	if (list_iter_endp())
-		return NULL;
-	return iter_node->as_pair.first;
-}
-
-// Finish iterating the current list
-void list_iter_finish (void)
-{
-	// Pop the list stack (if any)
-	if (is_kind(iter_stack, CK_PAIR) && !is_empty_list(iter_stack))
-	{
-		Cell *record = list_pop(&iter_stack);
-
-		iter_list = record->as_pair.first;
-		iter_node = record->as_pair.rest;
-
-		// Done with this pair
-		cell_free(record);
-	}
+	if (val)
+		return make_symbol(s_true);
 	else
+		return make_symbol(s_false);
+}
+
+int cell_eq (Cell *a, Cell *b)
+{
+	// Nothing equals NULL
+	if (!a || !b)
+		return 0;
+
+	// Compare pointers
+	if (a == b)
+		return 1;
+
+	// Must be the same kind
+	if (a->kind != b->kind)
+		return 0;
+
+	switch (a->kind)
 	{
-		iter_list = NULL;
-		iter_node = NULL;
+		case CK_INT:
+			return a->as_int == b->as_int;
+		case CK_SYMBOL:
+		case CK_STRING:
+			return a->as_str == b->as_str;
+		case CK_FUNC:
+			return 0;
+		case CK_NATIVE_FUNC:
+			return (a->as_native_fn.func == b->as_native_fn.func)
+				&& (a->as_native_fn.n_params == b->as_native_fn.n_params);
+		case CK_PAIR:
+			if (is_empty_list(a))
+				return is_empty_list(b);
+			else
+				return cell_eq(a->as_pair.first, b->as_pair.first)
+					&& cell_eq(a->as_pair.rest, b->as_pair.rest);
+		default:
+			assert(0 && "invalid cell kind");
+			return 0;
 	}
 }
 
