@@ -15,6 +15,15 @@
         [println "Assertion failed:" x "\n"]
         #t]]]
 
+;;; See if an item, x, is in a list, lst
+[def! member?
+  [fn* [x lst]
+    [if [empty? lst]
+	    #f
+		[if [= x [first lst]]
+		    #t
+			[member? x [rest lst]]]]]]
+
 ;; Do some assertion tests
 [assert #t]
 [assert ""]
@@ -42,6 +51,6 @@
 [assert [quote [/= "string" "stringbig"]]]
 
 ;; Welcome message
-[println "Welcome to the LIZP read-eval-print-loop\n"]
-[println "Theses *features* are available:" *features* "\n"]
+[println "Welcome to the LIZP read-eval-print-loop.\n"]
+[println "These *features* are available:" *features* ".\n"]
 
