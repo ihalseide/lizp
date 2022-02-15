@@ -9,8 +9,9 @@
 int char_is_symbol (char c)
 {
 	return (c > ' ')
-		&& (c != '"') && (c != '|') && (c != '[') && (c != ']')
-		&& (c != ';') && (c != ',') && (c != '.');
+		&& (c != '`') && (c != '\'')
+		&& (c != ';')
+		&& (c != '|') && (c != '[') && (c != ']');
 }
 
 int parse_int (const char *start, int length, int *out)
@@ -47,6 +48,7 @@ int parse_int (const char *start, int length, int *out)
 }
 
 // Create a string cell that has the string value from reading a quoted string
+// Strings are delimited by 2 different characters, example: `hello, world'
 int read_string_literal (const char *start, int length, Cell **out)
 {
 	// Validate inputs
@@ -70,7 +72,7 @@ int read_string_literal (const char *start, int length, Cell **out)
 	string_step(&view, &length, 1);
 
 	// Read contents and process escape codes
-	while (*view && (*view != '"') && (length > 0) && (pad_len > 0))
+	while (*view && (*view != '\'') && (length > 0) && (pad_len > 0))
 	{
 		char c = *view;
 		if (*view == '\\')
@@ -254,19 +256,23 @@ int read_str (const char *start, int length, Cell **out)
 			*out = make_symbol(s_nil);
 			string_step(&view, &rem, read_until(view, rem, '\n'));
 			break;
+		case '\'':
+			*out = NULL;
+			printf("read error : unmatched closing delimiter `\\%c'\n", *view);
+			break;
 		case ']':
 			*out = NULL;
-			printf("read error : unmatched closing delimiter ']'\n");
+			printf("read error : unmatched closing delimiter `%c'\n", *view);
 			break;
 		case '|':
 			*out = NULL;
-			printf("read error : pair delimiter '|' should only be inside a list\n");
+			printf("read error : pair delimiter `|' should only be inside a list\n");
 			break;
 		case '[':
 			// Opening paren, for lists
 			string_step(&view, &rem, read_list(view, rem, out));
 			break;
-		case '"': 
+		case '`': 
 			// Quoted string literal
 			string_step(&view, &rem, read_string_literal(view, rem, out));
 			break;

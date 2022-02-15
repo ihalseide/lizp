@@ -71,11 +71,9 @@ Cell *env_get (Cell *env, Cell *sym)
 	// Find the environment which contains the symbol
 	env = env_find(env, sym);
 	if (env)
-		// Return the slot if environment was found
 		return alist_assoc(sym, env->as_pair.first);
 
 	// Symbol not found
-	printf("env_get : error : symbol undefined\n");
 	return NULL;
 }
 
@@ -104,6 +102,8 @@ int env_set (Cell *env, Cell *sym, Cell *val)
 		// Symbol undefined.
 		// Push the new (symbol . value) pair to the env
 		slot = make_pair(sym, val);
+		if (!slot)
+			return 0;
 		list_push(slot, &(env->as_pair.first));
 	}
 
@@ -237,10 +237,15 @@ Cell *eval_ast (Cell *ast, Cell *env)
 				// Get the value out of the environment's slot
 				Cell *slot = env_get(env, ast);
 				if (slot)
+				{
 					return slot->as_pair.rest;
+				}
+				else
+				{
 
-				printf("eval_ast : error : undefined symbol '%s'\n", ast->as_str);
-				return NULL;
+					printf("eval_ast : error : undefined symbol `%s'\n", ast->as_str);
+					return NULL;
+				}
 			}
 		case CK_INT:
 		case CK_STRING:
@@ -266,19 +271,14 @@ void apply (Cell *fn, Cell *args, Cell *env, Cell **val_out, Cell **env_out)
 		return;
 	}
 
-	// If the value is NULL, there was an error
-	*val_out = NULL;
-	// If the env is not NULL, evaluation needs to be continued
-	// with the env
-	*env_out = NULL;
-
 	switch (fn->kind)
 	{
 		case CK_NATIVE_FUNC:
 			// Apply a built-in native C function
+			// Note: when n_params == 0, that means the function is variadic
 			if (fn->as_native_fn.n_params && (list_length(args) != fn->as_native_fn.n_params))
 			{
-				printf("apply : error : native function is defined only with %d parameters\n", fn->as_native_fn.n_params);
+				printf("apply : error : native function requires %d parameters\n", fn->as_native_fn.n_params);
 				return;
 			}
 
@@ -292,18 +292,27 @@ void apply (Cell *fn, Cell *args, Cell *env, Cell **val_out, Cell **env_out)
 				break;
 			}
 
+			// Call it
 			fn->as_native_fn.func(args, env, val_out);
+			*env_out = NULL;
 			break;
 		case CK_FUNC:
 			// Apply lisp function created by fn*
 			env = env_create(fn->as_fn.env, fn->as_fn.params, args);
 			if (!env)
+			{
+				*env_out = NULL;
+				*val_out = NULL;
 				return;
+			}
 			*val_out = fn->as_fn.ast;
 			*env_out = env;
 			break;
-		default: // Error: not a function
+		default:
+			// Error: not a function
 			printf("apply : error : first item in list is not a function\n");
+			*env_out = NULL;
+			*val_out = NULL;
 			break;
 	}
 }
@@ -611,6 +620,7 @@ void rep (const char *start, int length, Cell *env)
 }
 
 // For adding C functions to the environment
+// Note: when n_params == 0, that means the function is variadic
 void env_set_native_fn (Cell *env, const char *name, int n_params, Native_fn func)
 {
 	if (!env || !name || n_params < 0 || !func)

@@ -15,8 +15,8 @@ int main (void)
 	const char *code = "[do\n"
 					   "  [def! load-file\n"
 					   "    [fn* [f]\n"
-					   "      [eval [read-string [str \"[do \" [slurp f] \"\nnil]\n\"]]]]]\n"
-	                   "  [load-file \"lizp.lizp\"]]\n";
+					   "      [eval [read-string [str `[do ' [slurp f] `\nnil]\n']]]]]\n"
+	                   "  [load-file `lizp.lizp']]\n";
 	EVAL(READ(code, strlen(code)), repl_env);
 
 	// REPL
