@@ -7,17 +7,18 @@
 int main (void)
 {
 	// Initialize the REPL environment symbols
-	repl_env = init(8000, 8 * 1024);
+	repl_env = init(9000);
 	if (!repl_env)
 		return 1;
 
-	// Initialization lizp code
+	/* Initialization lizp code
 	const char *code = "[do\n"
 					   "  [def! load-file\n"
 					   "    [fn* [f]\n"
 					   "      [eval [read-string [str `[do ' [slurp f] `\nnil]\n']]]]]\n"
 	                   "  [load-file `lizp.lizp']]\n";
 	EVAL(READ(code, strlen(code)), repl_env);
+	*/
 
 	// REPL
 	char buffer[2 * 1024];

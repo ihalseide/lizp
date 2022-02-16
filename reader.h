@@ -7,7 +7,7 @@ int char_is_symbol (char c);
 
 int parse_int (const char *start, int length, int *out);
 
-int read_string_literal (const char *start, int length, Cell **out);
+int read_string_literal (const char *start, int length, int escape, Cell **out);
 
 int read_item (const char *start, int length, Cell **out);
 

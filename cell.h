@@ -3,13 +3,11 @@
 
 enum Cell_kind
 {
+	CK_INVALID,
+	CK_VOID,
 	CK_INT,
-	CK_STRING,
 	CK_SYMBOL,
-	CK_FUNC,
-	CK_NATIVE_FUNC,
 	CK_PAIR,
-	CK_ATOM,
 };
 
 typedef struct cell Cell;
@@ -20,59 +18,52 @@ struct cell
 	enum Cell_kind kind;
 	union
 	{
-		int as_int;
-		const char *as_str;
-		Cell *as_atom;
-		struct
+		int integer;           // CK_INT
+		const Cell *sym_name;  // CK_SYMBOL
+		const void *pointer;   // CK_VOID
+		struct                 // CK_PAIR
 		{
 			Cell *first;
 			Cell *rest;
-		} as_pair;
-		struct
-		{
-			int n_params;
-			Native_fn func;
-		} as_native_fn;
-		struct
-		{
-			Cell *params;
-			Cell *ast;
-			Cell *env;
-		} as_fn;
+		};
 	};
 };
 
+enum Cell_kind kind_of (const Cell *p);
+
+int cell_validp (const Cell *p);
+
+Cell *int_to_p (int a);
+
+int p_to_int (Cell *x);
+
 int init_cells (int ncells);
 
-Cell *cell_alloc ();
+Cell *cell_alloc (void);
 
-void cell_free (Cell *x);
+void cell_free (Cell *p);
 
 Cell *cell_init (enum Cell_kind k);
 
-int is_kind (const Cell *x, enum Cell_kind kind);
+int is_kind (const Cell *p, enum Cell_kind kind);
 
-int is_function (const Cell *x);
+int functionp (Cell *x);
 
 Cell *make_int (int n);
 
-Cell *make_native_fn (int n_params, Native_fn func);
+Cell *make_symbol (const Cell *name);
 
 Cell *make_pair (Cell *first, Cell *rest);
 
-Cell *make_atom (Cell *ref);
+Cell *make_empty_list (void);
 
-Cell *make_symbol (const char *str);
+Cell *make_void (const void *vp);
 
-Cell *make_string (const char *str);
+Cell *make_native_fn (int n_params, Native_fn func);
 
-Cell *make_fn (Cell *params, Cell *body, Cell *outer_env);
+int emptyp (const Cell *x);
 
-Cell *make_empty_list ();
-
-int is_empty_list (const Cell *x);
-
-int is_nonempty_list (const Cell *x);
+int nonempty_listp (const Cell *p);
 
 int list_length (const Cell *list);
 
@@ -80,8 +71,22 @@ void list_push (Cell *item, Cell **list);
 
 Cell *list_pop (Cell **list);
 
-Cell *make_bool_sym (int val);
-
 int cell_eq (const Cell *a, const Cell *b);
+
+Cell *string_to_list (const char *str);
+
+Cell *get_bool_sym (int v);
+
+Cell *alist_assoc (const Cell *key, Cell *alist);
+
+int nilp (const Cell *p);
+
+int truep (const Cell *p);
+
+int falsep (const Cell *p);
+
+int native_fnp (const Cell *p);
+
+int truthy (Cell *x);
 
 #endif /* _CELL_H */

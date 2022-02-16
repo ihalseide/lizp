@@ -7,10 +7,51 @@
 #include "cell.h"
 #include "lizp_string.h"
 
-/* Cell allocator */
+// Special cell sentinel values
+static Cell nil;
+static Cell bool_true;
+static Cell bool_false;
+static Cell sym_native_fn;
+
+// Cell allocator
 static Cell *cell_pool = NULL;
 static int cell_pool_cap = 0;
 
+enum Cell_kind kind_of (const Cell *p)
+{
+	if (cell_validp(p))
+		return p->kind;
+	else
+		return CK_INVALID;
+}
+
+// Valid cell pointer?
+int cell_validp (const Cell *p)
+{
+	if (cell_pool)
+		return p && (p >= cell_pool) && (p < (cell_pool + cell_pool_cap));
+	else
+		return 0;
+}
+
+Cell *int_to_p (int a)
+{
+	Cell *p = &cell_pool[a];
+	if (cell_validp(p))
+		return p;
+	else
+		return NULL;
+}
+
+int p_to_int (Cell *p)
+{
+	if (cell_validp(p))
+		return p - cell_pool;
+	else
+		return -1;
+}
+
+// Returns 0 upon success
 int init_cells (int ncells)
 {
 	assert(ncells > 0);
@@ -24,15 +65,21 @@ int init_cells (int ncells)
 	cell_pool_cap = ncells;
 
 	// Link the free cells together in a list
-	for (int i = 0; i < (cell_pool_cap - 1); i++)
-		cell_pool[i].as_pair.rest = &cell_pool[i + 1];
-	cell_pool[cell_pool_cap - 1].as_pair.rest = NULL;
+	// Note: int_to_p will make the last cell's next pointer
+	//       be NULL because the index is out of range.
+	for (int i = 0; i < cell_pool_cap; i++)
+	{
+		Cell *x = int_to_p(i);
+		x->kind = CK_PAIR;
+		x->first = NULL;
+		x->rest = int_to_p(i + 1);
+	}
 
 	return 0;
 }
 
 // Get a new cell
-Cell *cell_alloc ()
+Cell *cell_alloc (void)
 {
 	if (!cell_pool)
 	{
@@ -40,41 +87,36 @@ Cell *cell_alloc ()
 		return NULL;
 	}
 
-	Cell *x = cell_pool->as_pair.rest;
+	Cell *p = cell_pool->rest;
 
-	// Remove the cell from the free list
-	if (x)
+	if (cell_validp(p))
 	{
-		cell_pool->as_pair.rest = x->as_pair.rest;
+		// Remove the cell from the free list
+		cell_pool->rest = p->rest;
+		return p;
 	}
 	else
 	{
 		printf("cell_alloc : error : out of memory for cells\n");
 		return NULL;
 	}
-
-	return x;
 }
 
-void cell_free (Cell *x)
+void cell_free (Cell *p)
 {
-	if (!x)
+	if (cell_validp(p))
 	{
-		printf("cell_free : error : cannot free NULL\n");
+		// Turn x into a pair and put it into the free list
+		p->kind = CK_PAIR;
+		p->first = NULL;
+		p->rest = cell_pool->rest;
+		cell_pool->rest = p;
+	}
+	else
+	{
+		printf("cell_free : error : cannot free invalid pointer\n");
 		return;
 	}
-
-	if (!cell_pool)
-	{
-		printf("cell_free : error : cells not initialized\n");
-		return;
-	}
-
-	// Turn x into a pair and put it into the free list
-	x->kind = CK_PAIR;
-	x->as_pair.first = NULL;
-	x->as_pair.rest = cell_pool->as_pair.rest;
-	cell_pool->as_pair.rest = x;
 }
 
 Cell *cell_init (enum Cell_kind k)
@@ -85,113 +127,147 @@ Cell *cell_init (enum Cell_kind k)
 	return x;
 }
 
-int is_kind (const Cell *x, enum Cell_kind kind)
+int is_kind (const Cell *p, enum Cell_kind kind)
 {
-	return x && (x->kind == kind);
-}
-
-int is_function (const Cell *x)
-{
-	return is_kind(x, CK_FUNC) || is_kind(x, CK_NATIVE_FUNC);
+	return cell_validp(p) && (kind_of(p) == kind);
 }
 
 Cell *make_int (int n)
 {
-	Cell *x = cell_init(CK_INT);
-	if (x)
-		x->as_int = n;
-	return x;
+	Cell *p = cell_init(CK_INT);
+	if (cell_validp(p))
+		p->integer = n;
+	return p;
 }
 
-Cell *make_native_fn (int n_params, Native_fn func)
+Cell *make_symbol (const Cell *name)
 {
-	if (n_params < 0 || !func)
-		return NULL;
+	Cell *p = cell_init(CK_SYMBOL);
+	if (cell_validp(p))
+		p->sym_name = name;
+	return p;
+}
 
-	Cell *x = cell_init(CK_NATIVE_FUNC);
-	if (x)
-	{
-		x->as_native_fn.n_params = n_params;
-		x->as_native_fn.func = func;
-	}
-	return x;
+Cell *get_bool_sym (int v)
+{
+	if (v)
+		return &bool_true;
+	else
+		return &bool_false;
 }
 
 Cell *make_pair (Cell *first, Cell *rest)
 {
-	Cell *x = cell_init(CK_PAIR);
-	if (x)
+	Cell *p = cell_init(CK_PAIR);
+	if (cell_validp(p))
 	{
-		x->as_pair.first = first;
-		x->as_pair.rest = rest;
+		p->first = first;
+		p->rest = rest;
 	}
-	return x;
+	return p;
 }
 
-Cell *make_atom (Cell *ref)
+Cell *string_to_list (const char *str)
 {
-	Cell *x = cell_init(CK_ATOM);
-	if (x)
-	{
-		x->as_atom = ref;
-	}
-	return x;
-}
-
-Cell *make_symbol (const char *str)
-{
-	Cell *x = cell_init(CK_SYMBOL);
-	if (x)
-		x->as_str = str;
-	return x;
-}
-
-Cell *make_string (const char *str)
-{
-	Cell *x = cell_init(CK_STRING);
-	if (x)
-		x->as_str = str;
-	return x;
-}
-
-// A custom lisp function is a really just a list.
-// The form of that list is: (params env . body)
-Cell *make_fn (Cell *params, Cell *body, Cell *outer_env)
-{
-	if (!is_kind(params, CK_PAIR) || !body || !is_kind(outer_env, CK_PAIR))
+	Cell *list = make_empty_list();
+	if (!cell_validp(list))
 		return NULL;
 
-	Cell *x = cell_init(CK_FUNC);
-	if (x)
+	Cell *p = list;
+	if (*str)
 	{
-		x->as_fn.params = params;
-		x->as_fn.ast = body;
-		x->as_fn.env = outer_env;
+		p->first = make_int(*str);
+		str++;
 	}
-	return x;
+	while (*str)
+	{
+		Cell *e = make_pair(make_int(*str), &nil);
+		if (cell_validp(e))
+		{
+			p->rest = e;
+			p = p->rest;
+			str++;
+		}
+		else
+		{
+			return NULL;
+		}
+	}
+
+	return list;
 }
 
-Cell *make_empty_list ()
+Cell *make_empty_list (void)
 {
-	return make_pair(NULL, NULL);
+	return make_pair(NULL, &nil);
 }
 
+Cell *make_void (const void *vp)
+{
+	Cell *p = cell_init(CK_VOID);
+	if (p)
+		p->pointer = vp;
+	return p;
+}
+
+// Function for C code
+Cell *make_native_fn (int n_params, Native_fn func)
+{
+	return make_pair(&sym_native_fn, make_pair(make_int(n_params), make_void(func)));
+}
+
+int native_fnp (const Cell *p)
+{
+	if (!is_kind(p, CK_PAIR))
+		return 0;
+
+	return p->first == &sym_native_fn;
+}
+
+// The only valid false values nil and #f
+int truthy (Cell *x)
+{
+	if (!cell_validp(x))
+		return 0;
+	else
+		return x != &nil && x != &bool_false;
+}
+
+// Is nil?
+int nilp (const Cell *p)
+{
+	return p == &nil;
+}
+
+// Is #t?
+int truep (const Cell *p)
+{
+	return p == &bool_true;
+}
+
+// Is #f?
+int falsep (const Cell *p)
+{
+	return p == &bool_false;
+}
+
+// Is empty list?
 // Note: NULL is not considered a list
-int is_empty_list (const Cell *x)
+int emptyp (const Cell *p)
 {
-	return is_kind(x, CK_PAIR) && (x->as_pair.first == NULL);
+	return is_kind(p, CK_PAIR) && (p->first == NULL);
 }
 
-int is_nonempty_list (const Cell *x)
+int nonempty_listp (const Cell *p)
 {
-	return is_kind(x, CK_PAIR) && !is_empty_list(x);
+	return is_kind(p, CK_PAIR) && !emptyp(p);
 }
 
 int list_length (const Cell *list)
 {
 	int n;
-	for (n = 0; is_nonempty_list(list); n++)
-		list = list->as_pair.rest;
+	for (n = 0; nonempty_listp(list); n++)
+		list = list->rest;
 	return n;
 }
 
@@ -202,9 +278,9 @@ void list_push (Cell *item, Cell **list)
 	if (!item || !is_kind(*list, CK_PAIR))
 		return;
 
-	if (is_empty_list(*list))
+	if (emptyp(*list))
 		// An empty list has nothing in the first slot yet
-		(*list)->as_pair.first = item;
+		(*list)->first = item;
 	else
 		*list = make_pair(item, *list);
 }
@@ -212,57 +288,86 @@ void list_push (Cell *item, Cell **list)
 // Remove and return the item in the front of a list
 Cell *list_pop (Cell **list)
 {
-	if (!is_kind(*list, CK_PAIR) || is_empty_list(*list))
+	if (!is_kind(*list, CK_PAIR) || emptyp(*list))
 		return NULL;
 
-	Cell *val = (*list)->as_pair.first;
-	*list = (*list)->as_pair.rest;
+	Cell *val = (*list)->first;
+	*list = (*list)->rest;
 	return val;
-}
-
-Cell *make_bool_sym (int val)
-{
-	if (val)
-		return make_symbol(s_true);
-	else
-		return make_symbol(s_false);
 }
 
 int cell_eq (const Cell *a, const Cell *b)
 {
-	// Nothing equals NULL
-	if (!a || !b)
-		return 0;
-
-	// Compare pointers
-	if (a == b)
-		return 1;
-
-	// Must be the same kind
-	if (a->kind != b->kind)
-		return 0;
-
-	switch (a->kind)
+	while (1)
 	{
-		case CK_INT:
-			return a->as_int == b->as_int;
-		case CK_SYMBOL:
-		case CK_STRING:
-			return a->as_str == b->as_str;
-		case CK_FUNC:
+		// Nothing equals NULL
+		if (!a || !b)
 			return 0;
-		case CK_NATIVE_FUNC:
-			return (a->as_native_fn.func == b->as_native_fn.func)
-				&& (a->as_native_fn.n_params == b->as_native_fn.n_params);
-		case CK_PAIR:
-			if (is_empty_list(a))
-				return is_empty_list(b);
-			else
-				return cell_eq(a->as_pair.first, b->as_pair.first)
-					&& cell_eq(a->as_pair.rest, b->as_pair.rest);
-		default:
-			assert(0 && "invalid cell kind");
+
+		// Compare pointers
+		if (a == b)
+			return 1;
+
+		// Must be the same kind
+		if (a->kind != b->kind)
 			return 0;
+
+		switch (a->kind)
+		{
+			case CK_INT:
+				return a->integer == b->integer;
+			case CK_PAIR:
+				if (emptyp(a))
+				{
+					return emptyp(b);
+				}
+				else if (!cell_eq(a->first, b->first))
+				{
+					return 0;
+				}
+				else
+				{
+					// Tail call
+					a = a->rest;
+					b = b->rest;
+					continue;
+				}
+			case CK_SYMBOL:
+				// Compare pointers
+				return a->sym_name == b->sym_name;
+			case CK_VOID:
+				// Just compare pointers
+				return a->pointer == b->pointer;
+			default:
+				assert(0 && "invalid cell kind");
+				return 0;
+		}
 	}
+}
+
+// Find a symbol in an alist.
+// Returns the slot with [symbol | value]
+// An alist is a list of the form [[symbol . value] [symbol . value] ....]
+Cell *alist_assoc (const Cell *key, Cell *alist)
+{
+	// Validate inputs
+	if (!key || !is_kind(alist, CK_PAIR))
+		return NULL;
+
+	// Iterate through the list
+	Cell *p = alist;
+	while (nonempty_listp(p))
+	{
+		// Check if slot has same key
+		Cell *slot = p->first;
+		if (is_kind(slot, CK_PAIR) && cell_eq(slot->first, key))
+			return slot;
+
+		// Next
+		p = p->rest;
+	}
+
+	// Not found
+	return NULL;
 }
 

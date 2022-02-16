@@ -3,12 +3,10 @@ COpts = -std=c99 -Wall -g
 
 default: lizp
 
-lizp: main.c lizp_string.o cell.o function.o reader.o printer.o lizp.o
+lizp: main.c lizp_string.o cell.o function.o reader.o printer.o lizp.o symbol.o env.o
 	$(CC) $(COpts) -o $@ $^
 
-%.c: %.h
-
-%.o: %.c
+%.o: %.c %.h
 	$(CC) $(COpts) -c $^
 
 clean:

@@ -17,201 +17,41 @@ const char *s_nil = "nil",
 	  *s_do       = "do",
 	  *s_quote    = "quote";
 
-// String memory (holds the actual characters):
-char *char_pool = NULL;
-char *char_free = NULL;
-int char_pool_cap = 0;
-
-// Strings interned
-Cell *string_list = NULL;
-
-// Return 0 upon success
-int init_strings (int nchars)
+Cell *string_join (Cell *items, char sep, int readable)
 {
-	char_pool = malloc(nchars);
-	if (!char_pool)
-		return 1;
+	Cell *p_items = items;
 
-	char_free = char_pool;
-	char_pool_cap = nchars;
+	Cell *result = make_empty_list();
+	Cell *p_result = result;
 
-	// Set up the internal string list
-	string_list = make_pair(make_string(""), NULL);
-	insert_string(s_nil);
-	insert_string(s_true);
-	insert_string(s_false);
-	insert_string(s_def_bang);
-	insert_string(s_fn_star);
-	insert_string(s_let_star);
-	insert_string(s_do);
-	insert_string(s_if);
-	insert_string(s_quote);
-
-	return 0;
-}
-
-// Create new string by joining together the
-// string representation of all of the arguments
-//   sep = character separator (no separator if it is 0)
-//   readable = whether to print readably
-Cell *string_join (const Cell *args, char sep, int readable)
-{
-	// Validate arguments
-	if (!args)
-		return 0;
-
-	// Use the char pool as a space to write in (like reading string literals)
-	char *pad = char_free;
-	int len = char_pool_cap - (char_free - char_pool);
-
-	// Print first item with no separator
-	if ((len > 1) && is_nonempty_list(args))
+	// Do the first item without separator
+	if (is_kind(p_result, CK_PAIR) && nonempty_listp(p_items))
 	{
-		string_step((const char**) &pad, &len, pr_str(args->as_pair.first, pad, len, readable));
-		args = args->as_pair.rest;
-	}
-
-	// Print the remaining items with separators
-	while ((len > 1) && is_nonempty_list(args))
-	{
-		if (sep)
-			string_step((const char**) &pad, &len, print_char(sep, pad, len));
-		string_step((const char**) &pad, &len, pr_str(args->as_pair.first, pad, len, readable));
-		args = args->as_pair.rest;
-	}
-
-	// This will use the characters we already
-	// wrote without re-copying them
-	return intern_string(char_free, pad - char_free);
-}
-
-int string_can_alloc (int length)
-{
-	return char_free && (char_free + length) < (char_pool + char_pool_cap);
-}
-
-// Get space for a string of certain length
-char *string_alloc (int length)
-{
-	// Make sure there is enough memory
-	if (!string_can_alloc(length))
-		return NULL;
-
-	char *v = char_free;
-	char_free += length;
-	return v;
-}
-
-// Add string to the char_pool.
-// Does not modify the char_free pointer.
-char *string_pool_write (const char *start, int length)
-{
-	// Validate inputs
-	if (!start || length < 0 || !char_free)
-		return NULL;
-
-	// +1 becuase there needs to be room for
-	// the extra null terminator char too
-	char *new = string_alloc(length + 1);
-	if (!new)
-		return NULL;
-
-	// Copy string unless its already in the pool
-	// because the start already points there.
-	if (start != char_free)
-		// Only return the new string if memcpy succeeds
-		if (!memcpy(new, start, length))
-			return NULL;
-
-	// Add null terminator
-	new[length] = '\0';
-
-	return new;
-}
-
-// For writing C strings
-char *string_pool_write_c (const char *str)
-{
-	return string_pool_write(str, strlen(str));
-}
-
-// See if a string cells string is equal to the given str
-int string_equal (const Cell *string_cell, const char *str, int length)
-{
-	// Validate arguments
-	if (!string_cell || !str || length < 0)
-		return 0;
-
-	// Compare pointer addresses
-	const char *str2 = string_cell->as_str;
-	if (str2 == str)
-		return 1;
-
-	// Compare lengths
-	int cs_length = strlen(str2);
-	if (length != cs_length)
-		return 0;
-
-	// Compare contents
-	return strncmp(string_cell->as_str, str, length) == 0;
-}
-
-Cell *find_string (const char *start, int length)
-{
-	// Search whole string list for equivalent string
-	Cell *p = string_list;
-	while (is_kind(p, CK_PAIR) && !is_empty_list(p))
-	{
-		Cell *string = p->as_pair.first;
-		assert(is_kind(string, CK_STRING));
-
-		// Found?
-		if (string_equal(string, start, length))
-			return string;
+		p_result->first = p_items->first;
 
 		// Next
-		p = p->as_pair.rest;
+		p_items = p_items->rest;
+		p_result = p_result->rest;
 	}
 
-	// Not found
-	return NULL;
-}
+	Cell *separator = make_int(sep);
 
-// Add a C string to string list
-Cell *insert_string (const char *str)
-{
-	// Validate arguments
-	if (!str)
-		return NULL;
+	// Do the rest of the items with separator
+	while (is_kind(p_result, CK_PAIR) && nonempty_listp(p_items))
+	{
+		// Add separator
+		p_result->rest = make_pair(separator, NULL);
+		p_result = p_result->rest;
 
-	// Make string cell
-	Cell *s = make_string(str);
-	if (!s)
-		return NULL;
+		// Add item
+		p_result->rest = make_pair(p_items->first, NULL);
 
-	// Insert new node to string list
-	Cell *node = make_pair(s, string_list->as_pair.rest);
-	if (!node)
-		return NULL;
-	string_list->as_pair.rest = node;
+		// Next
+		p_items = p_items->rest;
+		p_result = p_result->rest;
+	}
 
-	return s;
-}
-
-// Returns internal string cell
-Cell *intern_string (const char *start, int length)
-{
-	// If string is already interned, return that value
-	Cell *result = find_string(start, length);
-	if (result)
-		return result;
-
-	// Make (C string) copy of the string
-	char *i_string = string_pool_write(start, length);
-	if (!i_string)
-		return NULL;
-
-	return insert_string(i_string);
+	return result;
 }
 
 // For string reading and writing

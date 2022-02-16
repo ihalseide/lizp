@@ -5,6 +5,8 @@
 #include <assert.h>
 
 #include "cell.h"
+#include "env.h"
+#include "symbol.h"
 #include "function.h"
 #include "lizp.h"
 #include "printer.h"
@@ -13,156 +15,6 @@
 
 // REPL environment
 Cell *repl_env = NULL;
-
-// Find a symbol in an alist.
-// Returns the slot with [symbol | value]
-// An alist is a list of the form [[symbol . value] [symbol . value] ....]
-Cell *alist_assoc (const Cell *key, Cell *alist)
-{
-	// Validate inputs
-	if (!key || !is_kind(alist, CK_PAIR))
-		return NULL;
-
-	// Iterate through the list
-	Cell *p = alist;
-	while (is_nonempty_list(p))
-	{
-		// Check if slot has same key
-		Cell *slot = p->as_pair.first;
-		if (is_kind(slot, CK_PAIR) && cell_eq(slot->as_pair.first, key))
-			return slot;
-
-		// Next
-		p = p->as_pair.rest;
-	}
-
-	// Not found
-	return NULL;
-}
-
-// Find the innermost env which contains symbol
-Cell *env_find (Cell *env, const Cell *sym)
-{
-	assert(is_kind(env, CK_PAIR) && is_kind(sym, CK_SYMBOL));
-
-	// Search up the environment hierarchy
-	// Note: env = [alist | outer]
-	while (is_nonempty_list(env))
-	{
-		// Search current environment
-		if (alist_assoc(sym, env->as_pair.first))
-			return env;
-
-		// Next
-		env = env->as_pair.rest;
-	}
-
-	return NULL;
-}
-
-// Get the innermost definition for the symbol.
-// Returns:
-//   when found -> the slot containing (symbol . value)
-//   when not found -> nil
-Cell *env_get (Cell *env, Cell *sym)
-{
-	assert(is_kind(env, CK_PAIR) && is_kind(sym, CK_SYMBOL));
-
-	// Find the environment which contains the symbol
-	env = env_find(env, sym);
-	if (env)
-		return alist_assoc(sym, env->as_pair.first);
-
-	// Symbol not found
-	return NULL;
-}
-
-// Returns whether it succeeded (1) or not (0)
-int env_set (Cell *env, Cell *sym, Cell *val)
-{
-	// Validate inputs.
-	if (!is_kind(env, CK_PAIR) || !is_kind(sym, CK_SYMBOL))
-		return 0;
-
-	// Do not allow nil, true, or false to be defined
-	if (sym->as_str == s_nil || sym->as_str == s_false || sym->as_str == s_true)
-		return 0;
-
-	// If there is already a symbol defined, change the value,
-	// otherwise add the new symbol with the value.
-	Cell *slot = alist_assoc(sym, env->as_pair.first);
-	if (slot)
-	{
-		// Symbol already defined.
-		// Change the value of the already present slot.
-		slot->as_pair.rest = val;
-	}
-	else
-	{
-		// Symbol undefined.
-		// Push the new (symbol . value) pair to the env
-		slot = make_pair(sym, val);
-		if (!slot)
-			return 0;
-		list_push(slot, &(env->as_pair.first));
-	}
-
-	return 1;
-}
-
-// An environment is a list of the form (alist . outer-env).
-// Create an environment with each item of the
-// "binds" list set to the corresponding item in the "exprs" list.
-Cell *env_create (Cell *env_outer, const Cell *binds, Cell *exprs)
-{
-	// Validate args (env_outer is allowed to be NULL)
-	if (env_outer && !is_kind(env_outer, CK_PAIR))
-	{
-		printf("env_create : error : invalid outer environment\n");
-		return NULL;
-	}
-
-	Cell *env = make_pair(make_empty_list(), env_outer);
-	if (!env)
-		return NULL;
-
-	// Create the bindings by iterating both lists
-	while (is_kind(binds, CK_PAIR) && is_kind(exprs, CK_PAIR) && !is_empty_list(binds) && !is_empty_list(exprs))
-	{
-		// Bind 1 pair
-		Cell *sym = binds->as_pair.first;
-		Cell *val = exprs->as_pair.first;
-
-		// Make sure it only binds symbols
-		if (!is_kind(sym, CK_SYMBOL))
-		{
-			printf("env_create : error : a member of the bindings list is not a symbol\n");
-			return NULL;
-		}
-		env_set(env, sym, val);
-
-		// Next
-		binds = binds->as_pair.rest;
-		exprs = exprs->as_pair.rest;
-	}
-
-	// Left over symbols in the bindings list
-	if (binds && !is_empty_list(binds))
-	{
-		printf("env_create : error : not enough values to bind to symbols list\n");
-		return NULL;
-	}
-
-	// Left over values in the exprs list
-	if (exprs && !is_empty_list(exprs))
-	{
-		printf("env_create : error : too many values to bind to symbols list\n");
-		return NULL;
-	}
-
-	return env;
-}
-
 
 // Does: Read a form from the stream
 // Returns: the form, which may be NULL
@@ -185,30 +37,30 @@ Cell *eval_each (Cell *list, Cell *env)
 	if (!is_kind(list, CK_PAIR) || !is_kind(env, CK_PAIR))
 		return NULL;
 
-	if (is_empty_list(list))
+	if (emptyp(list))
 		return list;
 
 	// Eval the first element
-	Cell *y = make_pair(EVAL(list->as_pair.first, env), NULL);
+	Cell *y = make_pair(EVAL(list->first, env), NULL);
 	Cell *p_y = y;
 
 	// eval the rest of the elements
-	list = list->as_pair.rest;
+	list = list->rest;
 	while (list && p_y)
 	{
 		if (!is_kind(list, CK_PAIR))
 		{
 			// dotted list
-			p_y->as_pair.rest = EVAL(list, env);
+			p_y->rest = EVAL(list, env);
 			break;
 		}
 
 		// Fill in next slot of y
-		p_y->as_pair.rest = make_pair(EVAL(list->as_pair.first, env), NULL);
+		p_y->rest = make_pair(EVAL(list->first, env), NULL);
 
 		// next
-		list = list->as_pair.rest;
-		p_y = p_y->as_pair.rest;
+		list = list->rest;
+		p_y = p_y->rest;
 	}
 
 	return y;
@@ -217,7 +69,7 @@ Cell *eval_each (Cell *list, Cell *env)
 Cell *eval_ast (Cell *ast, Cell *env)
 {
 	// Validate args
-	if (!ast || !env)
+	if (!cell_validp(ast) || !is_kind(env, CK_PAIR))
 		return NULL;
 
 	switch (ast->kind)
@@ -227,43 +79,37 @@ Cell *eval_ast (Cell *ast, Cell *env)
 			return eval_each(ast, env);
 		case CK_SYMBOL:
 			// Look up symbol's value...
-			if (ast->as_str == s_nil || ast->as_str == s_true || ast->as_str == s_false)
-			{
-				// These special symbols are self-evaluating
-				return ast;
-			}
-			else
+			// TODO: nil, true, false
+			// These special symbols are self-evaluating
 			{
 				// Get the value out of the environment's slot
 				Cell *slot = env_get(env, ast);
 				if (slot)
 				{
-					return slot->as_pair.rest;
+					return slot->rest;
 				}
 				else
 				{
 
-					printf("eval_ast : error : undefined symbol `%s'\n", ast->as_str);
+					printf("eval_ast : error : undefined symbol\n");
 					return NULL;
 				}
 			}
 		case CK_INT:
-		case CK_STRING:
-		case CK_FUNC:
-		case CK_NATIVE_FUNC:
-		case CK_ATOM:
 			// Self-evaluating values
 			return ast;
+		default:
+			// Invalid kind
+			return NULL;
 	}
-
-	// Invalid kind
-	return NULL;
 }
 
 // For proper tail-call recursion, the next ast and env are both returned for EVAL to use.
 // Null environment indicates that no further evaluation is needed
 void apply (Cell *fn, Cell *args, Cell *env, Cell **val_out, Cell **env_out)
 {
+	assert(0 && "not implemented");
+	/*
 	// Validate arguments
 	if (!fn || !is_kind(args, CK_PAIR) || !env || !val_out || !env_out)
 	{
@@ -287,7 +133,7 @@ void apply (Cell *fn, Cell *args, Cell *env, Cell **val_out, Cell **env_out)
 				// Special case for eval, because
 				// it only needs to do what EVAL already does.
 				// Don't even call eval because it's a dummy value.
-				*val_out = args->as_pair.first;
+				*val_out = args->first;
 				*env_out = repl_env; // Use the REPL environment instead of the current one?
 				break;
 			}
@@ -315,14 +161,7 @@ void apply (Cell *fn, Cell *args, Cell *env, Cell **val_out, Cell **env_out)
 			*val_out = NULL;
 			break;
 	}
-}
-
-// The only false values are NULL, "nil" and "#f"
-int truthy (Cell *x)
-{
-	if (!x)
-		return 0;
-	return !(is_kind(x, CK_SYMBOL) && (x->as_str == s_nil || x->as_str == s_false));
+	*/
 }
 
 // Returns 1 or 0 for if it is a special form or not
@@ -346,6 +185,8 @@ int eval_special (Cell *head, Cell *ast, Cell *env, Cell **ast_out, Cell **env_o
 		return 0;
 	assert(is_kind(ast, CK_PAIR));
 
+	assert(0 && "not implemented");
+	/*
 	const char *name = head->as_str;
 	if (name == s_def_bang)
 	{
@@ -356,14 +197,14 @@ int eval_special (Cell *head, Cell *ast, Cell *env, Cell **ast_out, Cell **env_o
 			return 1;
 		}
 
-		Cell *sym = ast->as_pair.first;
+		Cell *sym = ast->first;
 		if (!is_kind(sym, CK_SYMBOL))
 		{
 			printf("def! : error : argument 1 must be a symbol\n");
 			return 1;
 		}
 
-		Cell *val = EVAL(ast->as_pair.rest->as_pair.first, env);
+		Cell *val = EVAL(ast->rest->first, env);
 		if (!val)
 			return 1;
 
@@ -387,31 +228,31 @@ int eval_special (Cell *head, Cell *ast, Cell *env, Cell **ast_out, Cell **env_o
 		// Go through the bindings list and add the
 		// bindings to the environment
 		Cell *let_env = env_create(env, NULL, NULL);
-		Cell *p = ast->as_pair.first; // pointer to bindings list
+		Cell *p = ast->first; // pointer to bindings list
 		while (is_kind(p, CK_PAIR))
 		{
-			if (!is_kind(p->as_pair.rest, CK_PAIR))
+			if (!is_kind(p->rest, CK_PAIR))
 			{
 				// Error: odd amount of arguments in first list
 				printf("let* : error : requires an even amount of items in bindings list\n");
 				return 1;
 			}
-			if (!is_kind(p->as_pair.first, CK_SYMBOL))
+			if (!is_kind(p->first, CK_SYMBOL))
 			{
 				// Error: even element in bindings list not a symbol
 				printf("let* : error : requires even elements in bindings list to be symbols\n");
 				return 1;
 			}
 
-			env_set(let_env, p->as_pair.first, EVAL(p->as_pair.rest->as_pair.first, let_env));
+			env_set(let_env, p->first, EVAL(p->rest->first, let_env));
 
 			// Next pair (next twice)
-			p = p->as_pair.rest->as_pair.rest;
+			p = p->rest->rest;
 		}
 
 		// Tail call on the body expr
 		*env_out = let_env;
-		*ast_out = ast->as_pair.rest->as_pair.first;
+		*ast_out = ast->rest->first;
 		return 1;
 	}
 	else if (name == s_fn_star)
@@ -424,16 +265,16 @@ int eval_special (Cell *head, Cell *ast, Cell *env, Cell **ast_out, Cell **env_o
 		}
 
 		// Check that the parameter list is only symbols
-		Cell *p = ast->as_pair.first;
-		while (is_kind(p, CK_PAIR) && !is_empty_list(p))
+		Cell *p = ast->first;
+		while (is_kind(p, CK_PAIR) && !emptyp(p))
 		{
-			if (!is_kind(p->as_pair.first, CK_SYMBOL))
+			if (!is_kind(p->first, CK_SYMBOL))
 			{
 				// Error: parameter list must be all symbols
 				printf("fn* : error : items of parameter list must be symbols\n");
 				return 1;
 			}
-			if (p->as_pair.rest && !is_kind(p->as_pair.rest, CK_PAIR))
+			if (p->rest && !is_kind(p->rest, CK_PAIR))
 			{
 				// Something other than NULL or a list is next
 				printf("fn* : error : parameter list is not a proper list\n");
@@ -441,11 +282,11 @@ int eval_special (Cell *head, Cell *ast, Cell *env, Cell **ast_out, Cell **env_o
 			}
 
 			// Next
-			p = p->as_pair.rest;
+			p = p->rest;
 		}
 
 		// New function closure, no tail call
-		*ast_out = make_fn(ast->as_pair.first, ast->as_pair.rest->as_pair.first, env);
+		*ast_out = make_fn(ast->first, ast->rest->first, env);
 		return 1;
 	}
 	else if (name == s_if)
@@ -459,20 +300,20 @@ int eval_special (Cell *head, Cell *ast, Cell *env, Cell **ast_out, Cell **env_o
 			return 1;
 		}
 
-		Cell *cond = EVAL(ast->as_pair.first, env);
+		Cell *cond = EVAL(ast->first, env);
 		if (cond)
 		{
 			if (truthy(cond))
 			{
 				// Tail call with t-expr
 				*env_out = env;
-				*ast_out = ast->as_pair.rest->as_pair.first;
+				*ast_out = ast->rest->first;
 			}
-			else if (ast->as_pair.rest->as_pair.rest)
+			else if (ast->rest->rest)
 			{
 				// Tail call with f-expr
 				*env_out = env;
-				*ast_out = ast->as_pair.rest->as_pair.rest->as_pair.first;
+				*ast_out = ast->rest->rest->first;
 			}
 			else
 			{
@@ -488,16 +329,16 @@ int eval_special (Cell *head, Cell *ast, Cell *env, Cell **ast_out, Cell **env_o
 		// [do exprs...]
 
 		// Evaluate all but the last item
-		while (is_kind(ast, CK_PAIR) && !is_empty_list(ast) && ast->as_pair.rest)
+		while (is_kind(ast, CK_PAIR) && !emptyp(ast) && ast->rest)
 		{
-			EVAL(ast->as_pair.first, env);
-			ast = ast->as_pair.rest;
+			EVAL(ast->first, env);
+			ast = ast->rest;
 		}
 
 		// Has a last item, so do a tail call to evaluate that
-		if (is_kind(ast, CK_PAIR) && !is_empty_list(ast))
+		if (is_kind(ast, CK_PAIR) && !emptyp(ast))
 		{
-			*ast_out = ast->as_pair.first;
+			*ast_out = ast->first;
 			*env_out = env;
 		}
 		else
@@ -517,7 +358,7 @@ int eval_special (Cell *head, Cell *ast, Cell *env, Cell **ast_out, Cell **env_o
 			return 1;
 		}
 
-		*ast_out = ast->as_pair.first;
+		*ast_out = ast->first;
 		return 1;
 	}
 	else
@@ -525,6 +366,7 @@ int eval_special (Cell *head, Cell *ast, Cell *env, Cell **ast_out, Cell **env_o
 		// Not a known name for a special form
 		return 0;
 	}
+	*/
 }
 
 Cell *EVAL (Cell *ast, Cell *env)
@@ -544,13 +386,13 @@ Cell *EVAL (Cell *ast, Cell *env)
 			return eval_ast(ast, env);
 
 		// Empty list -> itself
-		if (is_empty_list(ast))
+		if (emptyp(ast))
 			return ast;
 
 		// Special form evaluation...
 		Cell *new_env = NULL;
 		Cell *new_ast = NULL;
-		if (eval_special(ast->as_pair.first, ast->as_pair.rest, env, &new_ast, &new_env))
+		if (eval_special(ast->first, ast->rest, env, &new_ast, &new_env))
 		{
 			if (!new_ast)
 				// Error in special form
@@ -572,8 +414,8 @@ Cell *EVAL (Cell *ast, Cell *env)
 		ast = eval_ast(ast, env);
 		if (!ast)
 			break;
-		Cell *fn = ast->as_pair.first;
-		Cell *args = ast->as_pair.rest;
+		Cell *fn = ast->first;
+		Cell *args = ast->rest;
 
 		// Make sure that the arguments are a list
 		if (!is_kind(args, CK_PAIR))
@@ -609,31 +451,46 @@ void rep (const char *start, int length, Cell *env)
 	Cell * form = READ(start, length);
 	if (form)
 	{
-		Cell * value = EVAL(form, env);
+		//Cell *value = EVAL(form, env);
+		Cell *value = form;
 		if (value)
 		{
 			PRINT(value);
 			return;
 		}
 	}
-	PRINT(make_string("no value"));
+
+	printf("no value\n");
 }
 
 // For adding C functions to the environment
 // Note: when n_params == 0, that means the function is variadic
 void env_set_native_fn (Cell *env, const char *name, int n_params, Native_fn func)
 {
-	if (!env || !name || n_params < 0 || !func)
-		return;
-	Cell *str = insert_string(name);
-	env_set(env, make_symbol(str->as_str), make_native_fn(n_params, func));
+	// Validate params
+	assert(env);
+	assert(name);
+	assert(n_params >= 0);
+	assert(func);
+
+	const Cell *sym = intern_symbol(string_to_list(name));
+	env_set(env, sym, make_native_fn(n_params, func));
 }
 
 // Returns global environment
-Cell *init (int ncells, int nchars)
+Cell *init (int ncells)
 {
-	init_cells(ncells);
-	init_strings(nchars);
+	if (init_cells(ncells))
+	{
+		printf("init : error could not initialize cells\n");
+		return NULL;
+	}
+
+	if (init_symbols())
+	{
+		printf("init : error could not initialize symbols\n");
+		return NULL;
+	}
 
 	// Setup the global environment now
 	Cell *env = env_create(NULL, NULL, NULL);
@@ -646,23 +503,12 @@ Cell *init (int ncells, int nchars)
 	env_set_native_fn(env, "=",           2, fn_eq);
 	env_set_native_fn(env, ">",           2, fn_gt);
 	env_set_native_fn(env, ">=",          2, fn_gte);
-	env_set_native_fn(env, "atom",        1, fn_atom);
-	env_set_native_fn(env, "atom?",       1, fn_atom_p);
 	env_set_native_fn(env, "count",       1, fn_count);
-	env_set_native_fn(env, "deref",       1, fn_deref);
 	env_set_native_fn(env, "empty?",      1, fn_empty_p);
 	env_set_native_fn(env, "eval",        1, fn_eval);
 	env_set_native_fn(env, "int?",        1, fn_int_p);
 	env_set_native_fn(env, "list",        0, fn_list);
 	env_set_native_fn(env, "list?",       1, fn_list_p);
-	env_set_native_fn(env, "pr-str",      0, fn_pr_str);
-	env_set_native_fn(env, "println",     0, fn_println);
-	env_set_native_fn(env, "prn",         0, fn_prn);
-	env_set_native_fn(env, "read-string", 1, fn_read_str);
-	env_set_native_fn(env, "reset!",      2, fn_reset_bang);
-	env_set_native_fn(env, "slurp",       1, fn_slurp);
-	env_set_native_fn(env, "str",         0, fn_str);
-	env_set_native_fn(env, "swap!",       0, fn_swap_bang);
 	env_set_native_fn(env, "pair",        2, fn_pair);
 	env_set_native_fn(env, "concat",      0, fn_concat);
 	env_set_native_fn(env, "assoc",       2, fn_assoc);
