@@ -4,18 +4,39 @@
 #include <ctype.h>
 
 #include "cell.h"
-#include "printer.h"
 #include "lizp_string.h"
 
-const char *s_nil = "nil",
-	  *s_false    = "#f",
-	  *s_true     = "#t",
-	  *s_def_bang = "def!",
-	  *s_let_star = "let*",
-	  *s_if       = "if",
-	  *s_fn_star  = "fn*",
-	  *s_do       = "do",
-	  *s_quote    = "quote";
+Cell *string_to_list (const char *str)
+{
+	Cell *list = make_empty_list();
+	if (!cell_validp(list))
+		return NULL;
+
+	Cell *p = list;
+	if (*str)
+	{
+		p->first = make_int(*str);
+		str++;
+	}
+	while (*str)
+	{
+		Cell *e = make_single_list(make_int(*str));
+		if (cell_validp(e))
+		{
+			p->rest = e;
+			p = p->rest;
+			str++;
+		}
+		else
+		{
+			return NULL;
+		}
+	}
+
+	// Set correct variant
+	list->var = CV_STRING;
+	return list;
+}
 
 Cell *string_join (Cell *items, char sep, int readable)
 {

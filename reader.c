@@ -266,6 +266,8 @@ int read_str (const char *start, int length, Cell **out)
 		case '"': 
 			// Quoted string literal
 			string_step(&view, &rem, read_string_literal(view, rem, 1, out));
+			if (cell_validp(*out))
+				(*out)->var = CV_STRING;
 			break;
 		default:
 			// Symbol or number

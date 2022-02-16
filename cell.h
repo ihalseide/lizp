@@ -10,12 +10,19 @@ enum Cell_kind
 	CK_PAIR,
 };
 
+enum Cell_variant
+{
+	CV_INVALID,
+	CV_STRING,
+};
+
 typedef struct cell Cell;
 typedef void (*Native_fn)(Cell* args, Cell *env, Cell **out);
 
 struct cell
 {
 	enum Cell_kind kind;
+	enum Cell_variant var;
 	union
 	{
 		int integer;           // CK_INT
@@ -28,6 +35,37 @@ struct cell
 		};
 	};
 };
+
+// Static symbols
+extern Cell sym_nil,
+	 sym_t,
+	 sym_f,
+	 sym_native_fn,
+	 sym_fn,
+	 sym_def_bang,
+	 sym_let_star,
+	 sym_fn_star,
+	 sym_if,
+	 sym_do,
+	 sym_quote;
+
+int init_symbols (void);
+
+const Cell *intern_find_symbol (const Cell *name);
+
+int intern_insert (Cell *sym);
+
+const Cell *intern_symbol (const Cell *name);
+
+int native_fnp (const Cell *p);
+
+int nilp (const Cell *p);
+
+int truep (const Cell *p);
+
+int falsep (const Cell *p);
+
+int truthy (Cell *x);
 
 enum Cell_kind kind_of (const Cell *p);
 
@@ -57,6 +95,8 @@ Cell *make_pair (Cell *first, Cell *rest);
 
 Cell *make_empty_list (void);
 
+Cell *make_single_list (Cell *p);
+
 Cell *make_void (const void *vp);
 
 Cell *make_native_fn (int n_params, Native_fn func);
@@ -79,14 +119,6 @@ Cell *get_bool_sym (int v);
 
 Cell *alist_assoc (const Cell *key, Cell *alist);
 
-int nilp (const Cell *p);
-
-int truep (const Cell *p);
-
-int falsep (const Cell *p);
-
-int native_fnp (const Cell *p);
-
-int truthy (Cell *x);
+int stringp (const Cell *p);
 
 #endif /* _CELL_H */

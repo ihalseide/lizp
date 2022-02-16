@@ -3,7 +3,7 @@ COpts = -std=c99 -Wall -g
 
 default: lizp
 
-lizp: main.c lizp_string.o cell.o function.o reader.o printer.o lizp.o symbol.o env.o
+lizp: main.c lizp_string.o cell.o function.o reader.o printer.o lizp.o env.o
 	$(CC) $(COpts) -o $@ $^
 
 %.o: %.c %.h
@@ -11,5 +11,6 @@ lizp: main.c lizp_string.o cell.o function.o reader.o printer.o lizp.o symbol.o 
 
 clean:
 	rm *.o
+	rm *.gch
 	rm lizp
 

@@ -6,7 +6,6 @@
 
 #include "cell.h"
 #include "env.h"
-#include "symbol.h"
 #include "function.h"
 #include "lizp.h"
 #include "printer.h"
@@ -483,12 +482,6 @@ Cell *init (int ncells)
 	if (init_cells(ncells))
 	{
 		printf("init : error could not initialize cells\n");
-		return NULL;
-	}
-
-	if (init_symbols())
-	{
-		printf("init : error could not initialize symbols\n");
 		return NULL;
 	}
 

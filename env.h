@@ -7,7 +7,7 @@ Cell *env_find (Cell *env, const Cell *sym);
 
 Cell *env_get (Cell *env, const Cell *sym);
 
-int env_set (Cell *env, const Cell *sym, Cell *val);
+int env_set (Cell *env, Cell *sym, Cell *val);
 
 Cell *env_create (Cell *env_outer, Cell *binds, Cell *exprs);
 

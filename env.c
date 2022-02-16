@@ -41,15 +41,14 @@ Cell *env_get (Cell *env, const Cell *sym)
 	return NULL;
 }
 
-// Returns whether it succeeded (1) or not (0)
-int env_set (Cell *env, const Cell *sym, Cell *val)
+// Returns 0 upon success
+int env_set (Cell *env, Cell *sym, Cell *val)
 {
 	// Validate inputs.
 	if (!is_kind(env, CK_PAIR) || !is_kind(sym, CK_SYMBOL))
-		return 0;
+		return 1;
 
-	// TODO:
-	// Do not allow nil, true, or false to be defined
+	// TODO: Do not allow nil, true, or false to be defined
 
 	// If there is already a symbol defined, change the value,
 	// otherwise add the new symbol with the value.
@@ -59,19 +58,23 @@ int env_set (Cell *env, const Cell *sym, Cell *val)
 		// Symbol already defined.
 		// Change the value of the already present slot.
 		slot->rest = val;
+		return 0;
 	}
 	else
 	{
 		// Symbol undefined.
 		// Push the new (symbol . value) pair to the env
-		Cell *i_know = (Cell *) sym; // IGNORE CONST
-		slot = make_pair(i_know, val);
-		if (!slot)
+		slot = make_pair(sym, val);
+		if (is_kind(slot, CK_PAIR))
+		{
+			list_push(slot, &(env->first));
 			return 0;
-		list_push(slot, &(env->first));
+		}
+		else
+		{
+			return 1;
+		}
 	}
-
-	return 1;
 }
 
 // An environment is a list of the form (alist . outer-env).

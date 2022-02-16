@@ -1,7 +1,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
-
+#include <assert.h>
 #include "printer.h"
 #include "lizp_string.h"
 
@@ -58,10 +58,12 @@ int print_int (int n, char *out, int length)
 	return len;
 }
 
-int print_list_as_string (Cell *list, char *out, int length, int readable)
+int print_list_as_string (const Cell *list, char *out, int length, int readable)
 {
 	// Validate inputs
-	if (!list || !out || (length < 0))
+	assert(is_kind(list, CK_PAIR));
+	assert(out);
+	if (length <= 0)
 		return 0;
 
 	char *view = out;
@@ -72,8 +74,8 @@ int print_list_as_string (Cell *list, char *out, int length, int readable)
 		string_step((const char**) &view, &rem, print_char('"', view, rem));
 
 	// String contents
-	Cell *p = list;
-	while (!nonempty_listp(p))
+	const Cell *p = list;
+	while ((rem > 1) && nonempty_listp(p))
 	{
 		// Get character value in list
 		Cell *e = p->first;
@@ -87,24 +89,26 @@ int print_list_as_string (Cell *list, char *out, int length, int readable)
 			if (rem < 2)
 				break;
 
-			char next_c = 0;
+			char esc = 0;
 			switch (c)
 			{
-				case '\n': next_c = 'n'; break;
-				case '\t': next_c = 't'; break;
-				case '\'': next_c = '\''; break;
-				case '\\': next_c = '\\'; break;
+				case '\n': esc = 'n'; break;
+				case '\t': esc = 't'; break;
+				case '\\': esc = '\\'; break;
 			}
-			if (next_c)
+
+			if (esc)
 			{
 				string_step((const char**) &view, &rem, print_char('\\', view, rem));
-				c = next_c;
+				c = esc;
 			}
 		}
 
-		// Next list item and next output spot
-		p = p->rest;
+		// Write char
 		string_step((const char**) &view, &rem, print_char(c, view, rem));
+
+		// Next list item
+		p = p->rest;
 	}
 
 	// Closing quote
@@ -171,12 +175,15 @@ int pr_str (Cell *x, char *out, int length, int readable)
 		case CK_INT:
 			return print_int(x->integer, out, length);
 		case CK_SYMBOL:
-			return print_list_as_string(x, out, length, readable);
+			return print_list_as_string(x->sym_name, out, length, 0);
 		case CK_PAIR:
-			return print_list(x, out, length, readable);
+			if (stringp(x))
+				return print_list_as_string(x, out, length, readable);
+			else
+				return print_list(x, out, length, readable);
+		case CK_VOID:
+			return print_cstr("#<unknown>", out, length);
 		default:
-			// Error: invalid cell kind
-			printf("pr_str : error : invalid cell kind\n");
-			return 0;
+			return print_cstr("#<invalid>", out, length);
 	}
 }

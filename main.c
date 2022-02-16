@@ -11,6 +11,10 @@ int main (void)
 	if (!repl_env)
 		return 1;
 
+	printf("debug: ");
+	PRINT(repl_env);
+	printf("\n");
+
 	/* Initialization lizp code
 	const char *code = "[do\n"
 					   "  [def! load-file\n"
