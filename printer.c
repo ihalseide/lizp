@@ -61,7 +61,7 @@ int print_int (int n, char *out, int length)
 int print_list_as_string (const Cell *list, char *out, int length, int readable)
 {
 	// Validate inputs
-	assert(is_kind(list, CK_PAIR));
+	assert(is_kind(list, CK_PAIR) || is_kind(list, CK_STRING));
 	assert(out);
 	if (length <= 0)
 		return 0;
@@ -75,7 +75,7 @@ int print_list_as_string (const Cell *list, char *out, int length, int readable)
 
 	// String contents
 	const Cell *p = list;
-	while ((rem > 1) && nonempty_listp(p))
+	while ((rem > 1) && (nonempty_stringp(p) || nonempty_listp(p)))
 	{
 		// Get character value in list
 		Cell *e = p->first;
@@ -176,10 +176,9 @@ int pr_str (Cell *x, char *out, int length, int readable)
 			return print_int(x->integer, out, length);
 		case CK_SYMBOL:
 			return print_list_as_string(x->sym_name, out, length, 0);
+		case CK_STRING:
+			return print_list_as_string(x, out, length, readable);
 		case CK_PAIR:
-			if (stringp(x))
-				return print_list_as_string(x, out, length, readable);
-			else
 				return print_list(x, out, length, readable);
 		case CK_VOID:
 			return print_cstr("#<unknown>", out, length);

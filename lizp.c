@@ -12,9 +12,6 @@
 #include "reader.h"
 #include "lizp_string.h"
 
-// REPL environment
-Cell *repl_env = NULL;
-
 // Does: Read a form from the stream
 // Returns: the form, which may be NULL
 Cell *READ (const char *start, int length)
@@ -472,7 +469,7 @@ void env_set_native_fn (Cell *env, const char *name, int n_params, Native_fn fun
 	assert(n_params >= 0);
 	assert(func);
 
-	const Cell *sym = intern_symbol(string_to_list(name));
+	Cell *sym = intern_symbol(string_to_list(name));
 	env_set(env, sym, make_native_fn(n_params, func));
 }
 

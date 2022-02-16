@@ -34,7 +34,7 @@ Cell *string_to_list (const char *str)
 	}
 
 	// Set correct variant
-	list->var = CV_STRING;
+	list->kind = CK_STRING;
 	return list;
 }
 

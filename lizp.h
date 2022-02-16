@@ -3,15 +3,13 @@
 
 #include "cell.h"
 
-extern Cell *repl_env;
-
 Cell *eval_each (Cell *list, Cell *env);
 
 Cell *eval_ast (Cell *ast, Cell *env);
 
-void apply (Cell *fn, Cell *args, Cell *env, Cell **val_out, Cell **env_out);
-
 int eval_special (Cell *head, Cell *ast, Cell *env, Cell **ast_out, Cell **env_out);
+
+void apply (Cell *fn, Cell *args, Cell *env, Cell **val_out, Cell **env_out);
 
 Cell *READ (const char *start, int length);
 

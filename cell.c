@@ -34,14 +34,6 @@ enum Cell_kind kind_of (const Cell *p)
 		return CK_INVALID;
 }
 
-enum Cell_variant var_of (const Cell *p)
-{
-	if (cell_validp(p))
-		return p->var;
-	else
-		return CV_INVALID;
-}
-
 // Valid cell pointer?
 int cell_validp (const Cell *p)
 {
@@ -120,11 +112,6 @@ Cell *cell_init (enum Cell_kind k)
 int is_kind (const Cell *p, enum Cell_kind kind)
 {
 	return cell_validp(p) && (kind_of(p) == kind);
-}
-
-int is_variant (const Cell *p, enum Cell_variant var)
-{
-	return cell_validp(p) && (var_of(p) == var);
 }
 
 Cell *make_int (int n)
@@ -217,12 +204,17 @@ int falsep (const Cell *p)
 // Note: NULL is not considered a list
 int emptyp (const Cell *p)
 {
-	return is_kind(p, CK_PAIR) && (p->first == NULL);
+	return (is_kind(p, CK_PAIR) || is_kind(p, CK_STRING)) && (p->first == NULL);
 }
 
 int nonempty_listp (const Cell *p)
 {
 	return is_kind(p, CK_PAIR) && !emptyp(p);
+}
+
+int nonempty_stringp (const Cell *p)
+{
+	return is_kind(p, CK_STRING) && !emptyp(p);
 }
 
 int list_length (const Cell *list)
@@ -333,13 +325,8 @@ Cell *alist_assoc (const Cell *key, Cell *alist)
 	return NULL;
 }
 
-int stringp (const Cell *p)
-{
-	return is_kind(p, CK_PAIR) && is_variant(p, CV_STRING);
-}
-
 // Returns: symbol cell or NULL
-const Cell *intern_find_symbol (const Cell *name)
+Cell *intern_find_symbol (const Cell *name)
 {
 	// Validate arguments
 	if (!cell_validp(symbol_list) || !is_kind(name, CK_PAIR))
@@ -384,13 +371,13 @@ int intern_insert (Cell *symbol)
 }
 
 // Returns symbol cell or NULL
-const Cell *intern_symbol (const Cell *name)
+Cell *intern_symbol (const Cell *name)
 {
 	// Validate arguments
 	if (!cell_validp(symbol_list) || !is_kind(name, CK_PAIR))
 		return NULL;
 
-	const Cell *result = intern_find_symbol(name);
+	Cell *result = intern_find_symbol(name);
 	if (result)
 	{
 		return result;
@@ -418,7 +405,7 @@ Cell *get_bool_sym (int v)
 int init_static_sym (Cell *p, const char *name)
 {
 	Cell *string = string_to_list(name);
-	if (stringp(string))
+	if (is_kind(string, CK_STRING))
 	{
 		p->kind = CK_SYMBOL;
 		p->sym_name = string;

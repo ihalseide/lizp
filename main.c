@@ -7,7 +7,7 @@
 int main (void)
 {
 	// Initialize the REPL environment symbols
-	repl_env = init(9000);
+	Cell *repl_env = init(9000);
 	if (!repl_env)
 		return 1;
 

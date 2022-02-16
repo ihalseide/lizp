@@ -8,12 +8,7 @@ enum Cell_kind
 	CK_INT,
 	CK_SYMBOL,
 	CK_PAIR,
-};
-
-enum Cell_variant
-{
-	CV_INVALID,
-	CV_STRING,
+	CK_STRING,
 };
 
 typedef struct cell Cell;
@@ -22,13 +17,12 @@ typedef void (*Native_fn)(Cell* args, Cell *env, Cell **out);
 struct cell
 {
 	enum Cell_kind kind;
-	enum Cell_variant var;
 	union
 	{
 		int integer;           // CK_INT
 		const Cell *sym_name;  // CK_SYMBOL
 		const void *pointer;   // CK_VOID
-		struct                 // CK_PAIR
+		struct                 // CK_PAIR, CK_STRING
 		{
 			Cell *first;
 			Cell *rest;
@@ -51,11 +45,11 @@ extern Cell sym_nil,
 
 int init_symbols (void);
 
-const Cell *intern_find_symbol (const Cell *name);
+Cell *intern_find_symbol (const Cell *name);
 
 int intern_insert (Cell *sym);
 
-const Cell *intern_symbol (const Cell *name);
+Cell *intern_symbol (const Cell *name);
 
 int native_fnp (const Cell *p);
 
@@ -119,6 +113,6 @@ Cell *get_bool_sym (int v);
 
 Cell *alist_assoc (const Cell *key, Cell *alist);
 
-int stringp (const Cell *p);
+int nonempty_stringp (const Cell *p);
 
 #endif /* _CELL_H */

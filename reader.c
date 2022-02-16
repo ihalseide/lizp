@@ -90,6 +90,7 @@ int read_string_literal (const char *start, int length, int escape, Cell **out)
 	string_step(&view, &length, 1);
 
 	*out = char_list;
+	(*out)->kind = CK_STRING;
 
 	// Return the number of chars written
 	return view - start;
@@ -266,8 +267,6 @@ int read_str (const char *start, int length, Cell **out)
 		case '"': 
 			// Quoted string literal
 			string_step(&view, &rem, read_string_literal(view, rem, 1, out));
-			if (cell_validp(*out))
-				(*out)->var = CV_STRING;
 			break;
 		default:
 			// Symbol or number
