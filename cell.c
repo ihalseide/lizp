@@ -455,7 +455,7 @@ int init_static_sym (Cell *p, const char *name)
 		p->sym_name = string;
 
 		// Add it to the internal symbol list
-		return list_push(p, &symbol_list);
+		return intern_insert(p);
 	}
 	else
 	{
@@ -467,22 +467,23 @@ int init_static_sym (Cell *p, const char *name)
 int init_symbols (void)
 {
 	symbol_list = make_empty_list();
+
 	if (!symbol_list)
 		return 1;
 
-	// Stop interning if one of these calls doesn't succeed
-	return init_static_sym(&sym_nil, "nil")
-		|| init_static_sym(&sym_t, "#t")
-		|| init_static_sym(&sym_f, "#f")
-		|| init_static_sym(&sym_native_fn, "_native-fn_")
-		|| init_static_sym(&sym_fn, "_fn_")
-		|| init_static_sym(&sym_def_bang, "def!")
-		|| init_static_sym(&sym_fn_star, "fn*")
-		|| init_static_sym(&sym_let_star, "let*")
-		|| init_static_sym(&sym_do, "do")
-		|| init_static_sym(&sym_if, "if")
-		|| init_static_sym(&sym_quote, "quote")
-		|| init_static_sym(&sym_string, "string");
+	// All of these must succeed
+	return init_static_sym(&sym_nil,       "nil")
+		|| init_static_sym(&sym_t,         "#t")
+		|| init_static_sym(&sym_f,         "#f")
+		|| init_static_sym(&sym_def_bang,  "def!")
+		|| init_static_sym(&sym_fn_star,   "fn*")
+		|| init_static_sym(&sym_let_star,  "let*")
+		|| init_static_sym(&sym_do,        "do")
+		|| init_static_sym(&sym_if,        "if")
+		|| init_static_sym(&sym_quote,     "quote")
+		|| init_static_sym(&sym_native_fn, "{native-fn}")
+		|| init_static_sym(&sym_fn,        "{fn}")
+		|| init_static_sym(&sym_string,    "{string}");
 }
 
 // Returns 0 upon success
@@ -568,42 +569,14 @@ int string_to_list (const char *start, int length, int escape, Cell **out)
 	}
 }
 
-// TODO: fixme
+// FIXME
+// Join together the string representation of the items into a new string
 Cell *string_join (Cell *items, char sep, int readable)
 {
-	Cell *p_items = items;
-
-	Cell *result = make_empty_list();
-	Cell *p_result = result;
-
-	// Do the first item without separator
-	if (is_kind(p_result, CK_PAIR) && nonempty_listp(p_items))
-	{
-		p_result->first = p_items->first;
-
-		// Next
-		p_items = p_items->rest;
-		p_result = p_result->rest;
-	}
-
-	Cell *separator = make_int(sep);
-
-	// Do the rest of the items with separator
-	while (is_kind(p_result, CK_PAIR) && nonempty_listp(p_items))
-	{
-		// Add separator
-		p_result->rest = make_pair(separator, NULL);
-		p_result = p_result->rest;
-
-		// Add item
-		p_result->rest = make_pair(p_items->first, NULL);
-
-		// Next
-		p_items = p_items->rest;
-		p_result = p_result->rest;
-	}
-
-	return result;
+	(void)items;
+	(void)sep;
+	(void)readable;
+	assert(0 && "not implemented");
 }
 
 // For string reading and writing
