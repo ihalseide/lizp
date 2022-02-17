@@ -2,9 +2,9 @@
 #include <string.h>
 #include <stdio.h>
 #include <assert.h>
+
 #include "cell.h"
 #include "printer.h"
-#include "lizp_string.h"
 
 int print_char (char c, char *out, int length)
 {
