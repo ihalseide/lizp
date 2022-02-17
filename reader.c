@@ -4,7 +4,7 @@
 #include <ctype.h>
 
 #include "reader.h"
-#include "lizp_string.h"
+#include "lizp.h"
 
 int char_is_symbol (char c)
 {
@@ -35,6 +35,7 @@ int read_int (const char *start, int length, Cell **out)
 	return view - start;
 }
 
+// Read and intern symbol
 // Returns number of chars read
 int read_sym (const char *start, int length, Cell **out)
 {

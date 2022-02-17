@@ -62,7 +62,7 @@ int print_int (int n, char *out, int length)
 int print_list_as_string (const Cell *list, char *out, int length, int readable)
 {
 	// Validate inputs
-	if (!(is_kind(list, CK_PAIR) || nilp(list)) || !out || length <= 0)
+	if (!(is_kind(list, CK_PAIR) || cell_eq(list, &sym_nil)) || !out || length <= 0)
 		return 0;
 
 	char *view = out;
@@ -148,7 +148,7 @@ int print_list (Cell *list, char *out, int length, int readable)
 
 		// List will be the last item in the 'rest' slot of the list at this point
 		// If there is a value (except nil) in the final rest slot, then print it dotted
-		if (cell_validp(list) && !nilp(list))
+		if (cell_validp(list) && !cell_eq(list, &sym_nil))
 		{
 			string_step((const char**)&view, &rem, print_cstr(" | ", view, rem));
 			string_step((const char**)&view, &rem, pr_str(list, view, rem, readable));

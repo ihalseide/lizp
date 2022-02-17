@@ -37,7 +37,7 @@ Cell *eval_each (Cell *list, Cell *env)
 		return list;
 
 	// Eval the first element
-	Cell *y = make_pair(EVAL(list->first, env), NULL);
+	Cell *y = make_single_list(EVAL(list->first, env));
 	Cell *p_y = y;
 
 	// eval the rest of the elements
@@ -75,8 +75,12 @@ Cell *eval_ast (Cell *ast, Cell *env)
 			return eval_each(ast, env);
 		case CK_SYMBOL:
 			// Look up symbol's value...
-			// TODO: nil, true, false
-			// These special symbols are self-evaluating
+			if (cell_eq(ast, &sym_nil) || cell_eq(ast, &sym_t) || cell_eq(ast, &sym_f))
+			{
+				// These special symbols are self-evaluating
+				return ast;
+			}
+			else
 			{
 				// Get the value out of the environment's slot
 				Cell *slot = env_get(env, ast);
@@ -163,28 +167,15 @@ void apply (Cell *fn, Cell *args, Cell *env, Cell **val_out, Cell **env_out)
 // Returns 1 or 0 for if it is a special form or not
 int eval_special (Cell *head, Cell *ast, Cell *env, Cell **ast_out, Cell **env_out)
 {
+	assert(is_kind(ast, CK_PAIR));
 	if (!ast_out || !env_out)
 		return 0;
-
-	// Default behavior is no tail-call, error
-	*env_out = NULL;
-	*ast_out = NULL;
 
 	// Head must be a symbol
 	if (!is_kind(head, CK_SYMBOL))
 		return 0;
 
-	// Make sure that ast is a list
-	if (!ast)
-		ast = make_empty_list();
-	if (!ast)
-		return 0;
-	assert(is_kind(ast, CK_PAIR));
-
-	assert(0 && "not implemented");
-	/*
-	const char *name = head->as_str;
-	if (name == s_def_bang)
+	if (cell_eq(head, &sym_def_bang))
 	{
 		// [def! <symbol> value]
 		if (list_length(ast) != 2)
@@ -202,22 +193,36 @@ int eval_special (Cell *head, Cell *ast, Cell *env, Cell **ast_out, Cell **env_o
 
 		Cell *val = EVAL(ast->rest->first, env);
 		if (!val)
+		{
+			*ast_out = NULL;
+			*env_out = NULL;
 			return 1;
+		}
 
+		// Note: env_set returns 0 upon success
 		if (env_set(env, sym, val))
-			*ast_out = val;
-		else
+		{
 			printf("def! : error : cannot define symbol\n");
-
-		return 1;
+			*ast_out = NULL;
+			*env_out = NULL;
+			return 1;
+		}
+		else
+		{
+			*ast_out = val;
+			*env_out = NULL;
+			return 1;
+		}
 	}
-	else if (name == s_let_star)
+	else if (cell_eq(head, &sym_let_star))
 	{
 		// [let* [sym1 expr1 sym2 expr2...] expr]
 		if (list_length(ast) != 2)
 		{
 			// Error: invalid ast
 			printf("let* : error : requires 2 expressions\n");
+			*ast_out = NULL;
+			*env_out = NULL;
 			return 1;
 		}
 
@@ -231,12 +236,16 @@ int eval_special (Cell *head, Cell *ast, Cell *env, Cell **ast_out, Cell **env_o
 			{
 				// Error: odd amount of arguments in first list
 				printf("let* : error : requires an even amount of items in bindings list\n");
+				*ast_out = NULL;
+				*env_out = NULL;
 				return 1;
 			}
 			if (!is_kind(p->first, CK_SYMBOL))
 			{
 				// Error: even element in bindings list not a symbol
 				printf("let* : error : requires even elements in bindings list to be symbols\n");
+				*ast_out = NULL;
+				*env_out = NULL;
 				return 1;
 			}
 
@@ -251,12 +260,14 @@ int eval_special (Cell *head, Cell *ast, Cell *env, Cell **ast_out, Cell **env_o
 		*ast_out = ast->rest->first;
 		return 1;
 	}
-	else if (name == s_fn_star)
+	else if (cell_eq(head, &sym_fn_star))
 	{
 		// [fn* [symbol1 symbol2 ...] expr]
 		if (list_length(ast) != 2)
 		{
 			printf("fn* : error : requires 2 expressions\n");
+			*ast_out = NULL;
+			*env_out = NULL;
 			return 1;
 		}
 
@@ -268,12 +279,16 @@ int eval_special (Cell *head, Cell *ast, Cell *env, Cell **ast_out, Cell **env_o
 			{
 				// Error: parameter list must be all symbols
 				printf("fn* : error : items of parameter list must be symbols\n");
+				*ast_out = NULL;
+				*env_out = NULL;
 				return 1;
 			}
 			if (p->rest && !is_kind(p->rest, CK_PAIR))
 			{
 				// Something other than NULL or a list is next
 				printf("fn* : error : parameter list is not a proper list\n");
+				*ast_out = NULL;
+				*env_out = NULL;
 				return 1;
 			}
 
@@ -282,10 +297,12 @@ int eval_special (Cell *head, Cell *ast, Cell *env, Cell **ast_out, Cell **env_o
 		}
 
 		// New function closure, no tail call
-		*ast_out = make_fn(ast->first, ast->rest->first, env);
+		// TODO: implement new function
+		*ast_out = &sym_nil;//make_fn(ast->first, ast->rest->first, env);
+		*env_out = NULL;
 		return 1;
 	}
-	else if (name == s_if)
+	else if (cell_eq(head, &sym_if))
 	{
 		// [if expr t-expr f-expr] OR [if expr t-expr]
 		int len = list_length(ast);
@@ -293,6 +310,8 @@ int eval_special (Cell *head, Cell *ast, Cell *env, Cell **ast_out, Cell **env_o
 		{
 			// Error: too few or too many arguments
 			printf("if : error : must have 2 or 3 arguments\n");
+			*ast_out = NULL;
+			*env_out = NULL;
 			return 1;
 		}
 
@@ -304,23 +323,31 @@ int eval_special (Cell *head, Cell *ast, Cell *env, Cell **ast_out, Cell **env_o
 				// Tail call with t-expr
 				*env_out = env;
 				*ast_out = ast->rest->first;
+				return 1;
 			}
 			else if (ast->rest->rest)
 			{
 				// Tail call with f-expr
 				*env_out = env;
 				*ast_out = ast->rest->rest->first;
+				return 1;
 			}
 			else
 			{
 				// No f-expr, so return nil
-				*ast_out = make_symbol(s_nil);
+				*ast_out = &sym_nil;
+				*env_out = NULL;
+				return 1;
 			}
 		}
-
-		return 1;
+		else
+		{
+			*ast_out = NULL;
+			*env_out = NULL;
+			return 1;
+		}
 	}
-	else if (name == s_do)
+	else if (cell_eq(head, &sym_do))
 	{
 		// [do exprs...]
 
@@ -336,42 +363,45 @@ int eval_special (Cell *head, Cell *ast, Cell *env, Cell **ast_out, Cell **env_o
 		{
 			*ast_out = ast->first;
 			*env_out = env;
+			return 1;
 		}
 		else
 		{
 			// If this point is reached, there were no items
-			*ast_out = make_symbol(s_nil);
+			*ast_out = &sym_nil;
+			*env_out = NULL;
+			return 1;
 		}
-
-		return 1;
 	}
-	else if (name == s_quote)
+	else if (cell_eq(head, &sym_quote))
 	{
 		// [quote expr]
 		if (list_length(ast) != 1)
 		{
 			printf("quote : error : requires 1 expression");
+			*ast_out = NULL;
+			*env_out = NULL;
 			return 1;
 		}
-
-		*ast_out = ast->first;
-		return 1;
+		else
+		{
+			*ast_out = ast->first;
+			*env_out = NULL;
+			return 1;
+		}
 	}
 	else
 	{
 		// Not a known name for a special form
+		*env_out = NULL;
+		*ast_out = NULL;
 		return 0;
 	}
-	*/
 }
 
 Cell *EVAL (Cell *ast, Cell *env)
 {
-	if (!env)
-	{
-		printf("EVAL : error : environment is NULL\n");
-		return NULL;
-	}
+	assert(env);
 
 	while (1)
 	{
@@ -380,6 +410,10 @@ Cell *EVAL (Cell *ast, Cell *env)
 
 		if (!is_kind(ast, CK_PAIR))
 			return eval_ast(ast, env);
+
+		// String -> itself
+		if (stringp(ast))
+			return ast;
 
 		// Empty list -> itself
 		if (emptyp(ast))
@@ -426,7 +460,6 @@ Cell *EVAL (Cell *ast, Cell *env)
 			return ast;
 	}
 
-	printf("EVAL : error : ast is NULL\n");
 	return NULL;
 }
 

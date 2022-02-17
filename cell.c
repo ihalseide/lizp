@@ -14,7 +14,8 @@ static int cell_pool_cap = 0;
 // List of internal symbols
 static Cell *symbol_list = NULL;
 
-// Static symbols
+// Constant built-in symbols
+// "static"
 Cell sym_nil,
 	 sym_t,
 	 sym_f,
@@ -225,24 +226,6 @@ int truthy (Cell *x)
 		return x != &sym_nil && x != &sym_f;
 }
 
-// Is nil?
-int nilp (const Cell *p)
-{
-	return p == &sym_nil;
-}
-
-// Is #t?
-int truep (const Cell *p)
-{
-	return p == &sym_t;
-}
-
-// Is #f?
-int falsep (const Cell *p)
-{
-	return p == &sym_f;
-}
-
 // Is empty list?
 // Note: NULL is not considered a list
 int emptyp (const Cell *p)
@@ -306,6 +289,7 @@ Cell *list_pop (Cell **list)
 
 int cell_eq (const Cell *a, const Cell *b)
 {
+	// While loop for tail-calls on lists
 	while (1)
 	{
 		// Nothing equals NULL
@@ -333,6 +317,10 @@ int cell_eq (const Cell *a, const Cell *b)
 				{
 					return 0;
 				}
+				else if (!a->rest && !b->rest)
+				{
+					return 1;
+				}
 				else
 				{
 					// Tail call
@@ -341,10 +329,10 @@ int cell_eq (const Cell *a, const Cell *b)
 					continue;
 				}
 			case CK_SYMBOL:
-				// Compare pointers
+				// Compare name pointers
 				return a->sym_name == b->sym_name;
 			case CK_FUNCTION:
-				// Just compare pointers
+				// Just compare function pointers
 				return a->func == b->func;
 			default:
 				assert(0 && "invalid cell kind");
@@ -454,13 +442,21 @@ int stringp (const Cell * p)
 // Returns 0 upon success
 int init_static_sym (Cell *p, const char *name)
 {
+	assert(cell_validp(p));
+	assert(name);
+
 	Cell *string = NULL;
-	int parsed_len = string_to_list(name, strlen(name), 0, &string);
-	if (parsed_len && stringp(string))
+	int string_len = strlen(name);
+	int parsed_len = string_to_list(name, string_len, 0, &string);
+
+	if ((parsed_len == string_len) && stringp(string))
 	{
+		// Initialize the symbol
 		p->kind = CK_SYMBOL;
 		p->sym_name = string;
-		return 0;
+
+		// Add it to the internal symbol list
+		return list_push(p, &symbol_list);
 	}
 	else
 	{
@@ -516,5 +512,123 @@ int init_cells (int ncells)
 	}
 
 	return init_symbols();
+}
+
+// Returns the number of chars parsed
+int string_to_list (const char *start, int length, int escape, Cell **out)
+{
+	// Validate args
+	if (!start || length <= 0 || !out)
+		return 0;
+
+	const char *view = start;
+	Cell *list = make_string_start();
+	Cell *p = list;
+
+	while (is_kind(p, CK_PAIR) && *view && length)
+	{
+		// Get next char to add to end of string
+		char c = *view;
+
+		// Maybe process escape codes
+		if (escape && length && (c == '\\'))
+		{
+			string_step(&view, &length, 1);
+			if (!length)
+			{
+				*out = NULL;
+				cell_free_all(list);
+				return view - start;
+			}
+
+			c = *view;
+			switch (c)
+			{
+				case 'n': c = '\n'; break;
+				case 't': c = '\t'; break;
+			}
+		}
+		string_step(&view, &length, 1);
+
+		// Put list with char in REST slot
+		p->rest = make_single_list(make_int(c));
+		p = p->rest;
+	}
+
+	// See if p being invalid is what caused the while loop to stop
+	if (is_kind(p, CK_PAIR))
+	{
+		*out = list;
+		return view - start;
+	}
+	else
+	{
+		*out = NULL;
+		cell_free_all(list);
+		return view - start;
+	}
+}
+
+// TODO: fixme
+Cell *string_join (Cell *items, char sep, int readable)
+{
+	Cell *p_items = items;
+
+	Cell *result = make_empty_list();
+	Cell *p_result = result;
+
+	// Do the first item without separator
+	if (is_kind(p_result, CK_PAIR) && nonempty_listp(p_items))
+	{
+		p_result->first = p_items->first;
+
+		// Next
+		p_items = p_items->rest;
+		p_result = p_result->rest;
+	}
+
+	Cell *separator = make_int(sep);
+
+	// Do the rest of the items with separator
+	while (is_kind(p_result, CK_PAIR) && nonempty_listp(p_items))
+	{
+		// Add separator
+		p_result->rest = make_pair(separator, NULL);
+		p_result = p_result->rest;
+
+		// Add item
+		p_result->rest = make_pair(p_items->first, NULL);
+
+		// Next
+		p_items = p_items->rest;
+		p_result = p_result->rest;
+	}
+
+	return result;
+}
+
+// For string reading and writing
+int string_step (const char **stream, int *length, int n)
+{
+	if (n <= *length)
+	{
+		*stream += n;
+		*length -= n;
+		return n;
+	}
+	return 0;
+}
+
+void string_skip_white(const char **stream, int *length)
+{
+	if (!stream)
+		return;
+
+	const char *view = *stream;
+	int rem = *length;
+	while (isspace(*view) && (rem > 0))
+		string_step(&view, &rem, 1);
+	*stream = view;
+	*length = rem;
 }
 

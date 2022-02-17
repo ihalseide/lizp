@@ -53,12 +53,6 @@ Cell *intern_symbol (const Cell *name);
 
 int native_fnp (const Cell *p);
 
-int nilp (const Cell *p);
-
-int truep (const Cell *p);
-
-int falsep (const Cell *p);
-
 int truthy (Cell *x);
 
 enum Cell_kind kind_of (const Cell *p);
@@ -118,5 +112,13 @@ Cell *get_bool_sym (int v);
 Cell *alist_assoc (const Cell *key, Cell *alist);
 
 Cell *make_string_start (void);
+
+int string_to_list (const char *start, int length, int escape, Cell **out);
+
+Cell *string_join (Cell *items, char sep, int readable);
+
+int string_step (const char **stream, int *length, int n);
+
+void string_skip_white(const char **stream, int *length);
 
 #endif /* _CELL_H */
