@@ -75,7 +75,9 @@ Cell *cell_init (enum Cell_kind k);
 
 int is_kind (const Cell *p, enum Cell_kind kind);
 
-int functionp (Cell *x);
+int functionp (const Cell *p);
+
+int fn_arity (const Cell *p);
 
 Cell *make_int (int n);
 
@@ -120,5 +122,7 @@ Cell *string_join (Cell *items, char sep, int readable);
 int string_step (const char **stream, int *length, int n);
 
 void string_skip_white(const char **stream, int *length);
+
+int function_nativep (const Cell *p);
 
 #endif /* _CELL_H */

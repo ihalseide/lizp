@@ -5,7 +5,6 @@
 #include <assert.h>
 
 #include "cell.h"
-#include "lizp_string.h"
 
 // Cell allocator
 static Cell *cell_pool = NULL;
@@ -630,5 +629,27 @@ void string_skip_white(const char **stream, int *length)
 		string_step(&view, &rem, 1);
 	*stream = view;
 	*length = rem;
+}
+
+int functionp (const Cell *p)
+{
+	if (!is_kind(p, CK_PAIR))
+		return 0;
+	else if (p->first == &sym_native_fn || p->first == &sym_fn)
+		return is_kind(p->rest, CK_PAIR);
+	else
+		return 0;
+}
+
+int fn_arity (const Cell *p)
+{
+	(void)p;
+	assert(0 && "not implemented");
+}
+
+int function_nativep (const Cell *p)
+{
+	(void)p;
+	assert(0 && "not implemented");
 }
 
