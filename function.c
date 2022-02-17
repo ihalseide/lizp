@@ -6,7 +6,6 @@
 #include "function.h"
 #include "lizp.h"
 #include "reader.h"
-#include "lizp_string.h"
 
 /*
 // [str a b c ...] -> "abc..." (prints non-readably)
