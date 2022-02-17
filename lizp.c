@@ -440,15 +440,10 @@ void PRINT (Cell *expr)
 // Do one read, eval, and print cycle on a string.
 void rep (const char *start, int length, Cell *env)
 {
-	// Allow passing C strings and to automatically get the length
-	if (length < 0)
-		length = strlen(start);
-
 	Cell * form = READ(start, length);
 	if (form)
 	{
-		//Cell *value = EVAL(form, env);
-		Cell *value = form;
+		Cell *value = EVAL(form, env);
 		if (value)
 		{
 			PRINT(value);
