@@ -10,7 +10,6 @@
 #include "lizp.h"
 #include "printer.h"
 #include "reader.h"
-#include "lizp_string.h"
 
 // Does: Read a form from the stream
 // Returns: the form, which may be NULL
@@ -108,60 +107,54 @@ Cell *eval_ast (Cell *ast, Cell *env)
 // Null environment indicates that no further evaluation is needed
 void apply (Cell *fn, Cell *args, Cell *env, Cell **val_out, Cell **env_out)
 {
-	assert(0 && "not implemented");
-	/*
-	// Validate arguments
-	if (!fn || !is_kind(args, CK_PAIR) || !env || !val_out || !env_out)
+	if (!is_kind(args, CK_PAIR) || !env || !val_out || !env_out)
 	{
 		printf("apply : error : invalid arguments\n");
 		return;
 	}
 
-	switch (fn->kind)
+	if (functionp(fn))
 	{
-		case CK_NATIVE_FUNC:
+		// Check if the number of parameters match
+		// Note: when n_params == 0, that means the function is variadic
+		int n_params = fn_arity(fn);
+		if (n_params && (list_length(args) != n_params))
+		{
+			printf("apply : error : function requires %d parameters\n", n_params);
+			return;
+		}
+
+		if (function_nativep(fn))
+		{
 			// Apply a built-in native C function
-			// Note: when n_params == 0, that means the function is variadic
-			if (fn->as_native_fn.n_params && (list_length(args) != fn->as_native_fn.n_params))
-			{
-				printf("apply : error : native function requires %d parameters\n", fn->as_native_fn.n_params);
-				return;
-			}
 
-			if (fn->as_native_fn.func == fn_eval)
+			// Special case for eval, because
+			// it only needs to do what EVAL already does.
+			if (fn->rest->rest->func == fn_eval)
 			{
-				// Special case for eval, because
-				// it only needs to do what EVAL already does.
-				// Don't even call eval because it's a dummy value.
+				// Pass-through
 				*val_out = args->first;
-				*env_out = repl_env; // Use the REPL environment instead of the current one?
-				break;
+				*env_out = env;
 			}
-
-			// Call it
-			fn->as_native_fn.func(args, env, val_out);
-			*env_out = NULL;
-			break;
-		case CK_FUNC:
-			// Apply lisp function created by fn*
-			env = env_create(fn->as_fn.env, fn->as_fn.params, args);
-			if (!env)
+			else
 			{
-				*env_out = NULL;
-				*val_out = NULL;
-				return;
+				// Call it
+				assert(0 && "not implemented");
 			}
-			*val_out = fn->as_fn.ast;
-			*env_out = env;
-			break;
-		default:
-			// Error: not a function
-			printf("apply : error : first item in list is not a function\n");
-			*env_out = NULL;
-			*val_out = NULL;
-			break;
+		}
+		else
+		{
+			// Apply other function (created by fn*)
+			assert(0 && "not implemented");
+		}
 	}
-	*/
+	else
+	{
+		printf("apply : error : not a function");
+		*val_out = NULL;
+		*env_out = NULL;
+		return;
+	}
 }
 
 // Returns 1 or 0 for if it is a special form or not
