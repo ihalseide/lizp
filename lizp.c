@@ -91,7 +91,7 @@ Cell *eval_ast (Cell *ast, Cell *env)
 					return NULL;
 				}
 			}
-		case CK_INT:
+		case CK_INTEGER:
 			// Self-evaluating values
 			return ast;
 		default:
@@ -459,18 +459,28 @@ void rep (const char *start, int length, Cell *env)
 	printf("no value\n");
 }
 
-// For adding C functions to the environment
+// Returns 0 upon success
 // Note: when n_params == 0, that means the function is variadic
-void env_set_native_fn (Cell *env, const char *name, int n_params, Native_fn func)
+int env_set_native_fn (Cell *env, const char *name, int n_params, Native_fn func)
 {
 	// Validate params
-	assert(env);
-	assert(name);
-	assert(n_params >= 0);
-	assert(func);
+	if (!env || !name || (n_params < 0) || !func)
+		return 1;
 
-	Cell *sym = intern_symbol(string_to_list(name));
-	env_set(env, sym, make_native_fn(n_params, func));
+	Cell *newname = NULL;
+	string_to_list(name, strlen(name), 0, &newname);
+	if (stringp(newname))
+	{
+		Cell *sym = intern_symbol(newname);
+		if (is_kind(sym, CK_SYMBOL))
+			return env_set(env, sym, make_wrapped_native_fn(n_params, func));
+		else
+			return 1;
+	}
+	else
+	{
+		return 1;
+	}
 }
 
 // Returns global environment
@@ -478,32 +488,39 @@ Cell *init (int ncells)
 {
 	if (init_cells(ncells))
 	{
-		printf("init : error could not initialize cells\n");
+		printf("init : error : could not initialize cells\n");
 		return NULL;
 	}
 
 	// Setup the global environment now
 	Cell *env = env_create(NULL, NULL, NULL);
-	env_set_native_fn(env, "*",           2, fn_mul);
-	env_set_native_fn(env, "+",           2, fn_add);
-	env_set_native_fn(env, "-",           2, fn_sub);
-	env_set_native_fn(env, "/",           2, fn_div);
-	env_set_native_fn(env, "<",           2, fn_lt);
-	env_set_native_fn(env, "<=",          2, fn_lte);
-	env_set_native_fn(env, "=",           2, fn_eq);
-	env_set_native_fn(env, ">",           2, fn_gt);
-	env_set_native_fn(env, ">=",          2, fn_gte);
-	env_set_native_fn(env, "count",       1, fn_count);
-	env_set_native_fn(env, "empty?",      1, fn_empty_p);
-	env_set_native_fn(env, "eval",        1, fn_eval);
-	env_set_native_fn(env, "int?",        1, fn_int_p);
-	env_set_native_fn(env, "list",        0, fn_list);
-	env_set_native_fn(env, "list?",       1, fn_list_p);
-	env_set_native_fn(env, "pair",        2, fn_pair);
-	env_set_native_fn(env, "concat",      0, fn_concat);
-	env_set_native_fn(env, "assoc",       2, fn_assoc);
-	env_set_native_fn(env, "first",       1, fn_first);
-	env_set_native_fn(env, "rest",        1, fn_rest);
-	return env;
+	if (env_set_native_fn(env, "*",      2, fn_mul)
+			|| env_set_native_fn(env, "+",      2, fn_add)
+			|| env_set_native_fn(env, "-",      2, fn_sub)
+			|| env_set_native_fn(env, "/",      2, fn_div)
+			|| env_set_native_fn(env, "<",      2, fn_lt)
+			|| env_set_native_fn(env, "<=",     2, fn_lte)
+			|| env_set_native_fn(env, "=",      2, fn_eq)
+			|| env_set_native_fn(env, ">",      2, fn_gt)
+			|| env_set_native_fn(env, ">=",     2, fn_gte)
+			|| env_set_native_fn(env, "count",  1, fn_count)
+			|| env_set_native_fn(env, "empty?", 1, fn_empty_p)
+			|| env_set_native_fn(env, "eval",   1, fn_eval)
+			|| env_set_native_fn(env, "int?",   1, fn_int_p)
+			|| env_set_native_fn(env, "list",   0, fn_list)
+			|| env_set_native_fn(env, "list?",  1, fn_list_p)
+			|| env_set_native_fn(env, "pair",   2, fn_pair)
+			|| env_set_native_fn(env, "concat", 0, fn_concat)
+			|| env_set_native_fn(env, "assoc",  2, fn_assoc)
+			|| env_set_native_fn(env, "first",  1, fn_first)
+			|| env_set_native_fn(env, "rest",   1, fn_rest))
+	{
+		printf("init : error : could not setup environment\n");
+		return NULL;
+	}
+	else
+	{
+		return env;
+	}
 }
 

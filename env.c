@@ -42,13 +42,12 @@ Cell *env_get (Cell *env, const Cell *sym)
 }
 
 // Returns 0 upon success
+// TODO: Do not allow nil, true, or false to be defined
 int env_set (Cell *env, Cell *sym, Cell *val)
 {
 	// Validate inputs.
 	if (!is_kind(env, CK_PAIR) || !is_kind(sym, CK_SYMBOL))
 		return 1;
-
-	// TODO: Do not allow nil, true, or false to be defined
 
 	// If there is already a symbol defined, change the value,
 	// otherwise add the new symbol with the value.

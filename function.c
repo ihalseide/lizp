@@ -127,7 +127,7 @@ void fn_list_p (Cell *args, Cell *env, Cell **val_out)
 // [int? x]
 void fn_int_p (Cell *args, Cell *env, Cell **val_out)
 {
-	*val_out = get_bool_sym(is_kind(args->first, CK_INT));
+	*val_out = get_bool_sym(is_kind(args->first, CK_INTEGER));
 }
 
 // [= x y]
@@ -142,7 +142,7 @@ void fn_lt (Cell *args, Cell *env, Cell **val_out)
 {
 	Cell *a = args->first;
 	Cell *b = args->rest->first;
-	if (!is_kind(a, CK_INT) || !is_kind(b, CK_INT))
+	if (!is_kind(a, CK_INTEGER) || !is_kind(b, CK_INTEGER))
 		return;
 	*val_out = get_bool_sym(a->integer < b->integer);
 }
@@ -152,7 +152,7 @@ void fn_gt (Cell *args, Cell *env, Cell **val_out)
 {
 	Cell *a = args->first;
 	Cell *b = args->rest->first;
-	if (!is_kind(a, CK_INT) || !is_kind(b, CK_INT))
+	if (!is_kind(a, CK_INTEGER) || !is_kind(b, CK_INTEGER))
 		return;
 	*val_out = get_bool_sym(a->integer > b->integer);
 }
@@ -162,7 +162,7 @@ void fn_lte (Cell *args, Cell *env, Cell **val_out)
 {
 	Cell *a = args->first;
 	Cell *b = args->rest->first;
-	if (!is_kind(a, CK_INT) || !is_kind(b, CK_INT))
+	if (!is_kind(a, CK_INTEGER) || !is_kind(b, CK_INTEGER))
 		return;
 	*val_out = get_bool_sym(a->integer <= b->integer);
 }
@@ -172,7 +172,7 @@ void fn_gte (Cell *args, Cell *env, Cell **val_out)
 {
 	Cell *a = args->first;
 	Cell *b = args->rest->first;
-	if (!is_kind(a, CK_INT) || !is_kind(b, CK_INT))
+	if (!is_kind(a, CK_INTEGER) || !is_kind(b, CK_INTEGER))
 		return;
 	*val_out = get_bool_sym(a->integer >= b->integer);
 }
@@ -182,7 +182,7 @@ void fn_add (Cell *args, Cell *env, Cell **val_out)
 {
 	Cell *a = args->first;
 	Cell *b = args->rest->first;
-	if (!is_kind(a, CK_INT) || !is_kind(b, CK_INT))
+	if (!is_kind(a, CK_INTEGER) || !is_kind(b, CK_INTEGER))
 		return;
 	*val_out = make_int(a->integer + b->integer);
 }
@@ -192,7 +192,7 @@ void fn_sub (Cell *args, Cell *env, Cell **val_out)
 {
 	Cell *a = args->first;
 	Cell *b = args->rest->first;
-	if (!is_kind(a, CK_INT) || !is_kind(b, CK_INT))
+	if (!is_kind(a, CK_INTEGER) || !is_kind(b, CK_INTEGER))
 		return;
 	*val_out = make_int(a->integer - b->integer);
 }
@@ -202,7 +202,7 @@ void fn_mul (Cell *args, Cell *env, Cell **val_out)
 {
 	Cell *a = args->first;
 	Cell *b = args->rest->first;
-	if (!is_kind(a, CK_INT) || !is_kind(b, CK_INT))
+	if (!is_kind(a, CK_INTEGER) || !is_kind(b, CK_INTEGER))
 		return;
 	*val_out = make_int(a->integer * b->integer);
 }
@@ -212,7 +212,7 @@ void fn_div (Cell *args, Cell *env, Cell **val_out)
 {
 	Cell *a = args->first;
 	Cell *b = args->rest->first;
-	if (!is_kind(a, CK_INT) || !is_kind(b, CK_INT))
+	if (!is_kind(a, CK_INTEGER) || !is_kind(b, CK_INTEGER))
 		return;
 	*val_out = make_int(a->integer / b->integer);
 }

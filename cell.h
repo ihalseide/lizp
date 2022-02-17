@@ -4,11 +4,10 @@
 enum Cell_kind
 {
 	CK_INVALID,
-	CK_VOID,
-	CK_INT,
+	CK_FUNCTION,
+	CK_INTEGER,
 	CK_SYMBOL,
 	CK_PAIR,
-	CK_STRING,
 };
 
 typedef struct cell Cell;
@@ -19,10 +18,10 @@ struct cell
 	enum Cell_kind kind;
 	union
 	{
-		int integer;           // CK_INT
-		const Cell *sym_name;  // CK_SYMBOL
-		const void *pointer;   // CK_VOID
-		struct                 // CK_PAIR, CK_STRING
+		int integer;
+		const Cell *sym_name;
+		Native_fn func;
+		struct
 		{
 			Cell *first;
 			Cell *rest;
@@ -41,7 +40,8 @@ extern Cell sym_nil,
 	 sym_fn_star,
 	 sym_if,
 	 sym_do,
-	 sym_quote;
+	 sym_quote,
+	 sym_string;
 
 int init_symbols (void);
 
@@ -75,6 +75,8 @@ Cell *cell_alloc (void);
 
 void cell_free (Cell *p);
 
+void cell_free_all (Cell *p);
+
 Cell *cell_init (enum Cell_kind k);
 
 int is_kind (const Cell *p, enum Cell_kind kind);
@@ -93,26 +95,28 @@ Cell *make_single_list (Cell *p);
 
 Cell *make_void (const void *vp);
 
-Cell *make_native_fn (int n_params, Native_fn func);
+Cell *make_native_fn (Native_fn func);
+
+Cell *make_wrapped_native_fn (int n_params, Native_fn func);
 
 int emptyp (const Cell *x);
+
+int stringp (const Cell *x);
 
 int nonempty_listp (const Cell *p);
 
 int list_length (const Cell *list);
 
-void list_push (Cell *item, Cell **list);
+int list_push (Cell *item, Cell **list);
 
 Cell *list_pop (Cell **list);
 
 int cell_eq (const Cell *a, const Cell *b);
 
-Cell *string_to_list (const char *str);
-
 Cell *get_bool_sym (int v);
 
 Cell *alist_assoc (const Cell *key, Cell *alist);
 
-int nonempty_stringp (const Cell *p);
+Cell *make_string_start (void);
 
 #endif /* _CELL_H */

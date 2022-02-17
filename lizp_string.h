@@ -3,7 +3,7 @@
 
 #include "cell.h"
 
-Cell *string_to_list (const char *str);
+int string_to_list (const char *start, int length, int escape, Cell **out);
 
 Cell *string_join (Cell *items, char sep, int readable);
 

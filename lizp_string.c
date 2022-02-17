@@ -6,36 +6,59 @@
 #include "cell.h"
 #include "lizp_string.h"
 
-Cell *string_to_list (const char *str)
+// Returns the number of chars parsed
+int string_to_list (const char *start, int length, int escape, Cell **out)
 {
-	Cell *list = make_empty_list();
-	if (!cell_validp(list))
-		return NULL;
+	// Validate args
+	if (!start || length <= 0 || !out)
+		return 0;
 
+	const char *view = start;
+	Cell *list = make_string_start();
 	Cell *p = list;
-	if (*str)
+
+	while (is_kind(p, CK_PAIR) && *view && length)
 	{
-		p->first = make_int(*str);
-		str++;
-	}
-	while (*str)
-	{
-		Cell *e = make_single_list(make_int(*str));
-		if (cell_validp(e))
+		// Get next char to add to end of string
+		char c = *view;
+
+		// Maybe process escape codes
+		if (escape && length && (c == '\\'))
 		{
-			p->rest = e;
-			p = p->rest;
-			str++;
+			string_step(&view, &length, 1);
+			if (!length)
+			{
+				*out = NULL;
+				cell_free_all(list);
+				return view - start;
+			}
+
+			c = *view;
+			switch (c)
+			{
+				case 'n': c = '\n'; break;
+				case 't': c = '\t'; break;
+			}
 		}
-		else
-		{
-			return NULL;
-		}
+		string_step(&view, &length, 1);
+
+		// Put list with char in REST slot
+		p->rest = make_single_list(make_int(c));
+		p = p->rest;
 	}
 
-	// Set correct variant
-	list->kind = CK_STRING;
-	return list;
+	// See if p being invalid is what caused the while loop to stop
+	if (is_kind(p, CK_PAIR))
+	{
+		*out = list;
+		return view - start;
+	}
+	else
+	{
+		*out = NULL;
+		cell_free_all(list);
+		return view - start;
+	}
 }
 
 Cell *string_join (Cell *items, char sep, int readable)

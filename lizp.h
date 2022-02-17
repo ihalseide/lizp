@@ -19,7 +19,7 @@ void PRINT (Cell *expr);
 
 void rep (const char *start, int length, Cell *env);
 
-void env_set_native_fn (Cell *env, const char *name, int n_params, Native_fn func);
+int env_set_native_fn (Cell *env, const char *name, int n_params, Native_fn func);
 
 Cell *init (int ncells);
 

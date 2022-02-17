@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <ctype.h>
 #include <assert.h>
+
 #include "cell.h"
 #include "lizp_string.h"
 
@@ -24,7 +25,8 @@ Cell sym_nil,
 	 sym_fn_star,
 	 sym_if,
 	 sym_do,
-	 sym_quote;
+	 sym_quote,
+	 sym_string;
 
 enum Cell_kind kind_of (const Cell *p)
 {
@@ -34,13 +36,39 @@ enum Cell_kind kind_of (const Cell *p)
 		return CK_INVALID;
 }
 
-// Valid cell pointer?
-int cell_validp (const Cell *p)
+int static_symp (const Cell *p)
+{
+	return p == &sym_nil
+		|| p == &sym_t
+		|| p == &sym_f
+		|| p == &sym_native_fn
+		|| p == &sym_fn
+		|| p == &sym_def_bang
+		|| p == &sym_let_star
+		|| p == &sym_fn_star
+		|| p == &sym_if
+		|| p == &sym_do
+		|| p == &sym_quote
+		|| p == &sym_string;
+}
+
+int cell_valid_pooledp (const Cell *p)
 {
 	if (cell_pool)
 		return p && (p >= cell_pool) && (p < (cell_pool + cell_pool_cap));
 	else
 		return 0;
+}
+
+// Valid cell pointer?
+int cell_validp (const Cell *p)
+{
+	if (!p)
+		return 0;
+	else if (static_symp(p))
+		return 1;
+	else
+		return cell_valid_pooledp(p);
 }
 
 Cell *int_to_p (int a)
@@ -80,13 +108,15 @@ Cell *cell_alloc (void)
 	else
 	{
 		printf("cell_alloc : error : out of memory for cells\n");
+		assert(0);
 		return NULL;
 	}
 }
 
 void cell_free (Cell *p)
 {
-	if (cell_validp(p))
+	// Do not try to free non-pool cells
+	if (cell_valid_pooledp(p))
 	{
 		// Turn x into a pair and put it into the free list
 		p->kind = CK_PAIR;
@@ -94,11 +124,17 @@ void cell_free (Cell *p)
 		p->rest = cell_pool->rest;
 		cell_pool->rest = p;
 	}
-	else
+}
+
+// Free the cell and all sub-items if its a list
+void cell_free_all (Cell *p)
+{
+	while (nonempty_listp(p))
 	{
-		printf("cell_free : error : cannot free invalid pointer\n");
-		return;
+		cell_free_all(p->first);
+		p = p->rest;
 	}
+	cell_free(p);
 }
 
 Cell *cell_init (enum Cell_kind k)
@@ -116,7 +152,7 @@ int is_kind (const Cell *p, enum Cell_kind kind)
 
 Cell *make_int (int n)
 {
-	Cell *p = cell_init(CK_INT);
+	Cell *p = cell_init(CK_INTEGER);
 	if (cell_validp(p))
 		p->integer = n;
 	return p;
@@ -141,6 +177,22 @@ Cell *make_pair (Cell *first, Cell *rest)
 	return p;
 }
 
+// Function for C code
+Cell *make_native_fn (Native_fn func)
+{
+	Cell *p = cell_init(CK_FUNCTION);
+	if (cell_validp(p))
+	{
+		p->func = func;
+	}
+	return p;
+}
+
+Cell *make_wrapped_native_fn (int n_params, Native_fn func)
+{
+	return make_pair(&sym_native_fn, make_pair(make_int(n_params), make_native_fn(func)));
+}
+
 Cell *make_empty_list (void)
 {
 	return make_pair(NULL, &sym_nil);
@@ -151,18 +203,9 @@ Cell *make_single_list (Cell *p)
 	return make_pair(p, &sym_nil);
 }
 
-Cell *make_void (const void *vp)
+Cell *make_string_start (void)
 {
-	Cell *p = cell_init(CK_VOID);
-	if (p)
-		p->pointer = vp;
-	return p;
-}
-
-// Function for C code
-Cell *make_native_fn (int n_params, Native_fn func)
-{
-	return make_pair(&sym_native_fn, make_pair(make_int(n_params), make_void(func)));
+	return make_single_list(&sym_string);
 }
 
 int native_fnp (const Cell *p)
@@ -204,17 +247,12 @@ int falsep (const Cell *p)
 // Note: NULL is not considered a list
 int emptyp (const Cell *p)
 {
-	return (is_kind(p, CK_PAIR) || is_kind(p, CK_STRING)) && (p->first == NULL);
+	return is_kind(p, CK_PAIR) && (p->first == NULL);
 }
 
 int nonempty_listp (const Cell *p)
 {
 	return is_kind(p, CK_PAIR) && !emptyp(p);
-}
-
-int nonempty_stringp (const Cell *p)
-{
-	return is_kind(p, CK_STRING) && !emptyp(p);
 }
 
 int list_length (const Cell *list)
@@ -226,17 +264,33 @@ int list_length (const Cell *list)
 }
 
 // Push an item in front of a list (which may be empty)
-void list_push (Cell *item, Cell **list)
+// Returns 0 upon success
+int list_push (Cell *item, Cell **list)
 {
 	// Validate arguments
-	if (!item || !is_kind(*list, CK_PAIR))
-		return;
+	if (!cell_validp(item) || !is_kind(*list, CK_PAIR))
+		return 1;
 
 	if (emptyp(*list))
+	{
 		// An empty list has nothing in the first slot yet
 		(*list)->first = item;
+		return 0;
+	}
 	else
-		*list = make_pair(item, *list);
+	{
+		// Non-empty list
+		Cell *node = make_pair(item, *list);
+		if (cell_validp(node))
+		{
+			*list = node;
+			return 0;
+		}
+		else
+		{
+			return 1;
+		}
+	}
 }
 
 // Remove and return the item in the front of a list
@@ -268,7 +322,7 @@ int cell_eq (const Cell *a, const Cell *b)
 
 		switch (a->kind)
 		{
-			case CK_INT:
+			case CK_INTEGER:
 				return a->integer == b->integer;
 			case CK_PAIR:
 				if (emptyp(a))
@@ -289,9 +343,9 @@ int cell_eq (const Cell *a, const Cell *b)
 			case CK_SYMBOL:
 				// Compare pointers
 				return a->sym_name == b->sym_name;
-			case CK_VOID:
+			case CK_FUNCTION:
 				// Just compare pointers
-				return a->pointer == b->pointer;
+				return a->func == b->func;
 			default:
 				assert(0 && "invalid cell kind");
 				return 0;
@@ -356,18 +410,8 @@ int intern_insert (Cell *symbol)
 	if (!cell_validp(symbol_list) || !is_kind(symbol, CK_SYMBOL))
 		return 1;
 
-	// Create new node with symbol
-	Cell *node = make_pair(symbol, symbol_list->rest);
-	if (is_kind(node, CK_PAIR))
-	{
-		// Insert node
-		symbol_list->rest = node;
-		return 0;
-	}
-	else
-	{
-		return 1;
-	}
+	// Push to front of symbol list
+	return list_push(symbol, &symbol_list);
 }
 
 // Returns symbol cell or NULL
@@ -385,10 +429,11 @@ Cell *intern_symbol (const Cell *name)
 	else
 	{
 		Cell *new_sym = make_symbol(name);
+		// (intern_insert returns 0 upon success)
 		if (intern_insert(new_sym))
-			return new_sym;
-		else
 			return NULL;
+		else
+			return new_sym;
 	}
 }
 
@@ -401,11 +446,17 @@ Cell *get_bool_sym (int v)
 		return &sym_f;
 }
 
+int stringp (const Cell * p)
+{
+	return nonempty_listp(p) && p->first == &sym_string;
+}
+
 // Returns 0 upon success
 int init_static_sym (Cell *p, const char *name)
 {
-	Cell *string = string_to_list(name);
-	if (is_kind(string, CK_STRING))
+	Cell *string = NULL;
+	int parsed_len = string_to_list(name, strlen(name), 0, &string);
+	if (parsed_len && stringp(string))
 	{
 		p->kind = CK_SYMBOL;
 		p->sym_name = string;
@@ -413,7 +464,6 @@ int init_static_sym (Cell *p, const char *name)
 	}
 	else
 	{
-		printf("init_static_sym : could not create \"%s\"\n", name);
 		return 1;
 	}
 }
@@ -436,7 +486,8 @@ int init_symbols (void)
 		|| init_static_sym(&sym_let_star, "let*")
 		|| init_static_sym(&sym_do, "do")
 		|| init_static_sym(&sym_if, "if")
-		|| init_static_sym(&sym_quote, "quote");
+		|| init_static_sym(&sym_quote, "quote")
+		|| init_static_sym(&sym_string, "string");
 }
 
 // Returns 0 upon success

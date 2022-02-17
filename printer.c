@@ -2,6 +2,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <assert.h>
+#include "cell.h"
 #include "printer.h"
 #include "lizp_string.h"
 
@@ -61,9 +62,7 @@ int print_int (int n, char *out, int length)
 int print_list_as_string (const Cell *list, char *out, int length, int readable)
 {
 	// Validate inputs
-	assert(is_kind(list, CK_PAIR) || is_kind(list, CK_STRING));
-	assert(out);
-	if (length <= 0)
+	if (!(is_kind(list, CK_PAIR) || nilp(list)) || !out || length <= 0)
 		return 0;
 
 	char *view = out;
@@ -75,11 +74,11 @@ int print_list_as_string (const Cell *list, char *out, int length, int readable)
 
 	// String contents
 	const Cell *p = list;
-	while ((rem > 1) && (nonempty_stringp(p) || nonempty_listp(p)))
+	while ((rem > 1) && nonempty_listp(p))
 	{
 		// Get character value in list
 		Cell *e = p->first;
-		if (!is_kind(e, CK_INT))
+		if (!is_kind(e, CK_INTEGER))
 			break;
 		char c = (char) e->integer;
 
@@ -162,26 +161,42 @@ int print_list (Cell *list, char *out, int length, int readable)
 	return length - rem;
 }
 
+int print_symbol (Cell *sym, char *out, int length)
+{
+	assert(is_kind(sym, CK_SYMBOL));
+	assert(stringp(sym->sym_name));
+	return print_list_as_string(sym->sym_name->rest, out, length, 0);
+}
+
+int print_pair (Cell *p, char *out, int length, int readable)
+{
+	assert(is_kind(p, CK_PAIR));
+	if (stringp(p))
+		return print_list_as_string(p->rest, out, length, readable);
+	else
+		return print_list(p, out, length, readable);
+}
+
 // Does: Prints form X to output stream
 // Returns: number of chars written
 int pr_str (Cell *x, char *out, int length, int readable)
 {
 	// Validate inputs
-	if (!out || !x || (length <= 0))
+	if (!out || (length <= 0))
 		return 0;
+	if (!cell_validp(x))
+		return print_cstr("#<NULL>", out, length);
 
 	switch (x->kind)
 	{
-		case CK_INT:
+		case CK_INTEGER:
 			return print_int(x->integer, out, length);
 		case CK_SYMBOL:
-			return print_list_as_string(x->sym_name, out, length, 0);
-		case CK_STRING:
-			return print_list_as_string(x, out, length, readable);
+			return print_symbol(x, out, length);
 		case CK_PAIR:
-				return print_list(x, out, length, readable);
-		case CK_VOID:
-			return print_cstr("#<unknown>", out, length);
+			return print_pair(x, out, length, readable);
+		case CK_FUNCTION:
+			return print_cstr("#<function>", out, length);
 		default:
 			return print_cstr("#<invalid>", out, length);
 	}
