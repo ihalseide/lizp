@@ -1,5 +1,5 @@
 CC = clang
-COpts = -std=c99 -Wall -g -Wunused
+COpts = -std=c99 -g -Wall -Wextra
 
 default: lizp
 
