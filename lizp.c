@@ -150,7 +150,7 @@ void apply (Cell *fn, Cell *args, Cell *env, Cell **val_out, Cell **env_out)
 	}
 	else
 	{
-		printf("apply : error : not a function");
+		printf("apply : error : not a function\n");
 		*val_out = NULL;
 		*env_out = NULL;
 		return;
@@ -158,7 +158,7 @@ void apply (Cell *fn, Cell *args, Cell *env, Cell **val_out, Cell **env_out)
 }
 
 // Returns 1 or 0 for if it is a special form or not
-int eval_special (Cell *head, Cell *ast, Cell *env, Cell **ast_out, Cell **env_out)
+int eval_special (Cell *head, Cell *given_ast, Cell *env, Cell **ast_out, Cell **env_out)
 {
 	assert(is_kind(ast, CK_PAIR));
 	if (!ast_out || !env_out)
@@ -167,6 +167,12 @@ int eval_special (Cell *head, Cell *ast, Cell *env, Cell **ast_out, Cell **env_o
 	// Head must be a symbol
 	if (!is_kind(head, CK_SYMBOL))
 		return 0;
+
+	Cell *ast;
+	if (given_ast)
+		ast = given_ast;
+	else
+		ast = make_empty_list();
 
 	if (cell_eq(head, &sym_def_bang))
 	{
@@ -388,6 +394,9 @@ int eval_special (Cell *head, Cell *ast, Cell *env, Cell **ast_out, Cell **env_o
 		// Not a known name for a special form
 		*env_out = NULL;
 		*ast_out = NULL;
+		// Free the unused new list
+		if (given_ast != ast)
+			cell_free_all(ast);
 		return 0;
 	}
 }

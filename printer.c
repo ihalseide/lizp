@@ -184,9 +184,9 @@ int pr_str (Cell *x, char *out, int length, int readable)
 	// Validate inputs
 	if (!out || (length <= 0))
 		return 0;
-	if (!cell_validp(x))
-		return print_cstr("#<NULL>", out, length);
 
+	if (!cell_validp(x))
+		return print_cstr("#<invalid>", out, length);
 	switch (x->kind)
 	{
 		case CK_INTEGER:
@@ -196,8 +196,9 @@ int pr_str (Cell *x, char *out, int length, int readable)
 		case CK_PAIR:
 			return print_pair(x, out, length, readable);
 		case CK_FUNCTION:
-			return print_cstr("#<function>", out, length);
+			return print_cstr("#<code>", out, length);
 		default:
 			return print_cstr("#<invalid>", out, length);
 	}
 }
+

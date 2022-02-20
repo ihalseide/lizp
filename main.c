@@ -20,6 +20,8 @@ int main (void)
 	EVAL(READ(code, strlen(code)), repl_env);
 	*/
 
+	PRINT(repl_env);
+
 	// REPL
 	char buffer[2 * 1024];
 	while (1)
