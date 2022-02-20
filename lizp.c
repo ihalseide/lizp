@@ -94,6 +94,7 @@ Cell *eval_ast (Cell *ast, Cell *env)
 					return NULL;
 				}
 			}
+		case CK_FUNCTION:
 		case CK_INTEGER:
 			// Self-evaluating values
 			return ast;
@@ -160,7 +161,7 @@ void apply (Cell *fn, Cell *args, Cell *env, Cell **val_out, Cell **env_out)
 // Returns 1 or 0 for if it is a special form or not
 int eval_special (Cell *head, Cell *given_ast, Cell *env, Cell **ast_out, Cell **env_out)
 {
-	assert(is_kind(ast, CK_PAIR));
+	assert(is_kind(given_ast, CK_PAIR));
 	if (!ast_out || !env_out)
 		return 0;
 
@@ -270,34 +271,10 @@ int eval_special (Cell *head, Cell *given_ast, Cell *env, Cell **ast_out, Cell *
 			return 1;
 		}
 
-		// Check that the parameter list is only symbols
-		Cell *p = ast->first;
-		while (is_kind(p, CK_PAIR) && !emptyp(p))
-		{
-			if (!is_kind(p->first, CK_SYMBOL))
-			{
-				// Error: parameter list must be all symbols
-				printf("fn* : error : items of parameter list must be symbols\n");
-				*ast_out = NULL;
-				*env_out = NULL;
-				return 1;
-			}
-			if (p->rest && !is_kind(p->rest, CK_PAIR))
-			{
-				// Something other than NULL or a list is next
-				printf("fn* : error : parameter list is not a proper list\n");
-				*ast_out = NULL;
-				*env_out = NULL;
-				return 1;
-			}
-
-			// Next
-			p = p->rest;
-		}
+		Cell *new_fn = make_lizp_fn(ast->first, ast->rest->first);
 
 		// New function closure, no tail call
-		// TODO: implement new function
-		*ast_out = &sym_nil;//make_fn(ast->first, ast->rest->first, env);
+		*ast_out = new_fn;
 		*env_out = NULL;
 		return 1;
 	}

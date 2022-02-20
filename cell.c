@@ -177,6 +177,14 @@ Cell *make_pair (Cell *first, Cell *rest)
 	return p;
 }
 
+// Like make_pair, but fails if any of the arguments are invalid
+Cell *make_pair_valid (Cell *first, Cell *rest)
+{
+	if (!cell_validp(first) || !cell_validp(rest))
+		return NULL;
+	return make_pair(first, rest);
+}
+
 // Function for C code
 Cell *make_native_fn (Native_fn func)
 {
@@ -190,7 +198,7 @@ Cell *make_native_fn (Native_fn func)
 
 Cell *make_wrapped_native_fn (int n_params, Native_fn func)
 {
-	return make_pair(&sym_native_fn, make_pair(make_int(n_params), make_native_fn(func)));
+	return make_pair_valid(&sym_native_fn, make_pair_valid(make_int(n_params), make_native_fn(func)));
 }
 
 Cell *make_empty_list (void)
@@ -200,12 +208,37 @@ Cell *make_empty_list (void)
 
 Cell *make_single_list (Cell *p)
 {
-	return make_pair(p, &sym_nil);
+	return make_pair_valid(p, &sym_nil);
 }
 
 Cell *make_string_start (void)
 {
 	return make_single_list(&sym_string);
+}
+
+Cell *make_lizp_fn (Cell *params, Cell *body)
+{
+	// Validate arguments
+	if (!is_kind(params, CK_PAIR))
+		return NULL;
+	if (!cell_validp(body))
+		return NULL;
+
+	// Check that the parameters are all symbols
+	Cell *p = params;
+	while (nonempty_listp(p))
+	{
+		if (!is_kind(p->first, CK_SYMBOL))
+		{
+			printf("make_lizp_fn : error : parameter list must all be symbols\n");
+			return NULL;
+		}
+
+		// Next
+		p = p->rest;
+	}
+
+	return make_pair_valid(&sym_fn, make_pair_valid(params, body));
 }
 
 int native_fnp (const Cell *p)
@@ -614,15 +647,26 @@ int functionp (const Cell *p)
 		return 0;
 }
 
+// Returns: the number of arguments a function takes,
+// 0 means variadic (any amount)
 int fn_arity (const Cell *p)
 {
-	(void)p;
-	assert(0 && "not implemented");
+	assert(functionp(p));
+	if (function_nativep(p))
+	{
+		Cell *cnt = p->rest->first;
+		assert(is_kind(cnt, CK_INTEGER));
+		return cnt->integer;
+	}
+	else
+	{
+		return list_length(p->rest->first);
+	}
 }
 
+// Returns: whether p is a native (built-in) function list
 int function_nativep (const Cell *p)
 {
-	(void)p;
-	assert(0 && "not implemented");
+	return functionp(p) && (p->first == &sym_native_fn);
 }
 

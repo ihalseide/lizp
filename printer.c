@@ -170,10 +170,19 @@ int print_symbol (Cell *sym, char *out, int length)
 
 int print_pair (Cell *p, char *out, int length, int readable)
 {
+	// Validate arguments
 	assert(is_kind(p, CK_PAIR));
+	if (!out || !length)
+		return 0;
+
 	if (stringp(p))
+		// Print the characters of a string
 		return print_list_as_string(p->rest, out, length, readable);
+	else if (functionp(p))
+		// Print functions like this:
+		return print_cstr("#<function>", out, length);
 	else
+		// Print list normally
 		return print_list(p, out, length, readable);
 }
 
