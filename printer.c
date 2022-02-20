@@ -20,12 +20,13 @@ int print_char (char c, char *out, int length)
 int print_cstr (const char *s, char *out, int length)
 {
 	// Validate inputs
-	if ((s == NULL) || (out == NULL) || (length <= 0))
+	if (!s || !out || (length <= 0))
 		return 0;
 
 	int i;
 	for (i = 0; s[i] && i < length; i++)
 		out[i] = s[i];
+
 	return i;
 }
 
@@ -168,22 +169,28 @@ int print_symbol (Cell *sym, char *out, int length)
 	return print_list_as_string(sym->sym_name->rest, out, length, 0);
 }
 
+// This function is necessary because there are a bunch of special types of pairs
 int print_pair (Cell *p, char *out, int length, int readable)
 {
 	// Validate arguments
-	assert(is_kind(p, CK_PAIR));
-	if (!out || !length)
+	if (!is_kind(p, CK_PAIR) || !out || !length)
 		return 0;
 
 	if (stringp(p))
+	{
 		// Print the characters of a string
 		return print_list_as_string(p->rest, out, length, readable);
+	}
 	else if (functionp(p))
-		// Print functions like this:
+	{
+		// Don't print actual function values out
 		return print_cstr("#<function>", out, length);
+	}
 	else
+	{
 		// Print list normally
 		return print_list(p, out, length, readable);
+	}
 }
 
 // Does: Prints form X to output stream
