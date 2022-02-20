@@ -8,12 +8,12 @@
 
 int print_char (char c, char *out, int length)
 {
-	if (out && (length > 0))
-	{
-		*out = c;
-		return 1;
-	}
-	return 0;
+	// Validate arguments
+	if (!out || length <= 0)
+		return 0;
+
+	*out = c;
+	return 1;
 }
 
 // returns number of chars written
@@ -94,6 +94,7 @@ int print_list_as_string (const Cell *list, char *out, int length, int readable)
 			{
 				case '\n': esc = 'n'; break;
 				case '\t': esc = 't'; break;
+				case '\0': esc = '0'; break;
 				case '\\': esc = '\\'; break;
 			}
 
