@@ -81,19 +81,20 @@ int env_set (Cell *env, Cell *sym, Cell *val)
 // "binds" list set to the corresponding item in the "exprs" list.
 Cell *env_create (Cell *env_outer, Cell *binds, Cell *exprs)
 {
-	// Validate args (env_outer is allowed to be NULL)
-	if (env_outer && !is_kind(env_outer, CK_PAIR))
+	// Validate args
+	if (env_outer != &sym_nil && !is_kind(env_outer, CK_PAIR))
 	{
 		printf("env_create : error : invalid outer environment\n");
 		return NULL;
 	}
 
-	Cell *env = make_pair(make_empty_list(), env_outer);
+	// Create the new environment
+	Cell *env = make_pair_valid(make_empty_list(), env_outer);
 	if (!env)
 		return NULL;
 
 	// Create the bindings by iterating both lists
-	while (is_kind(binds, CK_PAIR) && is_kind(exprs, CK_PAIR) && !emptyp(binds) && !emptyp(exprs))
+	while (nonempty_listp(binds) && nonempty_listp(exprs))
 	{
 		// Bind 1 pair
 		Cell *sym = binds->first;
@@ -112,17 +113,18 @@ Cell *env_create (Cell *env_outer, Cell *binds, Cell *exprs)
 		exprs = exprs->rest;
 	}
 
-	// Left over symbols in the bindings list
-	if (binds && !emptyp(binds))
+	if (nonempty_listp(binds) && emptyp(exprs))
 	{
+		// Left over symbols in the bindings list
 		printf("env_create : error : not enough values to bind to symbols list\n");
+		cell_free_all(env);
 		return NULL;
 	}
-
-	// Left over values in the exprs list
-	if (exprs && !emptyp(exprs))
+	else if (nonempty_listp(exprs) && emptyp(binds))
 	{
+		// Left over values in the exprs list
 		printf("env_create : error : too many values to bind to symbols list\n");
+		cell_free_all(env);
 		return NULL;
 	}
 
