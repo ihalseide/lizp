@@ -83,14 +83,14 @@ Cell *eval_ast (Cell *ast, Cell *env)
 			{
 				// Get the value out of the environment's slot
 				Cell *slot = env_get(env, ast);
-				if (slot)
+				if (cell_validp(slot))
 				{
 					return slot->rest;
 				}
 				else
 				{
-
-					printf("eval_ast : error : undefined symbol\n");
+					printf("eval_ast : error : undefined symbol : ");
+					PRINT(ast);
 					return NULL;
 				}
 			}
@@ -122,7 +122,8 @@ void apply (Cell *fn, Cell *args, Cell *env, Cell **val_out, Cell **env_out)
 		int n_params = fn_arity(fn);
 		if (n_params && (list_length(args) != n_params))
 		{
-			printf("apply : error : function requires %d parameters\n", n_params);
+			printf("apply : error : function requires %d parameters : ", n_params);
+			PRINT(fn);
 			*val_out = NULL;
 			*env_out = NULL;
 			return;
@@ -144,6 +145,7 @@ void apply (Cell *fn, Cell *args, Cell *env, Cell **val_out, Cell **env_out)
 			{
 				// Call native function
 				Native_fn f = fn->rest->rest->func; // 3rd item is function
+				// (val_out is modified by f)
 				f(args, env, val_out);
 				*env_out = NULL;
 			}
@@ -160,6 +162,7 @@ void apply (Cell *fn, Cell *args, Cell *env, Cell **val_out, Cell **env_out)
 			// Create new environment by binding params and args
 			Cell *fn_env = env_create(outer_env, params, args);
 
+			// Allow a tail call of the lizp-defined function
 			*val_out = body;
 			*env_out = fn_env;
 		}
