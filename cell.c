@@ -36,6 +36,7 @@ enum Cell_kind kind_of (const Cell *p)
 		return CK_INVALID;
 }
 
+// Returns: whether a cell pointer is a special / "static" pointer
 int static_symp (const Cell *p)
 {
 	return p == &sym_nil
@@ -52,43 +53,19 @@ int static_symp (const Cell *p)
 		|| p == &sym_string;
 }
 
+// Returns: whether a pointer is a valid pointer in the cell pool
 int cell_valid_pooledp (const Cell *p)
 {
-	if (cell_pool)
-		return p && (p >= cell_pool) && (p < (cell_pool + cell_pool_cap));
-	else
-		return 0;
+	return cell_pool && (p >= cell_pool) && (p < (cell_pool + cell_pool_cap));
 }
 
 // Valid cell pointer?
 int cell_validp (const Cell *p)
 {
-	if (!p)
-		return 0;
-	else if (static_symp(p))
-		return 1;
-	else
-		return cell_valid_pooledp(p);
+	return p && (static_symp(p) || cell_valid_pooledp(p));
 }
 
-Cell *int_to_p (int a)
-{
-	Cell *p = &cell_pool[a];
-	if (cell_validp(p))
-		return p;
-	else
-		return NULL;
-}
-
-int p_to_int (Cell *p)
-{
-	if (cell_validp(p))
-		return p - cell_pool;
-	else
-		return -1;
-}
-
-// Get a new cell
+// Get a new cell (un-initialized)
 Cell *cell_alloc (void)
 {
 	if (!cell_pool)
@@ -107,8 +84,7 @@ Cell *cell_alloc (void)
 	}
 	else
 	{
-		printf("cell_alloc : error : out of memory for cells\n");
-		assert(0);
+		printf("cell_alloc : error : out of memory\n");
 		return NULL;
 	}
 }
@@ -137,6 +113,8 @@ void cell_free_all (Cell *p)
 	cell_free(p);
 }
 
+// Returns: a new cell with its kind set
+// (every other field is not guaranteed to have a certain value)
 Cell *cell_init (enum Cell_kind k)
 {
 	Cell *x = cell_alloc();
@@ -145,6 +123,7 @@ Cell *cell_init (enum Cell_kind k)
 	return x;
 }
 
+// Returns: if a the cell pointer is a valid pointer of the kind
 int is_kind (const Cell *p, enum Cell_kind kind)
 {
 	return cell_validp(p) && (kind_of(p) == kind);
@@ -190,9 +169,7 @@ Cell *make_native_fn (Native_fn func)
 {
 	Cell *p = cell_init(CK_FUNCTION);
 	if (cell_validp(p))
-	{
 		p->func = func;
-	}
 	return p;
 }
 
@@ -202,16 +179,19 @@ Cell *make_wrapped_native_fn (int n_params, Native_fn func)
 	return make_pair_valid(&sym_native_fn, make_pair_valid(make_int(n_params), make_native_fn(func)));
 }
 
+// Returns: []
 Cell *make_empty_list (void)
 {
 	return make_pair(NULL, &sym_nil);
 }
 
+// Returns: [<p>]
 Cell *make_single_list (Cell *p)
 {
 	return make_pair_valid(p, &sym_nil);
 }
 
+// Returns: [{string}]
 Cell *make_string_start (void)
 {
 	return make_single_list(&sym_string);
@@ -530,6 +510,7 @@ int init_cells (int ncells)
 		return 1;
 
 	// Allocate the cell array
+	// Once it is allocated, the pointer should not be changed
 	cell_pool = malloc(ncells * sizeof(*cell_pool));
 	if (!cell_pool)
 		return 1;
@@ -538,15 +519,13 @@ int init_cells (int ncells)
 	cell_pool_cap = ncells;
 
 	// Link the free cells together in a list
-	// Note: int_to_p will make the last cell's next pointer
-	//       be NULL because the index is out of range.
 	for (int i = 0; i < cell_pool_cap; i++)
 	{
-		Cell *x = int_to_p(i);
-		x->kind = CK_PAIR;
-		x->first = NULL;
-		x->rest = int_to_p(i + 1);
+		cell_pool[i].kind = CK_PAIR;
+		cell_pool[i].first = NULL;
+		cell_pool[i].rest = &cell_pool[i + 1];
 	}
+	cell_pool[cell_pool_cap - 1].rest = &sym_nil;
 
 	return init_symbols();
 }

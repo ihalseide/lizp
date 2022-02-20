@@ -51,8 +51,6 @@ int native_fnp (const Cell *p);
 int truthy (Cell *x);
 enum Cell_kind kind_of (const Cell *p);
 int cell_validp (const Cell *p);
-Cell *int_to_p (int a);
-int p_to_int (Cell *x);
 int init_cells (int ncells);
 Cell *cell_alloc (void);
 void cell_free (Cell *p);
