@@ -109,12 +109,15 @@ void fn_empty_p (Cell *args, Cell *env, Cell **val_out)
 // [count list]
 void fn_count (Cell *args, Cell *env, Cell **val_out)
 {
-	if (!is_kind(args->first, CK_PAIR))
+	if (is_kind(args->first, CK_PAIR))
+	{
+		*val_out = make_int(list_length(args->first));
+	}
+	else
 	{
 		printf("count : error : first argument must be a list\n");
-		return;
+		*val_out = NULL;
 	}
-	*val_out = make_int(list_length(args->first));
 }
 
 // [list? x]
