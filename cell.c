@@ -217,12 +217,11 @@ Cell *make_string_start (void)
 	return make_single_list(&sym_string);
 }
 
-Cell *make_lizp_fn (Cell *params, Cell *body)
+// Returns: list of the form [{fn} params body outer_env]
+Cell *make_lizp_fn (Cell *params, Cell *body, Cell *outer_env)
 {
 	// Validate arguments
-	if (!is_kind(params, CK_PAIR))
-		return NULL;
-	if (!cell_validp(body))
+	if (!is_kind(params, CK_PAIR) || !is_kind(outer_env, CK_PAIR) || !cell_validp(body))
 		return NULL;
 
 	// Check that the parameters are all symbols
@@ -239,7 +238,11 @@ Cell *make_lizp_fn (Cell *params, Cell *body)
 		p = p->rest;
 	}
 
-	return make_pair_valid(&sym_fn, make_pair_valid(params, body));
+	// Create list of the form [{fn} params body outer_env]
+	return make_pair_valid(&sym_fn,
+			make_pair_valid(params,
+				make_pair_valid(body,
+					make_single_list(outer_env))));
 }
 
 int native_fnp (const Cell *p)

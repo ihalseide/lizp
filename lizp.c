@@ -104,6 +104,7 @@ Cell *eval_ast (Cell *ast, Cell *env)
 	}
 }
 
+// Returns values through val_out, env_out
 // For proper tail-call recursion, the next ast and env are both returned for EVAL to use.
 // Null environment indicates that no further evaluation is needed
 void apply (Cell *fn, Cell *args, Cell *env, Cell **val_out, Cell **env_out)
@@ -150,7 +151,17 @@ void apply (Cell *fn, Cell *args, Cell *env, Cell **val_out, Cell **env_out)
 		else
 		{
 			// Apply other function (created by fn*)
-			assert(0 && "not implemented");
+			assert(fn->first == &sym_fn);
+
+			Cell *params    = fn->rest->first;
+			Cell *body      = fn->rest->rest->first;
+			Cell *outer_env = fn->rest->rest->rest->first;
+
+			// Create new environment by binding params and args
+			Cell *fn_env = env_create(outer_env, params, args);
+
+			*val_out = body;
+			*env_out = fn_env;
 		}
 	}
 	else
@@ -274,7 +285,7 @@ int eval_special (Cell *head, Cell *given_ast, Cell *env, Cell **ast_out, Cell *
 			return 1;
 		}
 
-		Cell *new_fn = make_lizp_fn(ast->first, ast->rest->first);
+		Cell *new_fn = make_lizp_fn(ast->first, ast->rest->first, env);
 
 		// New function closure, no tail call
 		*ast_out = new_fn;
@@ -503,7 +514,7 @@ Cell *init (int ncells)
 	}
 
 	// Setup the global environment now
-	Cell *env = env_create(NULL, NULL, NULL);
+	Cell *env = env_create(&sym_nil, &sym_nil, &sym_nil);
 	if (env_set_native_fn(env, "*",      2, fn_mul)
 			|| env_set_native_fn(env, "+",      2, fn_add)
 			|| env_set_native_fn(env, "-",      2, fn_sub)

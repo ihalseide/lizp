@@ -68,7 +68,7 @@ Cell *make_pair_valid (Cell *first, Cell *rest);
 Cell *make_empty_list (void);
 Cell *make_single_list (Cell *p);
 Cell *make_void (const void *vp);
-Cell *make_lizp_fn (Cell *params, Cell *body);
+Cell *make_lizp_fn (Cell *params, Cell *body, Cell *outer_env);
 Cell *make_native_fn (Native_fn func);
 Cell *make_wrapped_native_fn (int n_params, Native_fn func);
 int emptyp (const Cell *x);
