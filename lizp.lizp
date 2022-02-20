@@ -12,7 +12,7 @@
 [def! assert
   [fn* [x]
     [if [not [eval x]]
-        [println `Assertion failed:' x `\n']
+        [println "Assertion failed:" x "\n"]
         #t]]]
 
 
@@ -35,16 +35,16 @@
 
 ;; Do some assertion tests
 [assert #t]
-[assert `']
+[assert ""]
 [assert assert]
 [assert [quote [not #f]]]
 [assert [quote [not nil]]]
 [assert [quote [/= #t #f]]]
 [assert [quote [/= #f nil]]]
 [assert [quote [/= #t nil]]]
-[assert [quote [/= `' nil]]]
-[assert [quote [/= `' `str']]]
-[assert [quote [= `' `']]]
+[assert [quote [/= "" nil]]]
+[assert [quote [/= "" "str"]]]
+[assert [quote [= "" ""]]]
 [assert [quote [= 0 0]]]
 [assert [quote [= = =]]]
 [assert [quote [= 3 [+ 1 2]]]]
@@ -55,11 +55,11 @@
 [assert [quote [= [] [list]]]]
 [assert [quote [/= [] nil]]]
 [assert [quote [= + +]]]
-[assert [quote [= `string' `string']]]
-[assert [quote [/= `string' `stringbig']]]
-[assert [quote [/= `string' `stringbig']]]
+[assert [quote [= "string" "string"]]]
+[assert [quote [/= "string" "stringbig"]]]
+[assert [quote [/= "string" "stringbig"]]]
 
 ;; Welcome message
-[println `Welcome to the LIZP read-eval-print-loop.\n']
-[println `These *features* are available:' *features* `.\n']
+[println "Welcome to the LIZP read-eval-print-loop.\n"]
+[println "These *features* are available:" *features* ".\n"]
 

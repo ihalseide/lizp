@@ -41,7 +41,7 @@ int print_string (const char *str, char *out, int length, int readable)
 
 	// Opening quote
 	if (readable)
-		string_step((const char**) &view, &rem, print_char('`', view, rem));
+		string_step((const char**) &view, &rem, print_char('"', view, rem));
 
 	// String contents
 	while (*str && (rem > 0))
@@ -61,7 +61,6 @@ int print_string (const char *str, char *out, int length, int readable)
 				case '\n': next_c = 'n'; break;
 				case '\t': next_c = 't'; break;
 				case '\'': next_c = '\''; break;
-				case '\\': next_c = '\\'; break;
 			}
 			if (next_c)
 			{
@@ -74,7 +73,7 @@ int print_string (const char *str, char *out, int length, int readable)
 
 	// Closing quote
 	if (readable)
-		string_step((const char**) &view, &rem, print_char('\'', view, rem));
+		string_step((const char**) &view, &rem, print_char('"', view, rem));
 
 	// Return length, including quotes that were written
 	return view - out;
