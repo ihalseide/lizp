@@ -196,6 +196,7 @@ Cell *make_native_fn (Native_fn func)
 	return p;
 }
 
+// Returns pair of the form: [{native-fn} n | func]
 Cell *make_wrapped_native_fn (int n_params, Native_fn func)
 {
 	return make_pair_valid(&sym_native_fn, make_pair_valid(make_int(n_params), make_native_fn(func)));

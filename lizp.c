@@ -122,6 +122,8 @@ void apply (Cell *fn, Cell *args, Cell *env, Cell **val_out, Cell **env_out)
 		if (n_params && (list_length(args) != n_params))
 		{
 			printf("apply : error : function requires %d parameters\n", n_params);
+			*val_out = NULL;
+			*env_out = NULL;
 			return;
 		}
 
@@ -139,8 +141,10 @@ void apply (Cell *fn, Cell *args, Cell *env, Cell **val_out, Cell **env_out)
 			}
 			else
 			{
-				// Call it
-				assert(0 && "not implemented");
+				// Call native function
+				Native_fn f = fn->rest->rest->func; // 3rd item is function
+				f(args, env, val_out);
+				*env_out = NULL;
 			}
 		}
 		else
@@ -161,7 +165,6 @@ void apply (Cell *fn, Cell *args, Cell *env, Cell **val_out, Cell **env_out)
 // Returns 1 or 0 for if it is a special form or not
 int eval_special (Cell *head, Cell *given_ast, Cell *env, Cell **ast_out, Cell **env_out)
 {
-	assert(is_kind(given_ast, CK_PAIR));
 	if (!ast_out || !env_out)
 		return 0;
 
