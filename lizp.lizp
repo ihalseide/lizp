@@ -21,17 +21,25 @@
   [fn* [x]
     [if [list? x]
         [not [empty? x]]
-		#f]]]
+        #f]]]
+
+;;; Calculate the sum of a list of numbers
+[def! sum-start
+  [fn* [L n]
+    [if [some-list? L]
+        [sum-start [rest L] [+ n [first L]]]
+        n]]]
+[def! sum [fn* [L] [sum-start L 0]]]
 
 ;;; See if an item, x, is in a list, lst
 ;;; TODO: fix bug with nested lists
 [def! member?
   [fn* [x lst]
     [if [some-list? lst]
-		[if [= x [first lst]]
-		    #t
-			[member? x [rest lst]]]
-		#f]]]
+        [if [= x [first lst]]
+            #t
+            [member? x [rest lst]]]
+        #f]]]
 
 ;; Do some assertion tests
 [assert #t]
