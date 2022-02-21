@@ -5,6 +5,7 @@
 #include <assert.h>
 
 #include "cell.h"
+#include "printer.h"
 
 // Cell allocator
 static Cell *cell_pool = NULL;
@@ -608,7 +609,44 @@ int string_to_list (const char *start, int length, int escape, Cell **out)
 // Join together the string representation of the items into a new string
 Cell *string_join (Cell *items, char sep, int readable)
 {
-	assert(0 && "not implemented");
+	Cell *result = make_string_start();
+	Cell *p_result = result;
+
+	Cell *p = items;
+	while (nonempty_listp(p))
+	{
+		Cell *item = p->first;
+
+		// Make sure the item is always a string
+		if (!stringp(item))
+		{
+			char buffer[4 * 1024];
+			int len = pr_str(item, buffer, sizeof(buffer) - 1, readable);
+			int len2 = string_to_list(buffer, len, readable, &item);
+			assert(len == len2);
+		}
+		assert(stringp(item));
+
+		// Use the string's content
+		Cell *p_item = item->rest;
+		while (nonempty_listp(p_item))
+		{
+			Cell *sub_item = p_item->first;
+			assert(intp(sub_item));
+
+			// Add sub-item character to result string
+			p_result->rest = make_single_list(sub_item);
+			p_result = p_result->rest;
+
+			// Next sub-item
+			p_item = p_item->rest;
+		}
+
+		// Next item
+		p = p->rest;
+	}
+
+	return result;
 }
 
 // For string reading and writing
