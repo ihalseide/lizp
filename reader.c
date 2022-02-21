@@ -167,7 +167,7 @@ int read_list (const char *start, int length, Cell **out)
 		while ((rem > 0) && *view && (*view != ']') && (*view != '|'))
 		{
 			// Read an element
-			Cell *e;
+			Cell *e = NULL;
 			if (!string_step(&view, &rem, read_str(view, rem, &e)) || !e)
 				break;
 
@@ -220,9 +220,11 @@ int read_str (const char *start, int length, Cell **out)
 	const char *view = start;
 	int rem = length;
 
-	// Do loop is for allowing comments to restart the read
-	do
+	// Loop is for allowing comments to restart the read
+	int loop = 1;
+	while (loop)
 	{
+		loop = 0;
 		string_skip_white(&view, &rem);
 		switch (*view)
 		{
@@ -234,14 +236,15 @@ int read_str (const char *start, int length, Cell **out)
 				// Line comment
 				*out = NULL;
 				string_step(&view, &rem, read_until(view, rem, '\n'));
-				continue;
+				loop = 1;
+				break;
 			case ']':
 				*out = NULL;
-				printf("read error : unmatched closing delimiter `%c'\n", *view);
+				printf("read error : unmatched closing delimiter '%c'\n", *view);
 				break;
 			case '|':
 				*out = NULL;
-				printf("read error : pair delimiter `|' should only be inside a list\n");
+				printf("read error : pair delimiter '|' should only be inside a list\n");
 				break;
 			case '[':
 				// Opening paren, for lists
@@ -259,9 +262,8 @@ int read_str (const char *start, int length, Cell **out)
 					string_step(&view, &rem, read_sym(view, rem, out));
 				break;
 		}
-		string_skip_white(&view, &rem);
 	}
-	while (0);
+	string_skip_white(&view, &rem);
 
 	return view - start;
 }
