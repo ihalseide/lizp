@@ -8,8 +8,6 @@
 #include "reader.h"
 #include "printer.h"
 
-static char buffer[1000];
-
 // [str a b c ...] -> "abc..." (prints non-readably)
 Cell *fn_str (Cell *args)
 {
@@ -28,8 +26,7 @@ Cell *fn_prn (Cell *args)
 	Cell *s = string_join(args, ' ', 1);
 	if (stringp(s))
 	{
-		int len = print_list_as_string(s->rest, buffer, sizeof(buffer), 1);
-		printf("%.*s", len, buffer);
+		PRINT(s);
 		cell_free_all(s);
 	}
 	return &sym_nil;
@@ -41,8 +38,7 @@ Cell *fn_println (Cell *args)
 	Cell *s = string_join(args, ' ', 0);
 	if (stringp(s))
 	{
-		int len = print_list_as_string(s->rest, buffer, sizeof(buffer), 1);
-		printf("%.*s", len, buffer);
+		PRINT(s);
 		cell_free_all(s);
 	}
 	return &sym_nil;
@@ -63,19 +59,26 @@ Cell *fn_eval (Cell *args)
 // [slurp "file name"] -> "file contents"
 Cell *fn_slurp (Cell *args)
 {
-	assert(0 && "NOT IMPLEMENTED");
-	/*
 	Cell *a = args->first;
 
 	// Validate arguments
-	if (!is_kind(a, CK_STRING))
-		return;
+	if (!stringp(a))
+	{
+		printf("slurp : error : 1st argument must be a string file name\n");
+		return NULL;
+	}
 
-	// Read all contents of the file...
-	// Open file
-	FILE *f = fopen(a->as_str, "r");
-	if (!f) // failed
-		return;
+	// Get string of file name
+	char path[1024];
+	int len = pr_str(a, path, sizeof(path) - 1, 0);
+	path[len] = '\0';
+
+	FILE *f = fopen(path, "r");
+	if (!f)
+	{
+		printf("slurp : error : could not read file\n");
+		return NULL;
+	}
 
 	// Get file length
 	fseek(f, 0, SEEK_END);
@@ -83,20 +86,27 @@ Cell *fn_slurp (Cell *args)
 	fseek(f, 0, SEEK_SET);
 
 	// See if we have enough room for this string data
-	if (!string_can_alloc(fsize + 1))
+	if (!cell_can_alloc(fsize + 1))
 	{
 		fclose(f);
-		return;
+		printf("slurp : error : not enough memory to read file\n");
+		return NULL;
 	}
 
-	// Read the char data and null-terminate it
-	fread(char_free, fsize, 1, f);
+	// Read the char data and null-terminate it.
+	// Stack allocate the file contents because it's
+	// getting converte to a lisp string anyways...
+	char content[fsize + 1];
+	fread(content, fsize, 1, f);
 	fclose(f);
+	content[fsize] = 0;
 
-	// Move the character allocation pointer
-	return intern_string(char_free, fsize);
+	// Convert to lisp string
+	Cell *s;
+	int parse = string_to_list(content, fsize, 0, &s);
+	assert(parse == fsize);
 
-	*/
+	return s;
 }
 
 // [read-string "str"] -> any value
@@ -105,6 +115,7 @@ Cell *fn_read_str (Cell *args)
 	Cell *a = args->first;
 	if (stringp(a))
 	{
+		char buffer[4 * 1024];
 		int len = pr_str(a, buffer, sizeof(buffer), 1);
 		Cell *b;
 		read_str(buffer, len, &b);
@@ -145,7 +156,7 @@ Cell *fn_list_p (Cell *args)
 // [int? x]
 Cell *fn_int_p (Cell *args)
 {
-	return get_bool_sym(pairp(args->first));
+	return get_bool_sym(intp(args->first));
 }
 
 // [= x y]

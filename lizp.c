@@ -457,7 +457,7 @@ Cell *EVAL (Cell *ast, Cell *env)
 
 void PRINT (Cell *expr)
 {
-	char buffer[2 * 1024];
+	static char buffer[2 * 1024];
 	int p_len = pr_str(expr, buffer, sizeof(buffer), 1);
 	printf("%.*s\n", p_len, buffer);
 }
@@ -533,6 +533,7 @@ Cell *init (int ncells)
 			|| env_set_native_fn(env, "concat", 0, fn_concat)
 			|| env_set_native_fn(env, "assoc",  2, fn_assoc)
 			|| env_set_native_fn(env, "first",  1, fn_first)
+			|| env_set_native_fn(env, "slurp",  1, fn_slurp)
 			|| env_set_native_fn(env, "rest",   1, fn_rest))
 	{
 		printf("init : error : could not setup environment\n");
