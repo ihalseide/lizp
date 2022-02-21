@@ -60,6 +60,7 @@ Cell *fn_list (Cell *args)
 // [eval expr]
 Cell *fn_eval (Cell *args)
 {
+	(void) args;
 	assert(0 && "Not to be implemented. This function is only needed for its pointer value.");
 }
 
