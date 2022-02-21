@@ -612,10 +612,25 @@ Cell *string_join (Cell *items, char sep, int readable)
 	Cell *result = make_string_start();
 	Cell *p_result = result;
 
+	// Make the separator character
+	Cell *sep_val;
+	if (sep)
+		sep_val = make_int(sep);
+	else
+		sep_val = NULL;
+
 	Cell *p = items;
+	int firstloop = 1;
 	while (nonempty_listp(p))
 	{
 		Cell *item = p->first;
+
+		// Add separator before the item (except the first item)
+		if (sep_val && !firstloop)
+		{
+			p_result->rest = make_single_list(sep_val);
+			p_result = p_result->rest;
+		}
 
 		// Make sure the item is always a string
 		if (!stringp(item))
@@ -627,7 +642,7 @@ Cell *string_join (Cell *items, char sep, int readable)
 		}
 		assert(stringp(item));
 
-		// Use the string's content
+		// Use the item string's content
 		Cell *p_item = item->rest;
 		while (nonempty_listp(p_item))
 		{
@@ -644,6 +659,7 @@ Cell *string_join (Cell *items, char sep, int readable)
 
 		// Next item
 		p = p->rest;
+		firstloop = 0;
 	}
 
 	return result;
