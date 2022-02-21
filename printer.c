@@ -63,7 +63,7 @@ int print_int (int n, char *out, int length)
 int print_list_as_string (const Cell *list, char *out, int length, int readable)
 {
 	// Validate inputs
-	if (!(is_kind(list, CK_PAIR) || cell_eq(list, &sym_nil)) || !out || length <= 0)
+	if (!(pairp(list) || cell_eq(list, &sym_nil)) || !out || length <= 0)
 		return 0;
 
 	char *view = out;
@@ -79,7 +79,7 @@ int print_list_as_string (const Cell *list, char *out, int length, int readable)
 	{
 		// Get character value in list
 		Cell *e = p->first;
-		if (!is_kind(e, CK_INTEGER))
+		if (!intp(e))
 			break;
 		char c = (char) e->integer;
 
@@ -123,7 +123,7 @@ int print_list_as_string (const Cell *list, char *out, int length, int readable)
 int print_list (Cell *list, char *out, int length, int readable)
 {
 	// Validate arguments
-	if (!is_kind(list, CK_PAIR) || !out || (length <= 0))
+	if (!pairp(list) || !out || (length <= 0))
 		return 0;
 
 	char *view = out;
@@ -165,7 +165,7 @@ int print_list (Cell *list, char *out, int length, int readable)
 
 int print_symbol (Cell *sym, char *out, int length)
 {
-	assert(is_kind(sym, CK_SYMBOL));
+	assert(symbolp(sym));
 	assert(stringp(sym->sym_name));
 	return print_list_as_string(sym->sym_name->rest, out, length, 0);
 }
@@ -174,7 +174,7 @@ int print_symbol (Cell *sym, char *out, int length)
 int print_pair (Cell *p, char *out, int length, int readable)
 {
 	// Validate arguments
-	if (!is_kind(p, CK_PAIR) || !out || !length)
+	if (!pairp(p) || !out || !length)
 		return 0;
 
 	if (stringp(p))

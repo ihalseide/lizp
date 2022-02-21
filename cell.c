@@ -124,9 +124,24 @@ Cell *cell_init (enum Cell_kind k)
 }
 
 // Returns: if a the cell pointer is a valid pointer of the kind
-int is_kind (const Cell *p, enum Cell_kind kind)
+static int is_kind (const Cell *p, enum Cell_kind kind)
 {
 	return cell_validp(p) && (kind_of(p) == kind);
+}
+
+int symbolp (const Cell *p)
+{
+	return is_kind(p, CK_SYMBOL);
+}
+
+int pairp (const Cell *p)
+{
+	return is_kind(p, CK_PAIR);
+}
+
+int intp (const Cell *p)
+{
+	return is_kind(p, CK_INTEGER);
 }
 
 Cell *make_int (int n)
@@ -198,10 +213,10 @@ Cell *make_string_start (void)
 }
 
 // Returns: list of the form [{fn} params body outer_env]
-Cell *make_lizp_fn (Cell *params, Cell *body, Cell *outer_env)
+Cell *make_lizp_fn (Cell *params, Cell *body)
 {
 	// Validate arguments
-	if (!is_kind(params, CK_PAIR) || !is_kind(outer_env, CK_PAIR) || !cell_validp(body))
+	if (!is_kind(params, CK_PAIR) || !cell_validp(body))
 		return NULL;
 
 	// Check that the parameters are all symbols
@@ -218,11 +233,10 @@ Cell *make_lizp_fn (Cell *params, Cell *body, Cell *outer_env)
 		p = p->rest;
 	}
 
-	// Create list of the form [{fn} params body outer_env]
+	// Create list of the form [{fn} params body]
 	return make_pair_valid(&sym_fn,
 			make_pair_valid(params,
-				make_pair_valid(body,
-					make_single_list(outer_env))));
+				make_single_list(body)));
 }
 
 int native_fnp (const Cell *p)

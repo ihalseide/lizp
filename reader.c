@@ -6,7 +6,7 @@
 #include "reader.h"
 #include "lizp.h"
 
-int char_is_symbol (char c)
+int char_symbolp (char c)
 {
 	return (c > ' ')
 		&& (c != '"')
@@ -45,7 +45,7 @@ int read_sym (const char *start, int length, Cell **out)
 
 	const char *view = start;
 
-	while (char_is_symbol(*view) && (length > 0))
+	while (char_symbolp(*view) && (length > 0))
 		string_step(&view, &length, 1);
 
 	Cell *name;
@@ -56,7 +56,7 @@ int read_sym (const char *start, int length, Cell **out)
 	if (symbol_len == parse_len && stringp(name))
 	{
 		Cell *interned = intern_symbol(name);
-		if (is_kind(interned, CK_SYMBOL))
+		if (symbolp(interned))
 		{
 			// Free name if it was already interned before
 			if (interned->sym_name != name)
@@ -210,7 +210,7 @@ int read_until (const char *start, int length, char sentinel)
 }
 
 // Read a form from an input stream/string
-// Returns: the number of characters read
+// Returns: the number of characters read, and writes the result to "out"
 int read_str (const char *start, int length, Cell **out)
 {
 	// Validate arguments
@@ -220,7 +220,7 @@ int read_str (const char *start, int length, Cell **out)
 	const char *view = start;
 	int rem = length;
 
-	// Do...while for allowing comments to restart the read
+	// Do loop is for allowing comments to restart the read
 	do
 	{
 		string_skip_white(&view, &rem);

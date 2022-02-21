@@ -3,7 +3,7 @@
 
 #include "cell.h"
 
-int char_is_symbol (char c);
+int char_symbolp (char c);
 
 int read_until (const char *start, int length, char sentinel);
 

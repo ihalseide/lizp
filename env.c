@@ -7,7 +7,7 @@
 // Find the innermost env which contains symbol
 Cell *env_find (Cell *env, const Cell *sym)
 {
-	assert(is_kind(env, CK_PAIR) && is_kind(sym, CK_SYMBOL));
+	assert(pairp(env) && symbolp(sym));
 
 	// Search up the environment hierarchy
 	// Note: env = [alist | outer]
@@ -30,7 +30,7 @@ Cell *env_find (Cell *env, const Cell *sym)
 //   when not found -> nil
 Cell *env_get (Cell *env, const Cell *sym)
 {
-	assert(is_kind(env, CK_PAIR) && is_kind(sym, CK_SYMBOL));
+	assert(pairp(env) && symbolp(sym));
 
 	// Find the environment which contains the symbol
 	env = env_find(env, sym);
@@ -46,7 +46,7 @@ Cell *env_get (Cell *env, const Cell *sym)
 int env_set (Cell *env, Cell *sym, Cell *val)
 {
 	// Validate inputs.
-	if (!is_kind(env, CK_PAIR) || !is_kind(sym, CK_SYMBOL))
+	if (!pairp(env) || !symbolp(sym))
 		return 1;
 
 	// If there is already a symbol defined, change the value,
@@ -64,7 +64,7 @@ int env_set (Cell *env, Cell *sym, Cell *val)
 		// Symbol undefined.
 		// Push the new (symbol . value) pair to the env
 		slot = make_pair(sym, val);
-		if (is_kind(slot, CK_PAIR))
+		if (pairp(slot))
 		{
 			list_push(slot, &(env->first));
 			return 0;
@@ -82,7 +82,7 @@ int env_set (Cell *env, Cell *sym, Cell *val)
 Cell *env_create (Cell *env_outer, Cell *binds, Cell *exprs)
 {
 	// Validate args
-	if (env_outer != &sym_nil && !is_kind(env_outer, CK_PAIR))
+	if (env_outer != &sym_nil && !pairp(env_outer))
 	{
 		printf("env_create : error : invalid outer environment\n");
 		return NULL;
@@ -101,7 +101,7 @@ Cell *env_create (Cell *env_outer, Cell *binds, Cell *exprs)
 		Cell *val = exprs->first;
 
 		// Make sure it only binds symbols
-		if (!is_kind(sym, CK_SYMBOL))
+		if (!symbolp(sym))
 		{
 			printf("env_create : error : a member of the bindings list is not a symbol\n");
 			return NULL;

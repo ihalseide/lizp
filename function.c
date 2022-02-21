@@ -109,7 +109,7 @@ void fn_empty_p (Cell *args, Cell *env, Cell **val_out)
 // [count list]
 void fn_count (Cell *args, Cell *env, Cell **val_out)
 {
-	if (is_kind(args->first, CK_PAIR))
+	if (pairp(args->first))
 	{
 		*val_out = make_int(list_length(args->first));
 	}
@@ -123,13 +123,13 @@ void fn_count (Cell *args, Cell *env, Cell **val_out)
 // [list? x]
 void fn_list_p (Cell *args, Cell *env, Cell **val_out)
 {
-	*val_out = get_bool_sym(is_kind(args->first, CK_PAIR));
+	*val_out = get_bool_sym(pairp(args->first));
 }
 
 // [int? x]
 void fn_int_p (Cell *args, Cell *env, Cell **val_out)
 {
-	*val_out = get_bool_sym(is_kind(args->first, CK_INTEGER));
+	*val_out = get_bool_sym(pairp(args->first));
 }
 
 // [= x y]
@@ -144,7 +144,7 @@ void fn_lt (Cell *args, Cell *env, Cell **val_out)
 {
 	Cell *a = args->first;
 	Cell *b = args->rest->first;
-	if (!is_kind(a, CK_INTEGER) || !is_kind(b, CK_INTEGER))
+	if (!intp(a) || !intp(b))
 		return;
 	*val_out = get_bool_sym(a->integer < b->integer);
 }
@@ -154,7 +154,7 @@ void fn_gt (Cell *args, Cell *env, Cell **val_out)
 {
 	Cell *a = args->first;
 	Cell *b = args->rest->first;
-	if (!is_kind(a, CK_INTEGER) || !is_kind(b, CK_INTEGER))
+	if (!intp(a) || !intp(b))
 		return;
 	*val_out = get_bool_sym(a->integer > b->integer);
 }
@@ -164,7 +164,7 @@ void fn_lte (Cell *args, Cell *env, Cell **val_out)
 {
 	Cell *a = args->first;
 	Cell *b = args->rest->first;
-	if (!is_kind(a, CK_INTEGER) || !is_kind(b, CK_INTEGER))
+	if (!intp(a) || !intp(b))
 		return;
 	*val_out = get_bool_sym(a->integer <= b->integer);
 }
@@ -174,7 +174,7 @@ void fn_gte (Cell *args, Cell *env, Cell **val_out)
 {
 	Cell *a = args->first;
 	Cell *b = args->rest->first;
-	if (!is_kind(a, CK_INTEGER) || !is_kind(b, CK_INTEGER))
+	if (!intp(a) || !intp(b))
 		return;
 	*val_out = get_bool_sym(a->integer >= b->integer);
 }
@@ -184,7 +184,7 @@ void fn_add (Cell *args, Cell *env, Cell **val_out)
 {
 	Cell *a = args->first;
 	Cell *b = args->rest->first;
-	if (!is_kind(a, CK_INTEGER) || !is_kind(b, CK_INTEGER))
+	if (!intp(a) || !intp(b))
 		return;
 	*val_out = make_int(a->integer + b->integer);
 }
@@ -194,7 +194,7 @@ void fn_sub (Cell *args, Cell *env, Cell **val_out)
 {
 	Cell *a = args->first;
 	Cell *b = args->rest->first;
-	if (!is_kind(a, CK_INTEGER) || !is_kind(b, CK_INTEGER))
+	if (!intp(a) || !intp(b))
 		return;
 	*val_out = make_int(a->integer - b->integer);
 }
@@ -204,7 +204,7 @@ void fn_mul (Cell *args, Cell *env, Cell **val_out)
 {
 	Cell *a = args->first;
 	Cell *b = args->rest->first;
-	if (!is_kind(a, CK_INTEGER) || !is_kind(b, CK_INTEGER))
+	if (!intp(a) || !intp(b))
 		return;
 	*val_out = make_int(a->integer * b->integer);
 }
@@ -214,7 +214,7 @@ void fn_div (Cell *args, Cell *env, Cell **val_out)
 {
 	Cell *a = args->first;
 	Cell *b = args->rest->first;
-	if (!is_kind(a, CK_INTEGER) || !is_kind(b, CK_INTEGER))
+	if (!intp(a) || !intp(b))
 		return;
 	*val_out = make_int(a->integer / b->integer);
 }
@@ -235,7 +235,7 @@ void fn_concat (Cell *args, Cell *env, Cell **val_out)
 	{
 		// Current list from arguments
 		Cell *a = args->first;
-		if (!is_kind(a, CK_PAIR))
+		if (!pairp(a))
 		{
 			printf("fn_concat : error : arguments must be lists\n");
 			return;
@@ -264,7 +264,7 @@ void fn_concat (Cell *args, Cell *env, Cell **val_out)
 
 void fn_assoc (Cell *args, Cell *env, Cell **val_out)
 {
-	if (!is_kind(args->rest->first, CK_PAIR))
+	if (!pairp(args->rest->first))
 	{
 		printf("assoc : error : second argument must be a list\n");
 		*val_out = NULL;
@@ -274,7 +274,7 @@ void fn_assoc (Cell *args, Cell *env, Cell **val_out)
 	Cell *slot = alist_assoc(args->first, args->rest->first);
 	if (slot)
 	{
-		assert(is_kind(slot, CK_PAIR));
+		assert(pairp(slot));
 		*val_out = slot;
 	}
 	else
@@ -286,7 +286,7 @@ void fn_assoc (Cell *args, Cell *env, Cell **val_out)
 void fn_first (Cell *args, Cell *env, Cell **val_out)
 {
 	Cell *a = args->first;
-	if (is_kind(a, CK_PAIR))
+	if (pairp(a))
 	{
 		if (emptyp(a))
 			*val_out = NULL;
@@ -303,7 +303,7 @@ void fn_first (Cell *args, Cell *env, Cell **val_out)
 void fn_rest (Cell *args, Cell *env, Cell **val_out)
 {
 	Cell *a = args->first;
-	if (is_kind(a, CK_PAIR))
+	if (intp(a))
 	{
 		if (emptyp(a))
 			*val_out = NULL;

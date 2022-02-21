@@ -29,7 +29,7 @@ Cell *READ (const char *start, int length)
 Cell *eval_each (Cell *list, Cell *env)
 {
 	// Validate arguments
-	if (!is_kind(list, CK_PAIR) || !is_kind(env, CK_PAIR))
+	if (!pairp(list) || !pairp(env))
 		return NULL;
 
 	if (emptyp(list))
@@ -43,7 +43,7 @@ Cell *eval_each (Cell *list, Cell *env)
 	list = list->rest;
 	while (list && p_y)
 	{
-		if (!is_kind(list, CK_PAIR))
+		if (!pairp(list))
 		{
 			// dotted list
 			p_y->rest = EVAL(list, env);
@@ -64,7 +64,7 @@ Cell *eval_each (Cell *list, Cell *env)
 Cell *eval_ast (Cell *ast, Cell *env)
 {
 	// Validate args
-	if (!cell_validp(ast) || !is_kind(env, CK_PAIR))
+	if (!cell_validp(ast) || !pairp(env))
 		return NULL;
 
 	switch (ast->kind)
@@ -109,7 +109,7 @@ Cell *eval_ast (Cell *ast, Cell *env)
 // Null environment indicates that no further evaluation is needed
 void apply (Cell *fn, Cell *args, Cell *env, Cell **val_out, Cell **env_out)
 {
-	if (!is_kind(args, CK_PAIR) || !env || !val_out || !env_out)
+	if (!pairp(args) || !env || !val_out || !env_out)
 	{
 		printf("apply : error : invalid arguments\n");
 		return;
@@ -157,10 +157,9 @@ void apply (Cell *fn, Cell *args, Cell *env, Cell **val_out, Cell **env_out)
 
 			Cell *params    = fn->rest->first;
 			Cell *body      = fn->rest->rest->first;
-			Cell *outer_env = fn->rest->rest->rest->first;
 
 			// Create new environment by binding params and args
-			Cell *fn_env = env_create(outer_env, params, args);
+			Cell *fn_env = env_create(env, params, args);
 
 			// Allow a tail call of the lizp-defined function
 			*val_out = body;
@@ -183,7 +182,7 @@ int eval_special (Cell *head, Cell *given_ast, Cell *env, Cell **ast_out, Cell *
 		return 0;
 
 	// Head must be a symbol
-	if (!is_kind(head, CK_SYMBOL))
+	if (!symbolp(head))
 		return 0;
 
 	Cell *ast;
@@ -202,7 +201,7 @@ int eval_special (Cell *head, Cell *given_ast, Cell *env, Cell **ast_out, Cell *
 		}
 
 		Cell *sym = ast->first;
-		if (!is_kind(sym, CK_SYMBOL))
+		if (!symbolp(sym))
 		{
 			printf("def! : error : argument 1 must be a symbol\n");
 			return 1;
@@ -247,9 +246,9 @@ int eval_special (Cell *head, Cell *given_ast, Cell *env, Cell **ast_out, Cell *
 		// bindings to the environment
 		Cell *let_env = env_create(env, NULL, NULL);
 		Cell *p = ast->first; // pointer to bindings list
-		while (is_kind(p, CK_PAIR))
+		while (pairp(p))
 		{
-			if (!is_kind(p->rest, CK_PAIR))
+			if (!pairp(p->rest))
 			{
 				// Error: odd amount of arguments in first list
 				printf("let* : error : requires an even amount of items in bindings list\n");
@@ -257,7 +256,7 @@ int eval_special (Cell *head, Cell *given_ast, Cell *env, Cell **ast_out, Cell *
 				*env_out = NULL;
 				return 1;
 			}
-			if (!is_kind(p->first, CK_SYMBOL))
+			if (!symbolp(p->first))
 			{
 				// Error: even element in bindings list not a symbol
 				printf("let* : error : requires even elements in bindings list to be symbols\n");
@@ -288,9 +287,9 @@ int eval_special (Cell *head, Cell *given_ast, Cell *env, Cell **ast_out, Cell *
 			return 1;
 		}
 
-		Cell *new_fn = make_lizp_fn(ast->first, ast->rest->first, env);
+		Cell *new_fn = make_lizp_fn(ast->first, ast->rest->first);
 
-		// New function closure, no tail call
+		// New function, no tail call
 		*ast_out = new_fn;
 		*env_out = NULL;
 		return 1;
@@ -299,7 +298,7 @@ int eval_special (Cell *head, Cell *given_ast, Cell *env, Cell **ast_out, Cell *
 	{
 		// [if expr t-expr f-expr] OR [if expr t-expr]
 		int len = list_length(ast);
-		if (!is_kind(ast, CK_PAIR) || (len != 2 && len != 3))
+		if (!pairp(ast) || (len != 2 && len != 3))
 		{
 			// Error: too few or too many arguments
 			printf("if : error : must have 2 or 3 arguments\n");
@@ -345,14 +344,14 @@ int eval_special (Cell *head, Cell *given_ast, Cell *env, Cell **ast_out, Cell *
 		// [do exprs...]
 
 		// Evaluate all but the last item
-		while (is_kind(ast, CK_PAIR) && !emptyp(ast) && ast->rest)
+		while (pairp(ast) && !emptyp(ast) && ast->rest)
 		{
 			EVAL(ast->first, env);
 			ast = ast->rest;
 		}
 
 		// Has a last item, so do a tail call to evaluate that
-		if (is_kind(ast, CK_PAIR) && !emptyp(ast))
+		if (pairp(ast) && !emptyp(ast))
 		{
 			*ast_out = ast->first;
 			*env_out = env;
@@ -404,7 +403,7 @@ Cell *EVAL (Cell *ast, Cell *env)
 		if (!ast)
 			break;
 
-		if (!is_kind(ast, CK_PAIR))
+		if (!pairp(ast))
 			return eval_ast(ast, env);
 
 		// String -> itself
@@ -444,7 +443,7 @@ Cell *EVAL (Cell *ast, Cell *env)
 		Cell *args = ast->rest;
 
 		// Make sure that the arguments are a list
-		if (!is_kind(args, CK_PAIR))
+		if (!pairp(args))
 			args = make_empty_list();
 
 		// Apply the function
@@ -496,7 +495,7 @@ int env_set_native_fn (Cell *env, const char *name, int n_params, Native_fn func
 	if (stringp(newname))
 	{
 		Cell *sym = intern_symbol(newname);
-		if (is_kind(sym, CK_SYMBOL))
+		if (symbolp(sym))
 			return env_set(env, sym, make_wrapped_native_fn(n_params, func));
 		else
 			return 1;
