@@ -124,7 +124,7 @@ Cell *fn_read_str (Cell *args)
 	{
 		char buffer[4 * 1024];
 		int len = pr_str(a, buffer, sizeof(buffer), 0);
-		assert(len < sizeof(buffer));
+		assert((unsigned) len < sizeof(buffer));
 		Cell *b;
 		read_str(buffer, len, &b);
 		return b;
