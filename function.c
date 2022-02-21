@@ -8,6 +8,13 @@
 #include "reader.h"
 #include "printer.h"
 
+void print_nonreadably (Cell *expr)
+{
+	static char buffer[2 * 1024];
+	int p_len = pr_str(expr, buffer, sizeof(buffer), 0);
+	printf("%.*s\n", p_len, buffer);
+}
+
 // [str a b c ...] -> "abc..." (prints non-readably)
 Cell *fn_str (Cell *args)
 {
@@ -38,7 +45,7 @@ Cell *fn_println (Cell *args)
 	Cell *s = string_join(args, ' ', 0);
 	if (stringp(s))
 	{
-		PRINT(s);
+		print_nonreadably(s);
 		cell_free_all(s);
 	}
 	return &sym_nil;
@@ -116,7 +123,8 @@ Cell *fn_read_str (Cell *args)
 	if (stringp(a))
 	{
 		char buffer[4 * 1024];
-		int len = pr_str(a, buffer, sizeof(buffer), 1);
+		int len = pr_str(a, buffer, sizeof(buffer), 0);
+		assert(len < sizeof(buffer));
 		Cell *b;
 		read_str(buffer, len, &b);
 		return b;

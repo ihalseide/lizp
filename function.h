@@ -34,5 +34,6 @@ Cell *fn_concat (Cell *args);
 Cell *fn_assoc (Cell *args);
 Cell *fn_first (Cell *args);
 Cell *fn_rest (Cell *args);
+void print_nonreadably (Cell *expr);
 
 #endif /* _FUNCTION_H */
