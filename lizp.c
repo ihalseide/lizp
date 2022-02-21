@@ -403,12 +403,11 @@ Cell *EVAL (Cell *ast, Cell *env)
 		if (!pairp(ast))
 			return eval_ast(ast, env);
 
+		// Special lists...
 		// String -> itself
-		if (stringp(ast))
-			return ast;
-
 		// Empty list -> itself
-		if (emptyp(ast))
+		// Function -> itself
+		if (stringp(ast) || emptyp(ast) || functionp(ast))
 			return ast;
 
 		// Special form evaluation...
