@@ -117,26 +117,24 @@ void apply (Cell *fn, Cell *args, Cell *env, Cell **val_out, Cell **env_out)
 
 	if (functionp(fn))
 	{
-		// Check if the number of parameters match
-		// Note: when n_params == 0, that means the function is variadic
-		int n_params = fn_arity(fn);
-		if (n_params && (list_length(args) != n_params))
+		// Check that the function arity matches the actual number of arguments
+		// (if arity is 0, it is variadic)
+		int n_params = function_arity(fn);
+		if (n_params && n_params != list_length(args))
 		{
-			printf("apply : error : function requires %d parameters : ", n_params);
-			PRINT(fn);
+			printf("apply : error : function requires %d argument(s)\n", n_params);
 			*val_out = NULL;
 			*env_out = NULL;
-			return;
 		}
 
 		if (function_nativep(fn))
 		{
-			// Apply a built-in native C function
+			// Built-in native C function...
 
-			// Special case for eval, because
-			// it only needs to do what EVAL already does.
 			if (fn->rest->rest->func == fn_eval)
 			{
+				// Special case for eval, because
+				// it only needs to do what EVAL already does.
 				// Pass-through
 				*val_out = args->first;
 				*env_out = env;
@@ -146,19 +144,18 @@ void apply (Cell *fn, Cell *args, Cell *env, Cell **val_out, Cell **env_out)
 				// Call native function
 				Native_fn f = fn->rest->rest->func; // 3rd item is function
 				// (val_out is modified by f)
-				f(args, env, val_out);
+				*val_out = f(args);
 				*env_out = NULL;
 			}
 		}
 		else
 		{
-			// Apply other function (created by fn*)
+			// Function created by "fn*"
 			assert(fn->first == &sym_fn);
 
-			Cell *params    = fn->rest->first;
-			Cell *body      = fn->rest->rest->first;
-
 			// Create new environment by binding params and args
+			Cell *params = fn->rest->first;
+			Cell *body   = fn->rest->rest->first;
 			Cell *fn_env = env_create(env, params, args);
 
 			// Allow a tail call of the lizp-defined function
@@ -168,10 +165,10 @@ void apply (Cell *fn, Cell *args, Cell *env, Cell **val_out, Cell **env_out)
 	}
 	else
 	{
+		// Not a function
 		printf("apply : error : not a function\n");
 		*val_out = NULL;
 		*env_out = NULL;
-		return;
 	}
 }
 
