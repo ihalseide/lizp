@@ -11,7 +11,7 @@ enum Cell_kind
 };
 
 typedef struct cell Cell;
-typedef void (*Native_fn)(Cell* args, Cell *env, Cell **out);
+typedef Cell *(*Native_fn)(Cell* args);
 
 struct cell
 {
@@ -66,7 +66,7 @@ enum Cell_kind kind_of (const Cell *p);
 int cell_eq (const Cell *a, const Cell *b);
 int cell_validp (const Cell *p);
 int emptyp (const Cell *x);
-int fn_arity (const Cell *p);
+int function_arity (const Cell *p);
 int function_nativep (const Cell *p);
 int functionp (const Cell *p);
 int init_cells (int ncells);

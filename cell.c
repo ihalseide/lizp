@@ -409,7 +409,7 @@ Cell *intern_find_symbol (const Cell *name)
 	while (nonempty_listp(p))
 	{
 		Cell *sym = p->first;
-		assert(is_kind(sym, CK_SYMBOL));
+		assert(symbolp(sym));
 		if (cell_eq(name, sym->sym_name))
 			return sym;
 
@@ -599,13 +599,9 @@ int string_to_list (const char *start, int length, int escape, Cell **out)
 	}
 }
 
-// FIXME
 // Join together the string representation of the items into a new string
 Cell *string_join (Cell *items, char sep, int readable)
 {
-	(void)items;
-	(void)sep;
-	(void)readable;
 	assert(0 && "not implemented");
 }
 
@@ -634,9 +630,10 @@ void string_skip_white(const char **stream, int *length)
 	*length = rem;
 }
 
+// Special pair: function
 int functionp (const Cell *p)
 {
-	if (!is_kind(p, CK_PAIR))
+	if (!pairp(p))
 		return 0;
 	else if (p->first == &sym_native_fn || p->first == &sym_fn)
 		return is_kind(p->rest, CK_PAIR);
@@ -646,7 +643,7 @@ int functionp (const Cell *p)
 
 // Returns: the number of arguments a function takes,
 // 0 means variadic (any amount)
-int fn_arity (const Cell *p)
+int function_arity (const Cell *p)
 {
 	assert(functionp(p));
 	if (function_nativep(p))
