@@ -1,7 +1,5 @@
 ;;;; This file can be loaded by the main program
 
-[def! *features* [quote [LIZP]]]
-
 ;;; Boolean not
 [def! not [fn* [x] [if x #f #t]]]
 
@@ -12,9 +10,8 @@
 [def! assert
   [fn* [x]
     [if [not [eval x]]
-        [println `Assertion failed:' x `\n']
+        [println "Assertion failed:" x "\n"]
         #t]]]
-
 
 ;;; Non-empty list predicate
 [def! some-list?
@@ -31,43 +28,36 @@
         n]]]
 [def! sum [fn* [L] [sum-start L 0]]]
 
-;;; See if an item, x, is in a list, lst
-;;; TODO: fix bug with nested lists
-[def! member?
-  [fn* [x lst]
-    [if [some-list? lst]
-        [if [= x [first lst]]
-            #t
-            [member? x [rest lst]]]
-        #f]]]
+;;; Negative numbers
+[def! neg [fn* [n] [- 0 n]]]
 
 ;; Do some assertion tests
 [assert #t]
-[assert `']
+[assert ""]
 [assert assert]
+[assert [quote ""]]
 [assert [quote [not #f]]]
 [assert [quote [not nil]]]
 [assert [quote [/= #t #f]]]
 [assert [quote [/= #f nil]]]
 [assert [quote [/= #t nil]]]
-[assert [quote [/= `' nil]]]
-[assert [quote [/= `' `str']]]
-[assert [quote [= `' `']]]
+[assert [quote [/= "" nil]]]
+[assert [quote [/= "" "str"]]]
+[assert [quote [= "" ""]]]
 [assert [quote [= 0 0]]]
 [assert [quote [= = =]]]
 [assert [quote [= 3 [+ 1 2]]]]
 [assert [quote [= 3 [- 6 3]]]]
 [assert [quote [= 48 [* 6 8]]]]
-[assert [quote [= -3 [/ 9 -3]]]]
+[assert [quote [= [neg 3] [/ 9 [neg 3]]]]]
 [assert [quote [= [] []]]]
 [assert [quote [= [] [list]]]]
 [assert [quote [/= [] nil]]]
 [assert [quote [= + +]]]
-[assert [quote [= `string' `string']]]
-[assert [quote [/= `string' `stringbig']]]
-[assert [quote [/= `string' `stringbig']]]
+[assert [quote [= "string" "string"]]]
+[assert [quote [/= "string" "stringbig"]]]
+[assert [quote [/= "string" "stringbig"]]]
 
 ;; Welcome message
-[println `Welcome to the LIZP read-eval-print-loop.\n']
-[println `These *features* are available:' *features* `.\n']
+[println "Welcome to the LIZP read-eval-print-loop.\n"]
 
