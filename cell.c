@@ -65,6 +65,12 @@ int cell_validp (const Cell *p)
 	return p && (static_symp(p) || cell_valid_pooledp(p));
 }
 
+// Is there room to allocate n_cells?
+int cell_can_alloc (int n_cells)
+{
+	return cell_pool && (cell_pool + n_cells <= cell_pool + cell_pool_cap);
+}
+
 // Get a new cell (un-initialized)
 Cell *cell_alloc (void)
 {
@@ -544,7 +550,7 @@ int init_cells (int ncells)
 	return init_symbols();
 }
 
-// Returns the number of chars parsed
+// Returns: the number of chars parsed, and write [string ...] -> out
 int string_to_list (const char *start, int length, int escape, Cell **out)
 {
 	// Validate args
