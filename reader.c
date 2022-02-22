@@ -3,10 +3,11 @@
 #include <assert.h>
 #include <ctype.h>
 
+#include "error.h"
 #include "reader.h"
-#include "lizp_string.h"
+#include "lizp.h"
 
-int char_is_symbol (char c)
+int char_symbolp (char c)
 {
 	return (c > ' ')
 		&& (c != '"')
@@ -14,26 +15,14 @@ int char_is_symbol (char c)
 		&& (c != '|') && (c != '[') && (c != ']');
 }
 
-int parse_int (const char *start, int length, int *out)
+// Returns the number of characters read
+int read_int (const char *start, int length, Cell **out)
 {
 	// Validate inputs
-	if (!out)
-		return 0;
 	if (!start || !out || length <= 0)
-	{
-		*out = 0;
 		return 0;
-	}
 
 	const char *view = start;
-
-	// Read optional minus sign
-	int sign = 1;
-	if (*view == '-')
-	{
-		sign = -sign;
-		string_step(&view, &length, 1);
-	}
 
 	// Result n from reading digits
 	int n = 0;
@@ -43,109 +32,84 @@ int parse_int (const char *start, int length, int *out)
 		string_step(&view, &length, 1);
 	}
 
-	*out = n * sign;
+	*out = make_int(n);
 	return view - start;
 }
 
-// Create a string cell that has the string value from reading a quoted string
-int read_string_literal (const char *start, int length, Cell **out)
+// Read and intern symbol
+// Returns number of chars read
+int read_sym (const char *start, int length, Cell **out)
 {
 	// Validate inputs
-	if (!out)
+	if (!start || !out || length <= 0)
 		return 0;
-	if (!start || length <= 0 || !char_free)
-	{
-		*out = NULL;
-		return 0;
-	}
 
-	// Is the current part of input string
 	const char *view = start;
 
-	// Is the current part of the output buffer (char pool)
-	// Write to the char_pool, but do not move the char_free pointer.
-	char *pad = char_free;
-	int pad_len = char_pool_cap - (char_free - char_pool);
+	while (char_symbolp(*view) && (length > 0))
+		string_step(&view, &length, 1);
+
+	Cell *name;
+	int symbol_len = view - start;
+	int parse_len = string_to_list(start, view - start, 0, &name);
+	assert(stringp(name));
+	assert(symbol_len == parse_len);
+
+	Cell *interned = intern_symbol(name);
+	assert(symbolp(interned));
+
+	// Free name if it was already interned before
+	if (interned->sym_name != name)
+		cell_free_all(name);
+
+	*out = interned;
+	return symbol_len;
+}
+
+// Convert a string to a list of characters
+int read_quoted_string (const char *start, int length, Cell **out)
+{
+	// Validate inputs
+	if (!out || !start || length <= 0 || *start != '"')
+		return 0;
+
+	const char *view = start;
 
 	// Read opening quote
 	string_step(&view, &length, 1);
+	
+	// Do a pass to find the end quote
+	int quoted_len = read_until(view, length, '"');
+	string_step(&view, &length, quoted_len);
 
-	// Read contents and process escape codes
-	while (*view && (*view != '"') && (length > 0) && (pad_len > 0))
+	if (length && *view == '"')
 	{
-		char c = *view;
-		if (*view == '\\')
-		{
-			string_step(&view, &length, 1);
-			c = *view;
-			switch (c)
-			{
-				case 'n': c = '\n'; break;
-				case 't': c = '\t'; break;
-			}
-		}
-		*pad = c;
-		string_step((const char**) &pad, &pad_len, 1);
+		// Read closing quote
 		string_step(&view, &length, 1);
-	}
 
-	// Read closing quote
-	string_step(&view, &length, 1);
-
-	// Intern the string, which will handle the case that
-	// this string is already in the char_pool.
-	// May or may not cause string allocation.
-	int result_length = pad - char_free;
-	*out = intern_string(char_free, result_length);
-
-	// Return the number of chars written
-	return view - start;
-}
-
-// Read in a symbol or number
-int read_item (const char *start, int length, Cell **out)
-{
-	// Validate arguments
-	if (!out)
-		return 0;
-	if (!start || (length <= 0))
-	{
-		*out = NULL;
-		return 0;
-	}
-
-	const char *p = start;
-
-	// Symbol or number
-	while (length > 0 && char_is_symbol(*p))
-		string_step(&p, &length, 1);
-
-	// Symbols or numbers can start with a '-', so we need to distinguish them by 
-	// what the next character is.
-	if (isdigit(*start) || ((length > 1) && (*start == '-') && isdigit(*(start + 1))))
-	{
-		// Number
-		int x;
-		int n = parse_int(start, p - start, &x);
-		if (!n)
+		Cell *string = NULL;
+		int parsed_len = string_to_list(start + 1, quoted_len, 1, &string);
+		if (parsed_len == 0 && quoted_len == 0)
 		{
-			*out = NULL;
-			return p - start;
+			// Empty string
+			*out = make_string_start();
+			return view - start;
 		}
-		*out = make_int(x);
+		else if (parsed_len == quoted_len && cell_validp(string))
+		{
+			// Successfully processed non-empty string
+			*out = string;
+			return view - start;
+		}
+		else
+		{
+			error_raise("read_quoted_string : error : could not parse string contents\n");
+		}
 	}
 	else
 	{
-		// Symbol
-		Cell *name = intern_string(start, p - start);
-		if (!name)
-			*out = NULL;
-
-		assert(is_kind(name, CK_STRING));
-		*out = make_symbol(name->as_str);
+		error_raise("read_quoted_string : error : unexpected end of input in quoted string\n");
 	}
-
-	return p - start;
 }
 
 int read_list (const char *start, int length, Cell **out)
@@ -170,12 +134,12 @@ int read_list (const char *start, int length, Cell **out)
 	if (!list)
 		return view - start;
 
-	if (*view != ']')
+	if (*view && *view != ']')
 	{
 		Cell *p = list;
 
 		// Read the first element
-		if (!string_step(&view, &rem, read_str(view, rem, &(p->as_pair.first))))
+		if (!string_step(&view, &rem, read_str(view, rem, &(p->first))))
 		{
 			*out = NULL;
 			return view - start;
@@ -185,12 +149,12 @@ int read_list (const char *start, int length, Cell **out)
 		while ((rem > 0) && *view && (*view != ']') && (*view != '|'))
 		{
 			// Read an element
-			Cell *e;
+			Cell *e = NULL;
 			if (!string_step(&view, &rem, read_str(view, rem, &e)) || !e)
-				break;
+				error_raise("read_list : could not read item");
 
-			p->as_pair.rest = make_pair(e, NULL);
-			p = p->as_pair.rest;
+			p->rest = make_pair(e, NULL);
+			p = p->rest;
 		}
 
 		if (*view == '|')
@@ -199,7 +163,7 @@ int read_list (const char *start, int length, Cell **out)
 			Cell *e;
 			string_step(&view, &rem, 1);
 			string_step(&view, &rem, read_str(view, rem, &e));
-			p->as_pair.rest = e;
+			p->rest = e;
 		}
 	}
 
@@ -211,9 +175,7 @@ int read_list (const char *start, int length, Cell **out)
 	}
 	else
 	{
-		// Error: unexpected end of input
-		*out = NULL;
-		printf("read_list: error : error reading item or unexpected end of input\n");
+		error_raise("read_list: unexpected end of input\n");
 	}
 
 	return view - start;
@@ -228,53 +190,54 @@ int read_until (const char *start, int length, char sentinel)
 }
 
 // Read a form from an input stream/string
-// Returns: the number of characters read
+// Returns: the number of characters read, and writes the result to "out"
 int read_str (const char *start, int length, Cell **out)
 {
 	// Validate arguments
-	if (!out)
+	if (!out || !start || length <= 0)
 		return 0;
-	if (!start || length <= 0)
-	{
-		*out = NULL;
-		return 0;
-	}
 
 	const char *view = start;
 	int rem = length;
 
-	string_skip_white(&view, &rem);
-	switch (*view)
+	// Loop is for allowing comments to restart the read
+	int loop = 1;
+	while (loop)
 	{
-		case '\0':
-			// End of input
-			*out = make_symbol(s_nil);
-			break;
-		case ';':
-			// Line comment
-			*out = make_symbol(s_nil);
-			string_step(&view, &rem, read_until(view, rem, '\n'));
-			break;
-		case ']':
-			*out = NULL;
-			printf("read error : unmatched closing delimiter '%c'\n", *view);
-			break;
-		case '|':
-			*out = NULL;
-			printf("read error : pair delimiter '|' should only be inside a list\n");
-			break;
-		case '[':
-			// Opening paren, for lists
-			string_step(&view, &rem, read_list(view, rem, out));
-			break;
-		case '"': 
-			// Quoted string literal
-			string_step(&view, &rem, read_string_literal(view, rem, out));
-			break;
-		default:
-			// Symbol or number
-			string_step(&view, &rem, read_item(view, rem, out));
-			break;
+		loop = 0;
+		string_skip_white(&view, &rem);
+		switch (*view)
+		{
+			case '\0':
+				// End of input
+				*out = NULL;
+				break;
+			case ';':
+				// Line comment
+				*out = NULL;
+				string_step(&view, &rem, read_until(view, rem, '\n'));
+				loop = 1;
+				break;
+			case ']':
+				error_raise("read : unmatched closing ']'");
+			case '|':
+				error_raise("read : the pair delimiter '|' should only be inside a list");
+			case '[':
+				// Opening paren, for lists
+				string_step(&view, &rem, read_list(view, rem, out));
+				break;
+			case '"': 
+				// Quoted string literal
+				string_step(&view, &rem, read_quoted_string(view, rem, out));
+				break;
+			default:
+				// Symbol or number
+				if (isdigit(*view))
+					string_step(&view, &rem, read_int(view, rem, out));
+				else
+					string_step(&view, &rem, read_sym(view, rem, out));
+				break;
+		}
 	}
 	string_skip_white(&view, &rem);
 

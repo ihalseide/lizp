@@ -2,87 +2,86 @@
 #include <assert.h>
 #include <string.h>
 
+#include "cell.h"
+#include "error.h"
 #include "function.h"
 #include "lizp.h"
+#include "printer.h"
 #include "reader.h"
-#include "lizp_string.h"
+
+void print_nonreadably (Cell *expr)
+{
+	static char buffer[2 * 1024];
+	int p_len = pr_str(expr, buffer, sizeof(buffer), 0);
+	printf("%.*s\n", p_len, buffer);
+}
 
 // [str a b c ...] -> "abc..." (prints non-readably)
-void fn_str (Cell *args, Cell *env, Cell **val_out)
+Cell *fn_str (Cell *args)
 {
-	*val_out = string_join(args, 0, 0);
+	return string_join(args, 0, 0);
 }
 
 // [pr-str a b c ...] -> "a b c ..." (prints readably)
-void fn_pr_str (Cell *args, Cell *env, Cell **val_out)
+Cell *fn_pr_str (Cell *args)
 {
-	*val_out = string_join(args, ' ', 1);
+	return string_join(args, ' ', 1);
 }
 
 // [prn a b c ...] -> nil (prints readably)
-void fn_prn (Cell *args, Cell *env, Cell **val_out)
+Cell *fn_prn (Cell *args)
 {
 	Cell *s = string_join(args, ' ', 1);
-	if (s)
-		printf("%s", s->as_str);
-	*val_out =  make_symbol(s_nil);
+	if (stringp(s))
+	{
+		PRINT(s);
+		cell_free_all(s);
+	}
+	return &sym_nil;
 }
 
 // [println a b c ...] -> nil (prints non-readably)
-void fn_println (Cell *args, Cell *env, Cell **val_out)
+Cell *fn_println (Cell *args)
 {
 	Cell *s = string_join(args, ' ', 0);
-	if (s)
-		printf("%s", s->as_str);
-	*val_out = make_symbol(s_nil);
+	if (stringp(s))
+	{
+		print_nonreadably(s);
+		cell_free_all(s);
+	}
+	return &sym_nil;
 }
 
-// [list a ...] -> [a ...] (variadic)
-void fn_list (Cell *args, Cell *env, Cell **val_out)
+// [list ...] -> [...] (variadic)
+Cell *fn_list (Cell *args)
 {
-	*val_out = args;
+	return args;
 }
 
-// [deref atom]
-void fn_deref (Cell *args, Cell *env, Cell **val_out)
+// [eval expr]
+Cell *fn_eval (Cell *args)
 {
-	if (is_kind(args->as_pair.first, CK_ATOM))
-		*val_out = args->as_pair.first->as_atom;
-	else
-		*val_out = NULL;
-}
-
-// [atom? x] -> bool
-void fn_atom_p (Cell *args, Cell *env, Cell **val_out)
-{
-	*val_out = make_bool_sym(is_kind(args->as_pair.first, CK_ATOM));
-}
-
-// [atom x] -> #<atom x>
-void fn_atom (Cell *args, Cell *env, Cell **val_out)
-{
-	*val_out = make_atom(args->as_pair.first);
-}
-
-void fn_eval (Cell *args, Cell *env, Cell **val_out)
-{
+	(void) args;
 	assert(0 && "Not to be implemented. This function is only needed for its pointer value.");
 }
 
-// (slurp "file name") -> "file contents"
-void fn_slurp (Cell *args, Cell *env, Cell **val_out)
+// [slurp "file name"] -> "file contents"
+Cell *fn_slurp (Cell *args)
 {
-	Cell *a = args->as_pair.first;
+	Cell *a = args->first;
 
 	// Validate arguments
-	if (!is_kind(a, CK_STRING))
-		return;
+	if (!stringp(a))
+		error_raise("slurp : 1st argument must be a string file name");
 
-	// Read all contents of the file...
-	// Open file
-	FILE *f = fopen(a->as_str, "r");
-	if (!f) // failed
-		return;
+	// Get string of file name
+	char path[1024];
+	int len = pr_str(a, path, sizeof(path) - 1, 0);
+	path[len] = '\0';
+
+	FILE *f = fopen(path, "r");
+	if (!f)
+		error_raise("slurp : could not read file");
 
 	// Get file length
 	fseek(f, 0, SEEK_END);
@@ -90,296 +89,257 @@ void fn_slurp (Cell *args, Cell *env, Cell **val_out)
 	fseek(f, 0, SEEK_SET);
 
 	// See if we have enough room for this string data
-	if (!string_can_alloc(fsize + 1))
+	if (!cell_can_alloc(fsize + 1))
 	{
 		fclose(f);
-		return;
+		error_raise("slurp : not enough memory to read file");
 	}
 
-	// Read the char data and null-terminate it
-	fread(char_free, fsize, 1, f);
+	// Read the char data and null-terminate it.
+	// Stack allocate the file contents because it's
+	// getting converte to a lisp string anyways...
+	char content[fsize + 1];
+	fread(content, fsize, 1, f);
 	fclose(f);
+	content[fsize] = 0;
 
-	// Move the character allocation pointer
-	*val_out = intern_string(char_free, fsize);
+	// Convert to lisp string
+	Cell *s;
+	int parse = string_to_list(content, fsize, 0, &s);
+	assert(parse == fsize);
+
+	return s;
 }
 
 // [read-string "str"] -> any value
-void fn_read_str (Cell *args, Cell *env, Cell **val_out)
+Cell *fn_read_str (Cell *args)
 {
-	Cell *a = args->as_pair.first;
-	if (is_kind(a, CK_STRING))
-		read_str(a->as_str, strlen(a->as_str), val_out);
+	Cell *a = args->first;
+	if (stringp(a))
+	{
+		char buffer[4 * 1024];
+		int len = pr_str(a, buffer, sizeof(buffer), 0);
+		assert((unsigned) len < sizeof(buffer));
+		Cell *b;
+		read_str(buffer, len, &b);
+		return b;
+	}
+	else
+	{
+		error_raise("read-string : argument must be a string");
+	}
 }
 
 // [empty? x]
-void fn_empty_p (Cell *args, Cell *env, Cell **val_out)
+Cell *fn_empty_p (Cell *args)
 {
-	*val_out = make_bool_sym(is_empty_list(args->as_pair.first));
+	return get_bool_sym(emptyp(args->first));
 }
 
 // [count list]
-void fn_count (Cell *args, Cell *env, Cell **val_out)
+Cell *fn_count (Cell *args)
 {
-	if (!is_kind(args->as_pair.first, CK_PAIR))
-	{
-		printf("count : error : first argument must be a list\n");
-		return;
-	}
-	*val_out = make_int(list_length(args->as_pair.first));
+	if (pairp(args->first))
+		return make_int(list_length(args->first));
+	else
+		error_raise("count : first argument must be a list");
 }
 
 // [list? x]
-void fn_list_p (Cell *args, Cell *env, Cell **val_out)
+Cell *fn_list_p (Cell *args)
 {
-	*val_out = make_bool_sym(is_kind(args->as_pair.first, CK_PAIR));
+	return get_bool_sym(pairp(args->first));
 }
 
 // [int? x]
-void fn_int_p (Cell *args, Cell *env, Cell **val_out)
+Cell *fn_int_p (Cell *args)
 {
-	*val_out = make_bool_sym(is_kind(args->as_pair.first, CK_INT));
-}
-
-
-// [reset! atom value] -> value
-void fn_reset_bang (Cell *args, Cell *env, Cell **val_out)
-{
-	Cell *atom = args->as_pair.first;
-	Cell *value = args->as_pair.rest->as_pair.first;
-
-	if (!is_kind(atom, CK_ATOM))
-	{
-		printf("reset! : error : first argument must be an atom\n");
-		return;
-	}
-
-	atom->as_atom = value;
-	*val_out = value;
+	return get_bool_sym(intp(args->first));
 }
 
 // [= x y]
-void fn_eq (Cell *args, Cell *env, Cell **val_out)
+Cell *fn_eq (Cell *args)
 {
-	*val_out = make_bool_sym(cell_eq(args->as_pair.first,
-				args->as_pair.rest->as_pair.first));
+	return get_bool_sym(cell_eq(args->first,
+				args->rest->first));
 }
 
 // [< n1 n2]
-void fn_lt (Cell *args, Cell *env, Cell **val_out)
+Cell *fn_lt (Cell *args)
 {
-	Cell *a = args->as_pair.first;
-	Cell *b = args->as_pair.rest->as_pair.first;
-	if (!is_kind(a, CK_INT) || !is_kind(b, CK_INT))
-		return;
-	*val_out = make_bool_sym(a->as_int < b->as_int);
+	Cell *a = args->first;
+	Cell *b = args->rest->first;
+	if (intp(a) && intp(b))
+		return get_bool_sym(a->integer < b->integer);
+	else
+		error_raise("< : both arguments must be integers");
 }
 
 // [> n1 n2]
-void fn_gt (Cell *args, Cell *env, Cell **val_out)
+Cell *fn_gt (Cell *args)
 {
-	Cell *a = args->as_pair.first;
-	Cell *b = args->as_pair.rest->as_pair.first;
-	if (!is_kind(a, CK_INT) || !is_kind(b, CK_INT))
-		return;
-	*val_out = make_bool_sym(a->as_int > b->as_int);
+	Cell *a = args->first;
+	Cell *b = args->rest->first;
+	if (intp(a) && intp(b))
+		return get_bool_sym(a->integer > b->integer);
+	else
+		error_raise("> : both arguments must be integers");
 }
 
 // [<= n1 n2]
-void fn_lte (Cell *args, Cell *env, Cell **val_out)
+Cell *fn_lte (Cell *args)
 {
-	Cell *a = args->as_pair.first;
-	Cell *b = args->as_pair.rest->as_pair.first;
-	if (!is_kind(a, CK_INT) || !is_kind(b, CK_INT))
-		return;
-	*val_out = make_bool_sym(a->as_int <= b->as_int);
+	Cell *a = args->first;
+	Cell *b = args->rest->first;
+	if (intp(a) && intp(b))
+		return get_bool_sym(a->integer <= b->integer);
+	else
+		error_raise("<= : both arguments must be integers");
 }
 
 // [>= n1 n2]
-void fn_gte (Cell *args, Cell *env, Cell **val_out)
+Cell *fn_gte (Cell *args)
 {
-	Cell *a = args->as_pair.first;
-	Cell *b = args->as_pair.rest->as_pair.first;
-	if (!is_kind(a, CK_INT) || !is_kind(b, CK_INT))
-		return;
-	*val_out = make_bool_sym(a->as_int >= b->as_int);
+	Cell *a = args->first;
+	Cell *b = args->rest->first;
+	if (intp(a) && intp(b))
+		return get_bool_sym(a->integer >= b->integer);
+	else
+		error_raise(">= : both arguments must be integers");
 }
 
 // [+ n1 n2]
-void fn_add (Cell *args, Cell *env, Cell **val_out)
+Cell *fn_add (Cell *args)
 {
-	Cell *a = args->as_pair.first;
-	Cell *b = args->as_pair.rest->as_pair.first;
-	if (!is_kind(a, CK_INT) || !is_kind(b, CK_INT))
-		return;
-	*val_out = make_int(a->as_int + b->as_int);
+	Cell *a = args->first;
+	Cell *b = args->rest->first;
+	if (intp(a) && intp(b))
+		return make_int(a->integer + b->integer);
+	else
+		error_raise("+ : both arguments must be integers");
 }
 
 // [- n1 n2]
-void fn_sub (Cell *args, Cell *env, Cell **val_out)
+Cell *fn_sub (Cell *args)
 {
-	Cell *a = args->as_pair.first;
-	Cell *b = args->as_pair.rest->as_pair.first;
-	if (!is_kind(a, CK_INT) || !is_kind(b, CK_INT))
-		return;
-	*val_out = make_int(a->as_int - b->as_int);
+	Cell *a = args->first;
+	Cell *b = args->rest->first;
+	if (intp(a) && intp(b))
+		return make_int(a->integer - b->integer);
+	else
+		error_raise("- : both arguments must be integers");
 }
 
 // [* n1 n2]
-void fn_mul (Cell *args, Cell *env, Cell **val_out)
+Cell *fn_mul (Cell *args)
 {
-	Cell *a = args->as_pair.first;
-	Cell *b = args->as_pair.rest->as_pair.first;
-	if (!is_kind(a, CK_INT) || !is_kind(b, CK_INT))
-		return;
-	*val_out = make_int(a->as_int * b->as_int);
+	Cell *a = args->first;
+	Cell *b = args->rest->first;
+	if (intp(a) && intp(b))
+		return make_int(a->integer * b->integer);
+	else
+		error_raise("* : both arguments must be integers");
 }
 
 // [/ n1 n2]
-void fn_div (Cell *args, Cell *env, Cell **val_out)
+Cell *fn_div (Cell *args)
 {
-	Cell *a = args->as_pair.first;
-	Cell *b = args->as_pair.rest->as_pair.first;
-	if (!is_kind(a, CK_INT) || !is_kind(b, CK_INT))
-		return;
-	*val_out = make_int(a->as_int / b->as_int);
-}
-
-// [swap! atom fn args...] (variadic)
-// The atom's val is modified to the result of applying the
-// function with the atom's value as the first argument and the
-// optionally given function arguments as the rest of the arguments.
-// Return's the atom's new value
-void fn_swap_bang (Cell *args, Cell *env, Cell **val_out)
-{
-	if (list_length(args) < 2)
-	{
-		printf("swap! : error : requires at least 2 arguments\n");
-		return;
-	}
-
-	Cell *atom = args->as_pair.first;
-	if (!is_kind(atom, CK_ATOM))
-	{
-		printf("swap! : error : argument 1 must be an atom\n");
-		return;
-	}
-
-	Cell *fn = args->as_pair.rest->as_pair.first;
-	if (!is_function(fn))
-	{
-		printf("swap! : error : argument 2 must be a function\n");
-		return;
-	}
-
-	// Create a new arguments list for the function to be called
-	Cell *args2 = args->as_pair.rest->as_pair.rest;
-	if (!args2)
-		args2 = make_empty_list();
-	list_push(atom->as_atom, &args2);
-
-	// Apply the function by evaluating a list as [fn args]
-	*val_out = EVAL(make_pair(fn, args2), env);
-
-	// Modify atom's value
-	atom->as_atom = *val_out;
+	Cell *a = args->first;
+	Cell *b = args->rest->first;
+	if (intp(a) && intp(b))
+		if (b->integer == 0)
+			error_raise("/ : division by zero");
+		else
+			return make_int(a->integer / b->integer);
+	else
+		error_raise("/ : both arguments must be integers");
 }
 
 // [pair x y] -> [x | y]
-void fn_pair (Cell *args, Cell *env, Cell **val_out)
+Cell *fn_pair (Cell *args)
 {
-	*val_out = make_pair(args->as_pair.first, args->as_pair.rest->as_pair.first);
+	return make_pair_valid(args->first, args->rest->first);
 }
 
 // [concat l1 l2 ...] -> list
-void fn_concat (Cell *args, Cell *env, Cell **val_out)
+Cell *fn_concat (Cell *args)
 {
 	Cell *list = make_empty_list();
 	Cell *p = list;
 
-	while (is_kind(args, CK_PAIR) && !is_empty_list(args))
+	while (nonempty_listp(args))
 	{
 		// Current list from arguments
-		Cell *a = args->as_pair.first;
-		if (!is_kind(a, CK_PAIR))
-		{
-			printf("fn_concat : error : arguments must be lists\n");
-			return;
-		}
+		Cell *a = args->first;
+		if (!pairp(a) || functionp(a) || stringp(a))
+			error_raise("fn_concat : arguments must be lists");
 
 		// Add all of the items from the current list
-		while (is_kind(a, CK_PAIR) && !is_empty_list(a))
+		while (nonempty_listp(a))
 		{
 			// Put item into the list
-			p->as_pair.first = a->as_pair.first;
-			p->as_pair.rest = make_empty_list();
-			p = p->as_pair.rest;
+			p->first = a->first;
+			p->rest = make_empty_list();
+			p = p->rest;
 
 			// Next argument
-			a = a->as_pair.rest;
+			a = a->rest;
 		}
 		// The list should end with null instead of an empty list
-		p->as_pair.rest = NULL;
+		p->rest = NULL;
 
 		// Next argument
-		args = args->as_pair.rest;
+		args = args->rest;
 	}
 
-	*val_out = list;
+	return list;
 }
 
-void fn_assoc (Cell *args, Cell *env, Cell **val_out)
+// [assoc item alist]
+Cell *fn_assoc (Cell *args)
 {
-	if (!is_kind(args->as_pair.rest->as_pair.first, CK_PAIR))
+	if (pairp(args->rest->first))
 	{
-		printf("assoc : error : second argument must be a list\n");
-		*val_out = make_symbol(s_nil);
-		return;
-	}
-
-	Cell *slot = alist_assoc(args->as_pair.first, args->as_pair.rest->as_pair.first);
-	if (slot)
-	{
-		assert(is_kind(slot, CK_PAIR));
-		*val_out = slot;
-	}
-	else
-	{
-		*val_out = make_symbol(s_nil);
-	}
-}
-
-void fn_first (Cell *args, Cell *env, Cell **val_out)
-{
-	Cell *a = args->as_pair.first;
-	if (is_kind(a, CK_PAIR))
-	{
-		if (is_empty_list(a))
-			*val_out = make_symbol(s_nil);
+		Cell *slot = alist_assoc(args->first, args->rest->first);
+		if (slot)
+			return slot;
 		else
-			*val_out = a->as_pair.first;
+			return &sym_nil;
 	}
 	else
 	{
-		printf("first : error : not a list\n");
-		*val_out = NULL;
+		error_raise("assoc : second argument must be a list");
 	}
 }
 
-void fn_rest (Cell *args, Cell *env, Cell **val_out)
+// [first pair]
+Cell *fn_first (Cell *args)
 {
-	Cell *a = args->as_pair.first;
-	if (is_kind(a, CK_PAIR))
+	Cell *a = args->first;
+	if (emptyp(a))
 	{
-		if (is_empty_list(a))
-			*val_out = make_symbol(s_nil);
-		else
-			*val_out = a->as_pair.rest;
+		return &sym_nil;
+	}
+	else if (pairp(a))
+	{
+		return a->first;
 	}
 	else
 	{
-		printf("rest : error : not a list\n");
-		*val_out = NULL;
+		error_raise("first : not a list");
+		return NULL;
 	}
+}
+
+// [rest pair]
+Cell *fn_rest (Cell *args)
+{
+	Cell *a = args->first;
+	if (emptyp(a))
+		return &sym_nil;
+	else if (pairp(a))
+		return a->rest;
+	else
+		error_raise("first : not a list");
 }
 

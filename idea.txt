@@ -1,0 +1,10 @@
+;;;; Types
+;;;; Only 4 types:
+;;;; * integer
+;;;; * atom
+;;;; * symbol
+;;;; * pair [first . rest]
+;;;;     string
+;;;;     function
+;;;;     native function
+

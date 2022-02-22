@@ -2,16 +2,18 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <string.h>
+
+#include "error.h"
 #include "lizp.h"
 
 int main (void)
 {
 	// Initialize the REPL environment symbols
-	repl_env = init(8000, 8 * 1024);
+	Cell *repl_env = init(10000);
 	if (!repl_env)
 		return 1;
 
-	// Initialization lizp code
+	// Initial lizp code
 	const char *code = "[do\n"
 					   "  [def! load-file\n"
 					   "    [fn* [f]\n"
@@ -27,8 +29,11 @@ int main (void)
 		if(!fgets(buffer, sizeof(buffer), stdin))
 			break;
 
-		rep(buffer, strlen(buffer), repl_env);
-		printf("\n");
+		// Do a REP, catching errors
+		if (!setjmp(jb_top_level))
+			rep(buffer, strlen(buffer), repl_env);
+		else
+			error_display();
 	}
 
 	return 0;

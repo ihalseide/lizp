@@ -1,7 +1,5 @@
 ;;;; This file can be loaded by the main program
 
-[def! *features* [quote [LIZP]]]
-
 ;;; Boolean not
 [def! not [fn* [x] [if x #f #t]]]
 
@@ -15,28 +13,29 @@
         [println "Assertion failed:" x "\n"]
         #t]]]
 
-
 ;;; Non-empty list predicate
 [def! some-list?
   [fn* [x]
     [if [list? x]
         [not [empty? x]]
-		#f]]]
+        #f]]]
 
-;;; See if an item, x, is in a list, lst
-;;; TODO: fix bug with nested lists
-[def! member?
-  [fn* [x lst]
-    [if [some-list? lst]
-		[if [= x [first lst]]
-		    #t
-			[member? x [rest lst]]]
-		#f]]]
+;;; Calculate the sum of a list of numbers
+[def! sum-start
+  [fn* [L n]
+    [if [some-list? L]
+        [sum-start [rest L] [+ n [first L]]]
+        n]]]
+[def! sum [fn* [L] [sum-start L 0]]]
+
+;;; Negative numbers
+[def! neg [fn* [n] [- 0 n]]]
 
 ;; Do some assertion tests
 [assert #t]
 [assert ""]
 [assert assert]
+[assert [quote ""]]
 [assert [quote [not #f]]]
 [assert [quote [not nil]]]
 [assert [quote [/= #t #f]]]
@@ -50,7 +49,7 @@
 [assert [quote [= 3 [+ 1 2]]]]
 [assert [quote [= 3 [- 6 3]]]]
 [assert [quote [= 48 [* 6 8]]]]
-[assert [quote [= -3 [/ 9 -3]]]]
+[assert [quote [= [neg 3] [/ 9 [neg 3]]]]]
 [assert [quote [= [] []]]]
 [assert [quote [= [] [list]]]]
 [assert [quote [/= [] nil]]]
@@ -61,5 +60,4 @@
 
 ;; Welcome message
 [println "Welcome to the LIZP read-eval-print-loop.\n"]
-[println "These *features* are available:" *features* ".\n"]
 

@@ -1,17 +1,16 @@
 CC = clang
-COpts = -std=c99 -Wall -g
+COpts = -std=c99 -g -Wall -Wextra
 
 default: lizp
 
-lizp: main.c lizp_string.o cell.o function.o reader.o printer.o lizp.o
+lizp: main.c cell.o function.o reader.o printer.o lizp.o env.o error.o
 	$(CC) $(COpts) -o $@ $^
 
-%.c: %.h
-
-%.o: %.c
+%.o: %.c %.h
 	$(CC) $(COpts) -c $^
 
 clean:
 	rm *.o
+	rm *.gch
 	rm lizp
 
