@@ -227,6 +227,14 @@ Cell *make_error (Cell *msg)
 	return make_pair_valid(&sym_error, make_single_list(msg));
 }
 
+// Returns: [{error} msg]
+Cell *make_error_c (const char *msg)
+{
+	Cell *p;
+	string_to_list(msg, strlen(msg), 0, &p);
+	return make_error(p);
+}
+
 // Returns: list of the form [{fn} params body outer_env]
 Cell *make_lizp_fn (Cell *params, Cell *body)
 {

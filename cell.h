@@ -52,6 +52,7 @@ Cell *intern_symbol (const Cell *name);
 Cell *list_pop (Cell **list);
 Cell *make_empty_list (void);
 Cell *make_error (Cell *msg);
+Cell *make_error_c (const char *msg);
 Cell *make_int (int n);
 Cell *make_lizp_fn (Cell *params, Cell *body);
 Cell *make_native_fn (Native_fn func);
