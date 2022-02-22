@@ -14,13 +14,11 @@ int main (void)
 		return 1;
 
 	// Initial lizp code
-	const char *code =
-		"[do\n"
-		"  [def! load-file\n"
-		"    [fn* [f]\n"
-		"      [eval [read-string [str \"[do\\n\" [slurp f] \"\\nnil]\"]]]]]\n"
-		"  [load-file \"lizp.lizp\"]\n"
-		"  nil]\n";
+	const char *code = "[do\n"
+					   "  [def! load-file\n"
+					   "    [fn* [f]\n"
+					   "      [eval [read-string [str \"[do \" [slurp f] \"\nnil]\n\"]]]]]\n"
+	                   "  [load-file \"lizp.lizp\"]]\n";
 	EVAL(READ(code, strlen(code)), repl_env);
 
 	// REPL
