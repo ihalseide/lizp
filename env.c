@@ -1,6 +1,8 @@
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
+
+#include "error.h"
 #include "cell.h"
 #include "env.h"
 
@@ -83,10 +85,7 @@ Cell *env_create (Cell *env_outer, Cell *binds, Cell *exprs)
 {
 	// Validate args
 	if (env_outer != &sym_nil && !pairp(env_outer))
-	{
-		printf("env_create : error : invalid outer environment\n");
-		return NULL;
-	}
+		error_raise("env_create : invalid outer environment\n");
 
 	// Create the new environment
 	Cell *env = make_pair_valid(make_empty_list(), env_outer);
@@ -102,10 +101,8 @@ Cell *env_create (Cell *env_outer, Cell *binds, Cell *exprs)
 
 		// Make sure it only binds symbols
 		if (!symbolp(sym))
-		{
-			printf("env_create : error : a member of the bindings list is not a symbol\n");
-			return NULL;
-		}
+			error_raise("env_create : a member of the bindings list is not a symbol\n");
+
 		env_set(env, sym, val);
 
 		// Next
@@ -116,16 +113,14 @@ Cell *env_create (Cell *env_outer, Cell *binds, Cell *exprs)
 	if (nonempty_listp(binds) && emptyp(exprs))
 	{
 		// Left over symbols in the bindings list
-		printf("env_create : error : not enough values to bind to symbols list\n");
 		cell_free_all(env);
-		return NULL;
+		error_raise("env_create : not enough values to bind to symbols list\n");
 	}
 	else if (nonempty_listp(exprs) && emptyp(binds))
 	{
 		// Left over values in the exprs list
-		printf("env_create : error : too many values to bind to symbols list\n");
 		cell_free_all(env);
-		return NULL;
+		error_raise("env_create : too many values to bind to symbols list\n");
 	}
 
 	return env;

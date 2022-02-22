@@ -3,6 +3,7 @@
 #include <assert.h>
 #include <ctype.h>
 
+#include "error.h"
 #include "reader.h"
 #include "lizp.h"
 
@@ -51,31 +52,18 @@ int read_sym (const char *start, int length, Cell **out)
 	Cell *name;
 	int symbol_len = view - start;
 	int parse_len = string_to_list(start, view - start, 0, &name);
+	assert(stringp(name));
+	assert(symbol_len == parse_len);
 
-	// Verify that the string turned out ok
-	if (symbol_len == parse_len && stringp(name))
-	{
-		Cell *interned = intern_symbol(name);
-		if (symbolp(interned))
-		{
-			// Free name if it was already interned before
-			if (interned->sym_name != name)
-				cell_free_all(name);
+	Cell *interned = intern_symbol(name);
+	assert(symbolp(interned));
 
-			*out = interned;
-			return symbol_len;
-		}
-		else
-		{
-			*out = NULL;
-			return symbol_len;
-		}
-	}
-	else
-	{
-		*out = NULL;
-		return symbol_len;
-	}
+	// Free name if it was already interned before
+	if (interned->sym_name != name)
+		cell_free_all(name);
+
+	*out = interned;
+	return symbol_len;
 }
 
 // Convert a string to a list of characters
@@ -115,18 +103,12 @@ int read_quoted_string (const char *start, int length, Cell **out)
 		}
 		else
 		{
-			// Error
-			printf("read_quoted_string : error : could not parse string contents\n");
-			*out = NULL;
-			return view - start;
+			error_raise("read_quoted_string : error : could not parse string contents\n");
 		}
 	}
 	else
 	{
-		// Error
-		printf("read_quoted_string : error : unexpected end of input in quoted string\n");
-		*out = NULL;
-		return view - start;
+		error_raise("read_quoted_string : error : unexpected end of input in quoted string\n");
 	}
 }
 
@@ -152,7 +134,7 @@ int read_list (const char *start, int length, Cell **out)
 	if (!list)
 		return view - start;
 
-	if (*view != ']')
+	if (*view && *view != ']')
 	{
 		Cell *p = list;
 
@@ -169,7 +151,7 @@ int read_list (const char *start, int length, Cell **out)
 			// Read an element
 			Cell *e = NULL;
 			if (!string_step(&view, &rem, read_str(view, rem, &e)) || !e)
-				break;
+				error_raise("read_list : could not read item");
 
 			p->rest = make_pair(e, NULL);
 			p = p->rest;
@@ -193,9 +175,7 @@ int read_list (const char *start, int length, Cell **out)
 	}
 	else
 	{
-		// Error: unexpected end of input
-		*out = NULL;
-		printf("read_list: error : error reading item or unexpected end of input\n");
+		error_raise("read_list: unexpected end of input\n");
 	}
 
 	return view - start;
@@ -239,13 +219,9 @@ int read_str (const char *start, int length, Cell **out)
 				loop = 1;
 				break;
 			case ']':
-				*out = NULL;
-				printf("read error : unmatched closing delimiter '%c'\n", *view);
-				break;
+				error_raise("read : unmatched closing ']'");
 			case '|':
-				*out = NULL;
-				printf("read error : pair delimiter '|' should only be inside a list\n");
-				break;
+				error_raise("read : the pair delimiter '|' should only be inside a list");
 			case '[':
 				// Opening paren, for lists
 				string_step(&view, &rem, read_list(view, rem, out));
