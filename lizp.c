@@ -84,14 +84,9 @@ Cell *eval_ast (Cell *ast, Cell *env)
 				// Get the value out of the environment's slot
 				Cell *slot = env_get(env, ast);
 				if (cell_validp(slot))
-				{
 					return slot->rest;
-				}
 				else
-				{
-					error_raise1("eval_ast : undefined symbol ", ast);
-					return NULL;
-				}
+					return make_error_c("eval_ast : undefined symbol");
 			}
 		case CK_FUNCTION:
 		case CK_INTEGER:
@@ -109,7 +104,13 @@ Cell *eval_ast (Cell *ast, Cell *env)
 void apply (Cell *fn, Cell *args, Cell *env, Cell **val_out, Cell **env_out)
 {
 	if (!pairp(args) || !env || !val_out || !env_out)
-		error_raise("apply : invalid arguments");
+	{
+		if (val_out)
+			*val_out = make_error_c("apply : invalid arguments");
+		if (env_out)
+			*env_out = NULL;
+		return;
+	}
 
 	if (functionp(fn))
 	{
@@ -117,7 +118,11 @@ void apply (Cell *fn, Cell *args, Cell *env, Cell **val_out, Cell **env_out)
 		// (if arity is 0, it is variadic)
 		int n_params = function_arity(fn);
 		if (n_params && n_params != list_length(args))
-			error_raise1("apply : function requires fixed number of argument(s): ", make_int(n_params));
+		{
+			*val_out = make_error_c("apply : function requires fixed number of argument(s): ");
+			*env_out = NULL;
+			return;
+		}
 
 		if (function_nativep(fn))
 		{
@@ -158,189 +163,8 @@ void apply (Cell *fn, Cell *args, Cell *env, Cell **val_out, Cell **env_out)
 	else
 	{
 		// Not a function
-		error_raise("apply : not a function");
-	}
-}
-
-// Returns 1 or 0 for if it is a special form or not
-int eval_special (Cell *head, Cell *given_ast, Cell *env, Cell **ast_out, Cell **env_out)
-{
-	if (!ast_out || !env_out)
-		return 0;
-
-	// Head must be a symbol
-	if (!symbolp(head))
-		return 0;
-
-	Cell *ast;
-	if (given_ast)
-		ast = given_ast;
-	else
-		ast = make_empty_list();
-
-	if (cell_eq(head, &sym_def_bang))
-	{
-		// [def! <symbol> value]
-		if (list_length(ast) != 2)
-			error_raise("def! : requires 2 expressions");
-
-		Cell *sym = ast->first;
-		if (!symbolp(sym))
-			error_raise("def! : argument 1 must be a symbol");
-
-		Cell *val = EVAL(ast->rest->first, env);
-		if (!val)
-		{
-			*ast_out = NULL;
-			*env_out = NULL;
-			return 1;
-		}
-
-		// Note: env_set returns 0 upon success
-		if (env_set(env, sym, val))
-			error_raise("def! : cannot define symbol\n");
-		else
-		{
-			*ast_out = val;
-			*env_out = NULL;
-			return 1;
-		}
-	}
-	else if (cell_eq(head, &sym_let_star))
-	{
-		// [let* [sym1 expr1 sym2 expr2...] expr]
-		if (list_length(ast) != 2)
-			// Error: invalid ast
-			error_raise("let* : requires 2 expressions");
-
-		// Go through the bindings list and add the
-		// bindings to the environment
-		Cell *let_env = env_create(env, NULL, NULL);
-		Cell *p = ast->first; // pointer to bindings list
-		while (pairp(p))
-		{
-			if (!pairp(p->rest))
-				// Error: odd amount of arguments in first list
-				error_raise("let* : requires an even amount of items in bindings list");
-
-			if (!symbolp(p->first))
-				// Error: even element in bindings list not a symbol
-				error_raise("let* : requires even elements in bindings list to be symbols\n");
-
-			env_set(let_env, p->first, EVAL(p->rest->first, let_env));
-
-			// Next pair (next twice)
-			p = p->rest->rest;
-		}
-
-		// Tail call on the body expr
-		*env_out = let_env;
-		*ast_out = ast->rest->first;
-		return 1;
-	}
-	else if (cell_eq(head, &sym_fn_star))
-	{
-		// [fn* [symbol1 symbol2 ...] expr]
-		if (list_length(ast) != 2)
-			error_raise("fn* : requires 2 expressions\n");
-
-		Cell *new_fn = make_lizp_fn(ast->first, ast->rest->first);
-
-		// New function, no tail call
-		*ast_out = new_fn;
+		*val_out = make_error_c("apply : not a function");
 		*env_out = NULL;
-		return 1;
-	}
-	else if (cell_eq(head, &sym_if))
-	{
-		// [if expr t-expr f-expr] OR [if expr t-expr]
-		int len = list_length(ast);
-		if (!pairp(ast) || (len != 2 && len != 3))
-		{
-			// Error: too few or too many arguments
-			error_raise("if : must have 2 or 3 arguments\n");
-			*ast_out = NULL;
-			*env_out = NULL;
-			return 1;
-		}
-
-		Cell *cond = EVAL(ast->first, env);
-		if (cond)
-		{
-			if (truthy(cond))
-			{
-				// Tail call with t-expr
-				*env_out = env;
-				*ast_out = ast->rest->first;
-				return 1;
-			}
-			else if (ast->rest->rest)
-			{
-				// Tail call with f-expr
-				*env_out = env;
-				*ast_out = ast->rest->rest->first;
-				return 1;
-			}
-			else
-			{
-				// No f-expr, so return nil
-				*ast_out = &sym_nil;
-				*env_out = NULL;
-				return 1;
-			}
-		}
-		else
-		{
-			*ast_out = NULL;
-			*env_out = NULL;
-			return 1;
-		}
-	}
-	else if (cell_eq(head, &sym_do))
-	{
-		// [do exprs...]
-
-		// Evaluate all but the last item
-		while (pairp(ast) && !emptyp(ast) && ast->rest)
-		{
-			EVAL(ast->first, env);
-			ast = ast->rest;
-		}
-
-		// Has a last item, so do a tail call to evaluate that
-		if (pairp(ast) && !emptyp(ast))
-		{
-			*ast_out = ast->first;
-			*env_out = env;
-			return 1;
-		}
-		else
-		{
-			// If this point is reached, there were no items
-			*ast_out = &sym_nil;
-			*env_out = NULL;
-			return 1;
-		}
-	}
-	else if (cell_eq(head, &sym_quote))
-	{
-		// [quote expr]
-		if (list_length(ast) != 1)
-			error_raise("quote : requires 1 expression");
-
-		*ast_out = ast->first;
-		*env_out = NULL;
-		return 1;
-	}
-	else
-	{
-		// Not a known name for a special form
-		*env_out = NULL;
-		*ast_out = NULL;
-		// Free the unused new list
-		if (given_ast != ast)
-			cell_free_all(ast);
-		return 0;
 	}
 }
 
@@ -362,25 +186,6 @@ Cell *EVAL (Cell *ast, Cell *env)
 		// Function -> itself
 		if (stringp(ast) || emptyp(ast) || functionp(ast))
 			return ast;
-
-		// Special form evaluation...
-		Cell *new_env = NULL;
-		Cell *new_ast = NULL;
-		if (eval_special(ast->first, ast->rest, env, &new_ast, &new_env))
-		{
-			if (!new_ast)
-				// Error in special form
-				return NULL;
-
-			if (!new_env)
-				// Value is final, no tail call
-				return new_ast;
-
-			// Tail call loop if new_env is a valid one
-			env = new_env;
-			ast = new_ast;
-			continue;
-		}
 
 		// Normal function application...
 
@@ -404,8 +209,7 @@ Cell *EVAL (Cell *ast, Cell *env)
 			return ast;
 	}
 
-	error_raise("eval : invalid ast");
-	return NULL;
+	return make_error_c("eval : invalid ast");
 }
 
 void PRINT (Cell *expr)
@@ -429,26 +233,21 @@ void rep (const char *start, int length, Cell *env)
 
 // Returns 0 upon success
 // Note: when n_params == 0, that means the function is variadic
-int env_set_native_fn (Cell *env, const char *name, int n_params, Native_fn func)
+void env_set_native_fn (Cell *env, const char *name, int n_params, Native_fn func)
 {
-	// Validate params
-	if (!env || !name || (n_params < 0) || !func)
-		return 1;
+	assert(env);
+	assert(name);
+	assert(n_params >= 0);
+	assert(func);
 
+	// Create lisp string for the name
 	Cell *newname = NULL;
 	string_to_list(name, strlen(name), 0, &newname);
-	if (stringp(newname))
-	{
-		Cell *sym = intern_symbol(newname);
-		if (symbolp(sym))
-			return env_set(env, sym, make_wrapped_native_fn(n_params, func));
-		else
-			return 1;
-	}
-	else
-	{
-		return 1;
-	}
+	assert(stringp(newname));
+
+	Cell *sym = intern_symbol(newname);
+	assert(symbolp(sym));
+	env_set(env, sym, make_wrapped_native_fn(n_params, func));
 }
 
 // Returns global environment
@@ -462,39 +261,34 @@ Cell *init (int ncells)
 
 	// Setup the global environment now
 	Cell *env = env_create(&sym_nil, &sym_nil, &sym_nil);
-	if (env_set_native_fn(env, "*",      2, fn_mul)
-			|| env_set_native_fn(env, "+",            2, fn_add)
-			|| env_set_native_fn(env, "-",            2, fn_sub)
-			|| env_set_native_fn(env, "/",            2, fn_div)
-			|| env_set_native_fn(env, "<",            2, fn_lt)
-			|| env_set_native_fn(env, "<=",           2, fn_lte)
-			|| env_set_native_fn(env, "=",            2, fn_eq)
-			|| env_set_native_fn(env, ">",            2, fn_gt)
-			|| env_set_native_fn(env, ">=",           2, fn_gte)
-			|| env_set_native_fn(env, "count",        1, fn_count)
-			|| env_set_native_fn(env, "empty?",       1, fn_empty_p)
-			|| env_set_native_fn(env, "eval",         1, fn_eval)
-			|| env_set_native_fn(env, "int?",         1, fn_int_p)
-			|| env_set_native_fn(env, "list",         0, fn_list)
-			|| env_set_native_fn(env, "list?",        1, fn_list_p)
-			|| env_set_native_fn(env, "pair",         2, fn_pair)
-			|| env_set_native_fn(env, "concat",       0, fn_concat)
-			|| env_set_native_fn(env, "assoc",        2, fn_assoc)
-			|| env_set_native_fn(env, "first",        1, fn_first)
-			|| env_set_native_fn(env, "slurp",        1, fn_slurp)
-			|| env_set_native_fn(env, "read-string",  1, fn_read_str)
-			|| env_set_native_fn(env, "println",      0, fn_println)
-			|| env_set_native_fn(env, "prn",          0, fn_prn)
-			|| env_set_native_fn(env, "pr-str",       0, fn_pr_str)
-			|| env_set_native_fn(env, "str",          0, fn_str)
-			|| env_set_native_fn(env, "rest",         1, fn_rest))
-	{
-		printf("init : error : could not setup environment\n");
-		return NULL;
-	}
-	else
-	{
-		return env;
-	}
+	assert(env);
+
+	env_set_native_fn(env, "*",            2, fn_mul);
+	env_set_native_fn(env, "+",            2, fn_add);
+	env_set_native_fn(env, "-",            2, fn_sub);
+	env_set_native_fn(env, "/",            2, fn_div);
+	env_set_native_fn(env, "<",            2, fn_lt);
+	env_set_native_fn(env, "<=",           2, fn_lte);
+	env_set_native_fn(env, "=",            2, fn_eq);
+	env_set_native_fn(env, ">",            2, fn_gt);
+	env_set_native_fn(env, ">=",           2, fn_gte);
+	env_set_native_fn(env, "assoc",        2, fn_assoc);
+	env_set_native_fn(env, "concat",       0, fn_concat);
+	env_set_native_fn(env, "count",        1, fn_count);
+	env_set_native_fn(env, "empty?",       1, fn_empty_p);
+	env_set_native_fn(env, "eval",         1, fn_eval);
+	env_set_native_fn(env, "first",        1, fn_first);
+	env_set_native_fn(env, "int?",         1, fn_int_p);
+	env_set_native_fn(env, "list",         0, fn_list);
+	env_set_native_fn(env, "list?",        1, fn_list_p);
+	env_set_native_fn(env, "pair",         2, fn_pair);
+	env_set_native_fn(env, "pr-str",       0, fn_pr_str);
+	env_set_native_fn(env, "println",      0, fn_println);
+	env_set_native_fn(env, "prn",          0, fn_prn);
+	env_set_native_fn(env, "read-string",  1, fn_read_str);
+	env_set_native_fn(env, "rest",         1, fn_rest);
+	env_set_native_fn(env, "slurp",        1, fn_slurp);
+	env_set_native_fn(env, "str",          0, fn_str);
+	return env;
 }
 
