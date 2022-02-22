@@ -4,6 +4,7 @@
 #include <ctype.h>
 #include <assert.h>
 
+#include "error.h"
 #include "cell.h"
 #include "env.h"
 #include "function.h"
@@ -89,8 +90,7 @@ Cell *eval_ast (Cell *ast, Cell *env)
 				}
 				else
 				{
-					printf("eval_ast : error : undefined symbol : ");
-					PRINT(ast);
+					error_raise1("eval_ast : undefined symbol ", ast);
 					return NULL;
 				}
 			}
@@ -110,10 +110,7 @@ Cell *eval_ast (Cell *ast, Cell *env)
 void apply (Cell *fn, Cell *args, Cell *env, Cell **val_out, Cell **env_out)
 {
 	if (!pairp(args) || !env || !val_out || !env_out)
-	{
-		printf("apply : error : invalid arguments\n");
-		return;
-	}
+		error_raise("apply : invalid arguments");
 
 	if (functionp(fn))
 	{
@@ -121,11 +118,7 @@ void apply (Cell *fn, Cell *args, Cell *env, Cell **val_out, Cell **env_out)
 		// (if arity is 0, it is variadic)
 		int n_params = function_arity(fn);
 		if (n_params && n_params != list_length(args))
-		{
-			printf("apply : error : function requires %d argument(s)\n", n_params);
-			*val_out = NULL;
-			*env_out = NULL;
-		}
+			error_raise1("apply : function requires fixed number of argument(s): ", make_int(n_params));
 
 		if (function_nativep(fn))
 		{
@@ -166,9 +159,7 @@ void apply (Cell *fn, Cell *args, Cell *env, Cell **val_out, Cell **env_out)
 	else
 	{
 		// Not a function
-		printf("apply : error : not a function\n");
-		*val_out = NULL;
-		*env_out = NULL;
+		error_raise("apply : not a function");
 	}
 }
 
@@ -192,17 +183,11 @@ int eval_special (Cell *head, Cell *given_ast, Cell *env, Cell **ast_out, Cell *
 	{
 		// [def! <symbol> value]
 		if (list_length(ast) != 2)
-		{
-			printf("def! : error : requires 2 expressions\n");
-			return 1;
-		}
+			error_raise("def! : requires 2 expressions");
 
 		Cell *sym = ast->first;
 		if (!symbolp(sym))
-		{
-			printf("def! : error : argument 1 must be a symbol\n");
-			return 1;
-		}
+			error_raise("def! : argument 1 must be a symbol");
 
 		Cell *val = EVAL(ast->rest->first, env);
 		if (!val)
@@ -214,12 +199,7 @@ int eval_special (Cell *head, Cell *given_ast, Cell *env, Cell **ast_out, Cell *
 
 		// Note: env_set returns 0 upon success
 		if (env_set(env, sym, val))
-		{
-			printf("def! : error : cannot define symbol\n");
-			*ast_out = NULL;
-			*env_out = NULL;
-			return 1;
-		}
+			error_raise("def! : cannot define symbol\n");
 		else
 		{
 			*ast_out = val;
@@ -231,13 +211,8 @@ int eval_special (Cell *head, Cell *given_ast, Cell *env, Cell **ast_out, Cell *
 	{
 		// [let* [sym1 expr1 sym2 expr2...] expr]
 		if (list_length(ast) != 2)
-		{
 			// Error: invalid ast
-			printf("let* : error : requires 2 expressions\n");
-			*ast_out = NULL;
-			*env_out = NULL;
-			return 1;
-		}
+			error_raise("let* : requires 2 expressions");
 
 		// Go through the bindings list and add the
 		// bindings to the environment
@@ -246,21 +221,12 @@ int eval_special (Cell *head, Cell *given_ast, Cell *env, Cell **ast_out, Cell *
 		while (pairp(p))
 		{
 			if (!pairp(p->rest))
-			{
 				// Error: odd amount of arguments in first list
-				printf("let* : error : requires an even amount of items in bindings list\n");
-				*ast_out = NULL;
-				*env_out = NULL;
-				return 1;
-			}
+				error_raise("let* : requires an even amount of items in bindings list");
+
 			if (!symbolp(p->first))
-			{
 				// Error: even element in bindings list not a symbol
-				printf("let* : error : requires even elements in bindings list to be symbols\n");
-				*ast_out = NULL;
-				*env_out = NULL;
-				return 1;
-			}
+				error_raise("let* : requires even elements in bindings list to be symbols\n");
 
 			env_set(let_env, p->first, EVAL(p->rest->first, let_env));
 
@@ -277,12 +243,7 @@ int eval_special (Cell *head, Cell *given_ast, Cell *env, Cell **ast_out, Cell *
 	{
 		// [fn* [symbol1 symbol2 ...] expr]
 		if (list_length(ast) != 2)
-		{
-			printf("fn* : error : requires 2 expressions\n");
-			*ast_out = NULL;
-			*env_out = NULL;
-			return 1;
-		}
+			error_raise("fn* : requires 2 expressions\n");
 
 		Cell *new_fn = make_lizp_fn(ast->first, ast->rest->first);
 
@@ -298,7 +259,7 @@ int eval_special (Cell *head, Cell *given_ast, Cell *env, Cell **ast_out, Cell *
 		if (!pairp(ast) || (len != 2 && len != 3))
 		{
 			// Error: too few or too many arguments
-			printf("if : error : must have 2 or 3 arguments\n");
+			error_raise("if : must have 2 or 3 arguments\n");
 			*ast_out = NULL;
 			*env_out = NULL;
 			return 1;
@@ -366,18 +327,11 @@ int eval_special (Cell *head, Cell *given_ast, Cell *env, Cell **ast_out, Cell *
 	{
 		// [quote expr]
 		if (list_length(ast) != 1)
-		{
-			printf("quote : error : requires 1 expression");
-			*ast_out = NULL;
-			*env_out = NULL;
-			return 1;
-		}
-		else
-		{
-			*ast_out = ast->first;
-			*env_out = NULL;
-			return 1;
-		}
+			error_raise("quote : requires 1 expression");
+
+		*ast_out = ast->first;
+		*env_out = NULL;
+		return 1;
 	}
 	else
 	{
@@ -451,6 +405,7 @@ Cell *EVAL (Cell *ast, Cell *env)
 			return ast;
 	}
 
+	error_raise("eval : invalid ast");
 	return NULL;
 }
 
@@ -469,13 +424,8 @@ void rep (const char *start, int length, Cell *env)
 	{
 		Cell *value = EVAL(form, env);
 		if (value)
-		{
 			PRINT(value);
-			return;
-		}
 	}
-
-	printf("no value\n");
 }
 
 // Returns 0 upon success

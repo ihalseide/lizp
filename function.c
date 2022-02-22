@@ -3,10 +3,11 @@
 #include <string.h>
 
 #include "cell.h"
+#include "error.h"
 #include "function.h"
 #include "lizp.h"
-#include "reader.h"
 #include "printer.h"
+#include "reader.h"
 
 void print_nonreadably (Cell *expr)
 {
@@ -71,10 +72,7 @@ Cell *fn_slurp (Cell *args)
 
 	// Validate arguments
 	if (!stringp(a))
-	{
-		printf("slurp : error : 1st argument must be a string file name\n");
-		return NULL;
-	}
+		error_raise("slurp : 1st argument must be a string file name");
 
 	// Get string of file name
 	char path[1024];
@@ -83,10 +81,7 @@ Cell *fn_slurp (Cell *args)
 
 	FILE *f = fopen(path, "r");
 	if (!f)
-	{
-		printf("slurp : error : could not read file\n");
-		return NULL;
-	}
+		error_raise("slurp : could not read file");
 
 	// Get file length
 	fseek(f, 0, SEEK_END);
@@ -97,8 +92,7 @@ Cell *fn_slurp (Cell *args)
 	if (!cell_can_alloc(fsize + 1))
 	{
 		fclose(f);
-		printf("slurp : error : not enough memory to read file\n");
-		return NULL;
+		error_raise("slurp : not enough memory to read file");
 	}
 
 	// Read the char data and null-terminate it.
@@ -132,7 +126,7 @@ Cell *fn_read_str (Cell *args)
 	}
 	else
 	{
-		return &sym_nil;
+		error_raise("read-string : argument must be a string");
 	}
 }
 
@@ -146,14 +140,9 @@ Cell *fn_empty_p (Cell *args)
 Cell *fn_count (Cell *args)
 {
 	if (pairp(args->first))
-	{
 		return make_int(list_length(args->first));
-	}
 	else
-	{
-		printf("count : error : first argument must be a list\n");
-		return NULL;
-	}
+		error_raise("count : first argument must be a list");
 }
 
 // [list? x]
@@ -183,7 +172,7 @@ Cell *fn_lt (Cell *args)
 	if (intp(a) && intp(b))
 		return get_bool_sym(a->integer < b->integer);
 	else
-		return &sym_nil;
+		error_raise("< : both arguments must be integers");
 }
 
 // [> n1 n2]
@@ -194,7 +183,7 @@ Cell *fn_gt (Cell *args)
 	if (intp(a) && intp(b))
 		return get_bool_sym(a->integer > b->integer);
 	else
-		return &sym_nil;
+		error_raise("> : both arguments must be integers");
 }
 
 // [<= n1 n2]
@@ -205,7 +194,7 @@ Cell *fn_lte (Cell *args)
 	if (intp(a) && intp(b))
 		return get_bool_sym(a->integer <= b->integer);
 	else
-		return &sym_nil;
+		error_raise("<= : both arguments must be integers");
 }
 
 // [>= n1 n2]
@@ -216,7 +205,7 @@ Cell *fn_gte (Cell *args)
 	if (intp(a) && intp(b))
 		return get_bool_sym(a->integer >= b->integer);
 	else
-		return &sym_nil;
+		error_raise(">= : both arguments must be integers");
 }
 
 // [+ n1 n2]
@@ -227,7 +216,7 @@ Cell *fn_add (Cell *args)
 	if (intp(a) && intp(b))
 		return make_int(a->integer + b->integer);
 	else
-		return &sym_nil;
+		error_raise("+ : both arguments must be integers");
 }
 
 // [- n1 n2]
@@ -238,7 +227,7 @@ Cell *fn_sub (Cell *args)
 	if (intp(a) && intp(b))
 		return make_int(a->integer - b->integer);
 	else
-		return &sym_nil;
+		error_raise("- : both arguments must be integers");
 }
 
 // [* n1 n2]
@@ -249,7 +238,7 @@ Cell *fn_mul (Cell *args)
 	if (intp(a) && intp(b))
 		return make_int(a->integer * b->integer);
 	else
-		return &sym_nil;
+		error_raise("* : both arguments must be integers");
 }
 
 // [/ n1 n2]
@@ -258,9 +247,12 @@ Cell *fn_div (Cell *args)
 	Cell *a = args->first;
 	Cell *b = args->rest->first;
 	if (intp(a) && intp(b))
-		return make_int(a->integer / b->integer);
+		if (b->integer == 0)
+			error_raise("/ : division by zero");
+		else
+			return make_int(a->integer / b->integer);
 	else
-		return &sym_nil;
+		error_raise("/ : both arguments must be integers");
 }
 
 // [pair x y] -> [x | y]
@@ -279,11 +271,8 @@ Cell *fn_concat (Cell *args)
 	{
 		// Current list from arguments
 		Cell *a = args->first;
-		if (!pairp(a))
-		{
-			printf("fn_concat : error : arguments must be lists\n");
-			return &sym_nil;
-		}
+		if (!pairp(a) || functionp(a) || stringp(a))
+			error_raise("fn_concat : arguments must be lists");
 
 		// Add all of the items from the current list
 		while (nonempty_listp(a))
@@ -319,8 +308,7 @@ Cell *fn_assoc (Cell *args)
 	}
 	else
 	{
-		printf("assoc : error : second argument must be a list\n");
-		return NULL;
+		error_raise("assoc : second argument must be a list");
 	}
 }
 
@@ -338,7 +326,7 @@ Cell *fn_first (Cell *args)
 	}
 	else
 	{
-		printf("first : error : not a list\n");
+		error_raise("first : not a list");
 		return NULL;
 	}
 }
@@ -348,17 +336,10 @@ Cell *fn_rest (Cell *args)
 {
 	Cell *a = args->first;
 	if (emptyp(a))
-	{
 		return &sym_nil;
-	}
 	else if (pairp(a))
-	{
 		return a->rest;
-	}
 	else
-	{
-		printf("first : error : not a list\n");
-		return NULL;
-	}
+		error_raise("first : not a list");
 }
 
