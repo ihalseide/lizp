@@ -27,6 +27,7 @@ Cell sym_nil,
 	 sym_if,
 	 sym_do,
 	 sym_quote,
+	 sym_error,
 	 sym_string;
 
 enum Cell_kind kind_of (const Cell *p)
@@ -219,6 +220,13 @@ Cell *make_string_start (void)
 	return make_single_list(&sym_string);
 }
 
+// Returns: [{error} msg]
+Cell *make_error (Cell *msg)
+{
+	assert(stringp(msg));
+	return make_pair_valid(&sym_error, make_single_list(msg));
+}
+
 // Returns: list of the form [{fn} params body outer_env]
 Cell *make_lizp_fn (Cell *params, Cell *body)
 {
@@ -248,10 +256,12 @@ Cell *make_lizp_fn (Cell *params, Cell *body)
 
 int native_fnp (const Cell *p)
 {
-	if (!is_kind(p, CK_PAIR))
-		return 0;
+	return pairp(p) && p->first == &sym_native_fn;
+}
 
-	return p->first == &sym_native_fn;
+int errorp (const Cell *p)
+{
+	return pairp(p) && p->first == &sym_error;
 }
 
 // The only valid false values nil and #f
@@ -521,6 +531,7 @@ int init_symbols (void)
 		|| init_static_sym(&sym_quote,     "quote")
 		|| init_static_sym(&sym_native_fn, "{native-fn}")
 		|| init_static_sym(&sym_fn,        "{fn}")
+		|| init_static_sym(&sym_error,     "{error}")
 		|| init_static_sym(&sym_string,    "{string}");
 }
 
