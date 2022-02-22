@@ -102,12 +102,14 @@ int read_quoted_string (const char *start, int length, Cell **out)
 		}
 		else
 		{
-			error_raise("read_quoted_string : error : could not parse string contents\n");
+			*out = make_error_c("read_quoted_string : error : could not parse string contents\n");
+			return view - start;
 		}
 	}
 	else
 	{
-		error_raise("read_quoted_string : error : unexpected end of input in quoted string\n");
+		*out = make_error_c("read_quoted_string : error : unexpected end of input in quoted string\n");
+		return view - start;
 	}
 }
 
@@ -138,9 +140,10 @@ int read_list (const char *start, int length, Cell **out)
 		Cell *p = list;
 
 		// Read the first element
-		if (!string_step(&view, &rem, read_str(view, rem, &(p->first))))
+		int n = string_step(&view, &rem, read_str(view, rem, &(p->first)));
+		if (!n)
 		{
-			*out = NULL;
+			*out = make_error_c("no items");
 			return view - start;
 		}
 
@@ -150,7 +153,10 @@ int read_list (const char *start, int length, Cell **out)
 			// Read an element
 			Cell *e = NULL;
 			if (!string_step(&view, &rem, read_str(view, rem, &e)) || !e)
-				error_raise("read_list : could not read item");
+			{
+				*out = make_error_c("read_list : could not read item");
+				return view - start;
+			}
 
 			p->rest = make_pair(e, NULL);
 			p = p->rest;
@@ -174,7 +180,7 @@ int read_list (const char *start, int length, Cell **out)
 	}
 	else
 	{
-		error_raise("read_list: unexpected end of input\n");
+		*out = make_error_c("read_list: unexpected end of input\n");
 	}
 
 	return view - start;
@@ -218,9 +224,11 @@ int read_str (const char *start, int length, Cell **out)
 				loop = 1;
 				break;
 			case ']':
-				error_raise("read : unmatched closing ']'");
+				*out = make_error_c("read : unmatched closing ']'");
+				break;
 			case '|':
-				error_raise("read : the pair delimiter '|' should only be inside a list");
+				*out = make_error_c("read : the pair delimiter '|' should only be inside a list");
+				break;
 			case '[':
 				// Opening paren, for lists
 				string_step(&view, &rem, read_list(view, rem, out));

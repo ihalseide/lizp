@@ -52,6 +52,7 @@ int static_symp (const Cell *p)
 		|| p == &sym_if
 		|| p == &sym_do
 		|| p == &sym_quote
+		|| p == &sym_error
 		|| p == &sym_string;
 }
 
@@ -494,8 +495,9 @@ int stringp (const Cell * p)
 	return nonempty_listp(p) && p->first == &sym_string;
 }
 
+// Initialize a special symbol
 // Returns 0 upon success
-int init_static_sym (Cell *p, const char *name)
+void init_static_sym (Cell *p, const char *name)
 {
 	assert(cell_validp(p));
 	assert(name);
@@ -503,20 +505,15 @@ int init_static_sym (Cell *p, const char *name)
 	Cell *string = NULL;
 	int string_len = strlen(name);
 	int parsed_len = string_to_list(name, string_len, 0, &string);
+	assert(stringp(string));
+	assert(parsed_len == string_len);
 
-	if ((parsed_len == string_len) && stringp(string))
-	{
-		// Initialize the symbol
-		p->kind = CK_SYMBOL;
-		p->sym_name = string;
+	// Initialize the symbol
+	p->kind = CK_SYMBOL;
+	p->sym_name = string;
 
-		// Add it to the internal symbol list
-		return intern_insert(p);
-	}
-	else
-	{
-		return 1;
-	}
+	// Add it to the internal symbol list
+	intern_insert(p);
 }
 
 // Return 0 upon success
@@ -527,20 +524,21 @@ int init_symbols (void)
 	if (!symbol_list)
 		return 1;
 
-	// All of these must succeed
-	return init_static_sym(&sym_nil,       "nil")
-		|| init_static_sym(&sym_t,         "#t")
-		|| init_static_sym(&sym_f,         "#f")
-		|| init_static_sym(&sym_def_bang,  "def!")
-		|| init_static_sym(&sym_fn_star,   "fn*")
-		|| init_static_sym(&sym_let_star,  "let*")
-		|| init_static_sym(&sym_do,        "do")
-		|| init_static_sym(&sym_if,        "if")
-		|| init_static_sym(&sym_quote,     "quote")
-		|| init_static_sym(&sym_native_fn, "{native-fn}")
-		|| init_static_sym(&sym_fn,        "{fn}")
-		|| init_static_sym(&sym_error,     "{error}")
-		|| init_static_sym(&sym_string,    "{string}");
+	init_static_sym(&sym_nil,       "nil");
+	init_static_sym(&sym_t,         "#t");
+	init_static_sym(&sym_f,         "#f");
+	init_static_sym(&sym_def_bang,  "def!");
+	init_static_sym(&sym_fn_star,   "fn*");
+	init_static_sym(&sym_let_star,  "let*");
+	init_static_sym(&sym_do,        "do");
+	init_static_sym(&sym_if,        "if");
+	init_static_sym(&sym_quote,     "quote");
+	init_static_sym(&sym_native_fn, "{native-fn}");
+	init_static_sym(&sym_fn,        "{fn}");
+	init_static_sym(&sym_error,     "{error}");
+	init_static_sym(&sym_string,    "{string}");
+
+	return 0;
 }
 
 // Returns 0 upon success

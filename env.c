@@ -8,7 +8,8 @@
 // Find the innermost env which contains symbol
 Cell *env_find (Cell *env, const Cell *sym)
 {
-	assert(pairp(env) && symbolp(sym));
+	assert(pairp(env));
+	assert(symbolp(sym));
 
 	// Search up the environment hierarchy
 	// Note: env = [alist | outer]
@@ -31,7 +32,8 @@ Cell *env_find (Cell *env, const Cell *sym)
 //   when not found -> nil
 Cell *env_get (Cell *env, const Cell *sym)
 {
-	assert(pairp(env) && symbolp(sym));
+	assert(pairp(env));
+	assert(symbolp(sym));
 
 	// Find the environment which contains the symbol
 	env = env_find(env, sym);
@@ -43,7 +45,6 @@ Cell *env_get (Cell *env, const Cell *sym)
 }
 
 // Returns 0 upon success
-// TODO: Do not allow nil, true, or false to be defined
 int env_set (Cell *env, Cell *sym, Cell *val)
 {
 	// Validate inputs.
@@ -64,16 +65,8 @@ int env_set (Cell *env, Cell *sym, Cell *val)
 	{
 		// Symbol undefined.
 		// Push the new (symbol . value) pair to the env
-		slot = make_pair(sym, val);
-		if (pairp(slot))
-		{
-			list_push(slot, &(env->first));
-			return 0;
-		}
-		else
-		{
-			return 1;
-		}
+		slot = make_pair_valid(sym, val);
+		return pairp(slot) && list_push(slot, &(env->first));
 	}
 }
 
@@ -82,14 +75,8 @@ int env_set (Cell *env, Cell *sym, Cell *val)
 // "binds" list set to the corresponding item in the "exprs" list.
 Cell *env_create (Cell *env_outer, Cell *binds, Cell *exprs)
 {
-	// Validate args
-	if (env_outer != &sym_nil && !pairp(env_outer))
-		error_raise("env_create : invalid outer environment\n");
-
-	// Create the new environment
+	assert(env_outer == &sym_nil || pairp(env_outer));
 	Cell *env = make_pair_valid(make_empty_list(), env_outer);
-	if (!env)
-		return NULL;
 
 	// Create the bindings by iterating both lists
 	while (nonempty_listp(binds) && nonempty_listp(exprs))
@@ -97,31 +84,19 @@ Cell *env_create (Cell *env_outer, Cell *binds, Cell *exprs)
 		// Bind 1 pair
 		Cell *sym = binds->first;
 		Cell *val = exprs->first;
-
-		// Make sure it only binds symbols
-		if (!symbolp(sym))
-			error_raise("env_create : a member of the bindings list is not a symbol\n");
-
-		env_set(env, sym, val);
+		int fail = env_set(env, sym, val);
+		if (fail)
+			break;
 
 		// Next
 		binds = binds->rest;
 		exprs = exprs->rest;
 	}
 
-	if (nonempty_listp(binds) && emptyp(exprs))
-	{
-		// Left over symbols in the bindings list
-		cell_free_all(env);
-		error_raise("env_create : not enough values to bind to symbols list\n");
-	}
-	else if (nonempty_listp(exprs) && emptyp(binds))
-	{
-		// Left over values in the exprs list
-		cell_free_all(env);
-		error_raise("env_create : too many values to bind to symbols list\n");
-	}
-
-	return env;
+	// Check if all of the lists were used up
+	if (nonempty_listp(binds) || nonempty_listp(exprs))
+		return NULL;
+	else
+		return env;
 }
 
