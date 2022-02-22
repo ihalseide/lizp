@@ -15,6 +15,8 @@ int print_list (Cell *list, char *out, int length, int readable);
 
 int print_list_as_string (const Cell *list, char *out, int length, int readable);
 
+int print_error (Cell *list, char *out, int length);
+
 int pr_str (Cell *x, char *out, int length, int readable);
 
 #endif /* _PRINTER_H */

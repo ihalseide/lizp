@@ -170,36 +170,45 @@ int print_symbol (Cell *sym, char *out, int length)
 	return print_list_as_string(sym->sym_name->rest, out, length, 0);
 }
 
+int print_error (Cell *list, char *out, int length)
+{
+	char *view = out;
+	string_step((const char**)&view, &length, print_cstr("ERROR : ", out, length));
+	while (nonempty_listp(list))
+	{
+		string_step((const char**)&view, &length, pr_str(list->first, view, length, 0));
+		list = list->rest;
+	}
+	return view - out;
+}
+
 // This function is necessary because there are a bunch of special types of pairs
 int print_pair (Cell *p, char *out, int length, int readable)
 {
-	// Validate arguments
-	if (!pairp(p) || !out || !length)
+	assert(out);
+	assert(pairp(p));
+	if (length <= 0)
 		return 0;
 
+	if (errorp(p))
+		return print_error(p->rest, out, length);
 	if (stringp(p))
-	{
 		// Print the characters of a string
 		return print_list_as_string(p->rest, out, length, readable);
-	}
 	else if (functionp(p))
-	{
 		// Don't print actual function values out
 		return print_cstr("#<function>", out, length);
-	}
 	else
-	{
 		// Print list normally
 		return print_list(p, out, length, readable);
-	}
 }
 
 // Does: Prints form X to output stream
 // Returns: number of chars written
 int pr_str (Cell *x, char *out, int length, int readable)
 {
-	// Validate inputs
-	if (!out || (length <= 0))
+	assert(out);
+	if (length <= 0)
 		return 0;
 
 	if (!cell_validp(x))

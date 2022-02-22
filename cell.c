@@ -221,19 +221,19 @@ Cell *make_string_start (void)
 	return make_single_list(&sym_string);
 }
 
-// Returns: [{error} msg]
-Cell *make_error (Cell *msg)
+// Returns: [{error} ...]
+Cell *make_error (Cell *args)
 {
-	assert(stringp(msg));
-	return make_pair_valid(&sym_error, make_single_list(msg));
+	assert(nonempty_listp(args) && !stringp(args));
+	return make_pair_valid(&sym_error, args);
 }
 
 // Returns: [{error} msg]
-Cell *make_error_c (const char *msg)
+Cell *make_error_c (const char *msg, Cell *stuff)
 {
-	Cell *p;
-	string_to_list(msg, strlen(msg), 0, &p);
-	return make_error(p);
+	Cell *str;
+	string_to_list(msg, strlen(msg), 0, &str);
+	return make_error(make_pair_valid(str, stuff));
 }
 
 // Returns: list of the form [{fn} params body outer_env]

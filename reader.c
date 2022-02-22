@@ -102,13 +102,13 @@ int read_quoted_string (const char *start, int length, Cell **out)
 		}
 		else
 		{
-			*out = make_error_c("read_quoted_string : error : could not parse string contents\n");
+			*out = make_error_c("read_quoted_string : error : could not parse string contents", &sym_nil);
 			return view - start;
 		}
 	}
 	else
 	{
-		*out = make_error_c("read_quoted_string : error : unexpected end of input in quoted string\n");
+		*out = make_error_c("read_quoted_string : error : unexpected end of input in quoted string", &sym_nil);
 		return view - start;
 	}
 }
@@ -143,7 +143,7 @@ int read_list (const char *start, int length, Cell **out)
 		int n = string_step(&view, &rem, read_str(view, rem, &(p->first)));
 		if (!n)
 		{
-			*out = make_error_c("no items");
+			*out = make_error_c("no items", &sym_nil);
 			return view - start;
 		}
 
@@ -154,7 +154,7 @@ int read_list (const char *start, int length, Cell **out)
 			Cell *e = NULL;
 			if (!string_step(&view, &rem, read_str(view, rem, &e)) || !e)
 			{
-				*out = make_error_c("read_list : could not read item");
+				*out = make_error_c("read_list : could not read item", &sym_nil);
 				return view - start;
 			}
 
@@ -180,7 +180,7 @@ int read_list (const char *start, int length, Cell **out)
 	}
 	else
 	{
-		*out = make_error_c("read_list: unexpected end of input\n");
+		*out = make_error_c("read_list: unexpected end of input", &sym_nil);
 	}
 
 	return view - start;
@@ -224,10 +224,10 @@ int read_str (const char *start, int length, Cell **out)
 				loop = 1;
 				break;
 			case ']':
-				*out = make_error_c("read : unmatched closing ']'");
+				*out = make_error_c("read : unmatched closing ']'", &sym_nil);
 				break;
 			case '|':
-				*out = make_error_c("read : the pair delimiter '|' should only be inside a list");
+				*out = make_error_c("read : the pair delimiter '|' should only be inside a list", &sym_nil);
 				break;
 			case '[':
 				// Opening paren, for lists

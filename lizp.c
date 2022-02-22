@@ -28,9 +28,8 @@ Cell *READ (const char *start, int length)
 // Returns: a new list.
 Cell *eval_each (Cell *list, Cell *env)
 {
-	// Validate arguments
-	if (!pairp(list) || !pairp(env))
-		return NULL;
+	assert(pairp(list));
+	assert(pairp(env));
 
 	if (emptyp(list))
 		return list;
@@ -86,7 +85,7 @@ Cell *eval_ast (Cell *ast, Cell *env)
 				if (cell_validp(slot))
 					return slot->rest;
 				else
-					return make_error_c("eval_ast : undefined symbol");
+					return make_error_c("eval_ast : undefined symbol : ", make_single_list(ast));
 			}
 		case CK_FUNCTION:
 		case CK_INTEGER:
@@ -106,7 +105,7 @@ void apply (Cell *fn, Cell *args, Cell *env, Cell **val_out, Cell **env_out)
 	if (!pairp(args) || !env || !val_out || !env_out)
 	{
 		if (val_out)
-			*val_out = make_error_c("apply : invalid arguments");
+			*val_out = make_error_c("apply : invalid arguments", &sym_nil);
 		if (env_out)
 			*env_out = NULL;
 		return;
@@ -119,7 +118,7 @@ void apply (Cell *fn, Cell *args, Cell *env, Cell **val_out, Cell **env_out)
 		int n_params = function_arity(fn);
 		if (n_params && n_params != list_length(args))
 		{
-			*val_out = make_error_c("apply : function requires fixed number of argument(s): ");
+			*val_out = make_error_c("apply : function requires fixed number of argument(s): ", &sym_nil);
 			*env_out = NULL;
 			return;
 		}
@@ -163,7 +162,7 @@ void apply (Cell *fn, Cell *args, Cell *env, Cell **val_out, Cell **env_out)
 	else
 	{
 		// Not a function
-		*val_out = make_error_c("apply : not a function");
+		*val_out = make_error_c("apply : not a function", &sym_nil);
 		*env_out = NULL;
 	}
 }
@@ -209,7 +208,7 @@ Cell *EVAL (Cell *ast, Cell *env)
 			return ast;
 	}
 
-	return make_error_c("eval : invalid ast");
+	return make_error_c("eval : invalid ast", &sym_nil);
 }
 
 void PRINT (Cell *expr)
