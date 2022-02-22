@@ -4,7 +4,6 @@
 #include <ctype.h>
 #include <assert.h>
 
-#include "error.h"
 #include "cell.h"
 #include "env.h"
 #include "function.h"

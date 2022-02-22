@@ -3,7 +3,6 @@
 #include <assert.h>
 #include <ctype.h>
 
-#include "error.h"
 #include "reader.h"
 #include "lizp.h"
 

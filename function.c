@@ -3,7 +3,6 @@
 #include <string.h>
 
 #include "cell.h"
-#include "error.h"
 #include "function.h"
 #include "lizp.h"
 #include "printer.h"

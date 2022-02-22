@@ -3,7 +3,6 @@
 #include <assert.h>
 #include <string.h>
 
-#include "error.h"
 #include "lizp.h"
 
 int main (void)
@@ -29,11 +28,7 @@ int main (void)
 		if(!fgets(buffer, sizeof(buffer), stdin))
 			break;
 
-		// Do a REP, catching errors
-		if (!setjmp(jb_top_level))
-			rep(buffer, strlen(buffer), repl_env);
-		else
-			error_display();
+		rep(buffer, strlen(buffer), repl_env);
 	}
 
 	return 0;

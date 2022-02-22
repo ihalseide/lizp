@@ -2,7 +2,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "error.h"
 #include "cell.h"
 #include "env.h"
 
