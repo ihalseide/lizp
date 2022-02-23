@@ -1,6 +1,39 @@
 #ifndef _CELL_H
 #define _CELL_H
 
+// Number of special form symbols
+#define SPECIAL_COUNT 6
+
+typedef enum Native_fn Native_fn_t;
+enum Native_fn
+{
+	FN_INVALID,
+	FN_STR,
+	FN_PR_STR,
+	FN_PRN,
+	FN_PRINTLN,
+	FN_LIST,
+	FN_EVAL,
+	FN_SLURP,
+	FN_READ_STR,
+	FN_EMPTY_P,
+	FN_COUNT,
+	FN_LIST_P,
+	FN_INT_P,
+	FN_EQ,
+	FN_LT,
+	FN_GT,
+	FN_LTE,
+	FN_GTE,
+	FN_ADD,
+	FN_SUB,
+	FN_MUL,
+	FN_DIV,
+	FN_CONCAT,
+	FN_FIRST,
+	FN_REST,
+};
+
 typedef enum Cell_kind Cell_kind_t;
 enum Cell_kind
 {
@@ -36,7 +69,7 @@ extern Cell sym_nil,
 	 sym_def_bang,
 	 sym_let_star,
 	 sym_fn_star,
-	 sym_if,
+	 sym_cond,
 	 sym_do,
 	 sym_quote,
 	 sym_string;
@@ -53,7 +86,7 @@ Cell *intern_find_symbol(const Cell *name);
 Cell *intern_symbol(Cell *name);
 Cell *list_pop(Cell **list);
 Cell *make_empty_list(void);
-Cell *make_fn_native (int id);
+Cell *make_fn_native (Native_fn_t id);
 Cell *make_int(int n);
 Cell *make_lizp_fn(Cell *params, Cell *body);
 Cell *make_pair(Cell *first, Cell *rest);
@@ -79,6 +112,7 @@ int list_push(Cell *item, Cell **list);
 int native_fnp(const Cell *p);
 int nonempty_listp(const Cell *p);
 int pairp(const Cell *p);
+int specialp(const Cell *p);
 int stringp(const Cell *x);
 int symbolp(const Cell *p);
 int truthy(Cell *x);

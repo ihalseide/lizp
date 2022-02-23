@@ -6,6 +6,7 @@
 
 #include "cell.h"
 #include "printer.h"
+#include "function.h"
 
 // Cell allocator
 static Cell *cell_pool = NULL;
@@ -24,10 +25,21 @@ Cell sym_nil,
 	 sym_def_bang,
 	 sym_let_star,
 	 sym_fn_star,
-	 sym_if,
+	 sym_cond,
 	 sym_do,
 	 sym_quote,
 	 sym_string;
+
+int specialp(const Cell *p)
+{
+	_Static_assert(SPECIAL_COUNT == 6, "handle all special symbols");
+	return p == &sym_def_bang
+		|| p == &sym_let_star
+		|| p == &sym_fn_star
+		|| p == &sym_cond
+		|| p == &sym_do
+		|| p == &sym_quote;
+}
 
 int kind_of(const Cell *p)
 {
@@ -48,7 +60,7 @@ int static_symp(const Cell *p)
 		|| p == &sym_def_bang
 		|| p == &sym_let_star
 		|| p == &sym_fn_star
-		|| p == &sym_if
+		|| p == &sym_cond
 		|| p == &sym_do
 		|| p == &sym_quote
 		|| p == &sym_string;
@@ -228,7 +240,7 @@ Cell *make_fn(Cell *params, Cell *body)
 }
 
 // Returns: list of the form [{native-fn} id]
-Cell *make_fn_native(int id)
+Cell *make_fn_native(Native_fn_t id)
 {
 	return make_pair_valid(&sym_native_fn,
 			make_single_list(make_int(id)));
@@ -489,7 +501,7 @@ int init_symbols(void)
 	init_static_sym(&sym_fn_star,   "fn*");
 	init_static_sym(&sym_let_star,  "let*");
 	init_static_sym(&sym_do,        "do");
-	init_static_sym(&sym_if,        "if");
+	init_static_sym(&sym_cond,      "cond");
 	init_static_sym(&sym_quote,     "quote");
 	init_static_sym(&sym_native_fn, "{c-function}");
 	init_static_sym(&sym_fn,        "{function}");
