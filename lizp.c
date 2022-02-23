@@ -1258,24 +1258,30 @@ void eval_special (Cell *sym, Cell *ast, Cell *env, Cell **ast_out, Cell **env_o
 	else if (sym == &sym_def_bang)
 	{
 		// [def! symbol expr]
-		if (2 == list_length(ast))
+		if (2 != list_length(ast))
+			error("def! requires 2 arguments");
+
+		Cell *p1 = ast->first;
+		if (!symbolp(p1))
+			error("def! requires first argument to be a symbol");
+
+		Cell *p2 = ast->rest->first;
+		if(!cell_validp(p2))
+			error("def! requires second argument to be valid");
+
+		p2 = EVAL(p2, env);
+		if (!cell_validp(p2))
+			error("def! requires second argument to be valid");
+
+		if (env_set(repl_env, p1, p2))
 		{
-			Cell *p1 = ast->first;
-			Cell *p2 = ast->rest->first;
-			if (symbolp(p1) && cell_validp(p2))
-			{
-				p2 = EVAL(p2, env);
-				if (cell_validp(p2) && !env_set(repl_env, p1, p2))
-				{
-					*ast_out = p2;
-					*env_out = NULL;
-					return;
-				}
-			}
+			PRINT(p1);
+			error("^ cannot define symbol");
 		}
-		// Fall-through to error
-		*ast_out = NULL;
+
+		*ast_out = p2;
 		*env_out = NULL;
+		return;
 	}
 	else if (sym == &sym_let_star)
 	{
