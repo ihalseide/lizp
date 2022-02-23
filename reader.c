@@ -11,6 +11,7 @@ int char_symbolp (char c)
 	return (c > ' ')
 		&& (c != '"')
 		&& (c != ';')
+		&& (c != '\'')
 		&& (c != '[') && (c != ']');
 }
 
@@ -234,6 +235,15 @@ int read_str (const char *start, int length, Cell **out)
 			case '"': 
 				// Quoted string literal
 				string_step(&view, &rem, read_quoted_string(view, rem, out));
+				break;
+			case '\'':
+				// Shortcut for special form quote
+				{
+					Cell *ast;
+					string_step(&view, &rem, 1);
+					string_step(&view, &rem, read_str(view, rem, &ast));
+					*out = make_pair_valid(&sym_quote, make_single_list(ast));
+				}
 				break;
 			default:
 				// Symbol or number

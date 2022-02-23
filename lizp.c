@@ -121,6 +121,21 @@ void eval_special (Cell *sym, Cell *ast, Cell *env, Cell **ast_out, Cell **env_o
 			*env_out = env;
 		}
 	}
+	else if (sym == &sym_quote)
+	{
+		// [quote expr]
+		if (1 == list_length(ast))
+		{
+			*ast_out = ast->first;
+			*env_out = NULL;
+		}
+		else
+		{
+			// quote takes only 1 argument
+			*ast_out = NULL;
+			*env_out = NULL;
+		}
+	}
 	else
 	{
 		assert(0);
