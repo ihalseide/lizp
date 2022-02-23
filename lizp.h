@@ -1,4 +1,4 @@
-#ifndef _ALL_H
+#ifndef _LIZP_H
 
 // Number of special form symbols
 #define SPECIAL_COUNT 6
@@ -59,7 +59,7 @@ struct cell
 	};
 };
 
-// Static symbols
+// Special symbol cells
 extern Cell sym_nil,
 	 sym_t,
 	 sym_f,
@@ -73,9 +73,13 @@ extern Cell sym_nil,
 	 sym_quote,
 	 sym_string;
 
-Cell *EVAL(Cell *ast, Cell *env);
+// Global repl env
+extern Cell *repl_env;
+
 Cell *READ(const char *start, int length);
+Cell *EVAL(Cell *ast, Cell *env);
 void PRINT(Cell *expr);
+void rep(const char *start, int length, Cell *env);
 
 Cell *alist_assoc(const Cell *key, Cell *alist);
 Cell *apply_built_in(Native_fn_t fn, Cell *args);
@@ -102,7 +106,6 @@ Cell *make_string_start(void);
 Cell *make_symbol(Cell *name);
 Cell *make_void(const void *vp);
 Cell *string_join(Cell *items, char sep, int readable);
-extern Cell *repl_env;
 int cell_can_alloc(int n_cells);
 int cell_eq(const Cell *a, const Cell *b);
 int cell_validp(const Cell *p);
@@ -147,7 +150,7 @@ void cell_free_all(Cell *p);
 void env_setup_fn(Cell *env, const char *str, Native_fn_t id);
 void eval_special(Cell *sym, Cell *ast, Cell *env, Cell **val_out, Cell **env_out);
 void print_nonreadably (Cell *expr);
-void rep(const char *start, int length, Cell *env);
 void string_skip_white(const char **stream, int *length);
 
-#endif /* _ALL_H */
+#endif /* _LIZP_H */
+
