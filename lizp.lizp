@@ -1,7 +1,10 @@
 ;;;; This file can be loaded by the main program
 
 ;;; Boolean not
-[def! not [fn* [x] [if x #f #t]]]
+[def! not
+  [fn* [x]
+    [cond x #f
+          #t #t]]]
 
 ;;; Not equal
 [def! /= [fn* [x y] [not [= x y]]]]
@@ -9,28 +12,26 @@
 ;;; Assert true. Used for making sure that a quoted form is true
 [def! assert
   [fn* [x]
-    [if [not [eval x]]
-        [println "Assertion failed:" x "\n"]
-        #t]]]
+    [cond [eval x] #t
+	      #t [println "Assertion failed:" x "\n"]]]]
 
 ;;; Non-empty list predicate
 [def! some-list?
   [fn* [x]
-    [if [list? x]
-        [not [empty? x]]
-        #f]]]
+    [cond [list? x] [not [empty? x]]
+          #t #f]]]
 
 ;;; Calculate the sum of a list of numbers
 [def! sum-start
   [fn* [L n]
-    [if [some-list? L]
-        [sum-start [rest L] [+ n [first L]]]
-        n]]]
+    [cond [some-list? L] [sum-start [rest L] [+ n [first L]]]
+          #t n]]]
 [def! sum [fn* [L] [sum-start L 0]]]
 
 ;;; Negative numbers
 [def! neg [fn* [n] [- 0 n]]]
 
+[cond #f
 ;; Do some assertion tests
 [assert #t]
 [assert ""]
@@ -57,6 +58,7 @@
 [assert [quote [= "string" "string"]]]
 [assert [quote [/= "string" "stringbig"]]]
 [assert [quote [/= "string" "stringbig"]]]
+#t nil]
 
 ;; Welcome message
 [println "Welcome to the LIZP read-eval-print-loop.\n"]
