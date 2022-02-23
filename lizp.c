@@ -11,19 +11,6 @@
 #include "printer.h"
 #include "reader.h"
 
-// Does: Read a form from the stream
-// Returns: the form, which may be NULL
-Cell *READ (const char *start, int length)
-{
-	// Validate inputs
-	if (!start || (length < 0))
-		return NULL;
-
-	Cell *x;
-	read_str(start, length, &x);
-	return x;
-}
-
 // Does: evaluate each item of list x, without modifying x.
 // Returns: a new list.
 Cell *eval_each (Cell *list, Cell *env)
@@ -63,11 +50,15 @@ Cell *eval_each (Cell *list, Cell *env)
 Cell *eval_ast (Cell *ast, Cell *env)
 {
 	// Validate args
+	assert(env);
 	if (!cell_validp(ast) || !pairp(env))
 		return NULL;
 
 	switch (ast->kind)
 	{
+		case CK_INTEGER:
+			// Self-evaluating
+			return ast;
 		case CK_PAIR:
 			// Evaluate each element in a list
 			return eval_each(ast, env);
@@ -85,15 +76,54 @@ Cell *eval_ast (Cell *ast, Cell *env)
 				if (cell_validp(slot))
 					return slot->rest;
 				else
-					return make_error_c("eval_ast : undefined symbol : ", make_single_list(ast));
+					// undefined symbol : ast
+					return NULL;
 			}
-		case CK_FUNCTION:
-		case CK_INTEGER:
-			// Self-evaluating values
-			return ast;
 		default:
-			// Invalid kind
-			return NULL;
+			assert(0);
+	}
+}
+
+// Returns values through val_out, env_out
+// For proper tail-call recursion, the next ast and env are both returned for EVAL to use.
+// Null environment indicates that no further evaluation is needed
+void eval_special (Cell *sym, Cell *ast, Cell *env, Cell **ast_out, Cell **env_out)
+{
+	assert(symbolp(sym));
+	assert(pairp(env));
+	assert(ast_out);
+	assert(env_out);
+
+	if (ast == &sym_nil)
+		ast = make_empty_list();
+	assert(pairp(ast));
+
+	if (sym == &sym_do)
+	{
+		// [do ... last] -> last:
+		if (emptyp(ast))
+		{
+			// [do] -> nil
+			*ast_out = &sym_nil;
+			*env_out = NULL;
+		}
+		else
+		{
+			// Evaluate all but the last item
+			Cell *p = ast;
+			while (nonempty_listp(p) && (p->rest != &sym_nil))
+			{
+				EVAL(p->first, env);
+				p = p->rest;
+			}
+			// Tail call on the last item
+			*ast_out = p->first;
+			*env_out = env;
+		}
+	}
+	else
+	{
+		assert(0);
 	}
 }
 
@@ -102,113 +132,102 @@ Cell *eval_ast (Cell *ast, Cell *env)
 // Null environment indicates that no further evaluation is needed
 void apply (Cell *fn, Cell *args, Cell *env, Cell **val_out, Cell **env_out)
 {
-	if (!pairp(args) || !env || !val_out || !env_out)
-	{
-		if (val_out)
-			*val_out = make_error_c("apply : invalid arguments", &sym_nil);
-		if (env_out)
-			*env_out = NULL;
-		return;
-	}
+	assert(cell_validp(fn));
+	assert(cell_validp(args));
+	assert(pairp(env));
+	assert(val_out);
+	assert(env_out);
 
 	if (functionp(fn))
 	{
-		// Check that the function arity matches the actual number of arguments
-		// (if arity is 0, it is variadic)
-		int n_params = function_arity(fn);
-		if (n_params && n_params != list_length(args))
-		{
-			*val_out = make_error_c("apply : function requires fixed number of argument(s): ", &sym_nil);
-			*env_out = NULL;
-			return;
-		}
+		// Make sure the arguments are a list
+		if (!pairp(args))
+			args = make_empty_list();
+		assert(pairp(args));
 
 		if (function_nativep(fn))
 		{
-			// Built-in native C function...
-
-			if (fn->rest->rest->func == fn_eval)
+			int id = fn->rest->first->integer;
+			if (id == FN_EVAL)
 			{
-				// Special case for eval, because
-				// it only needs to do what EVAL already does.
-				// Pass-through
+				// Eval is a special case
 				*val_out = args->first;
 				*env_out = env;
 			}
 			else
 			{
-				// Call native function
-				Native_fn f = fn->rest->rest->func; // 3rd item is function
-				// (val_out is modified by f)
-				*val_out = f(args);
+				*val_out = apply_built_in(id, args);
 				*env_out = NULL;
 			}
 		}
 		else
 		{
-			// Function created by "fn*"
-			assert(fn->first == &sym_fn);
-
-			// Create new environment by binding params and args
-			Cell *params = fn->rest->first;
-			Cell *body   = fn->rest->rest->first;
-			Cell *fn_env = env_create(env, params, args);
-
-			// Allow a tail call of the lizp-defined function
-			*val_out = body;
-			*env_out = fn_env;
+			assert(0 && "not implemented");
 		}
 	}
 	else
 	{
 		// Not a function
-		*val_out = make_error_c("apply : not a function", &sym_nil);
+		*val_out = NULL;
 		*env_out = NULL;
 	}
 }
 
+// Does: Read a form from the stream
+// Returns: the form, which may be NULL
+Cell *READ (const char *start, int length)
+{
+	// Validate inputs
+	if (!start || (length < 0))
+		return NULL;
+
+	Cell *x;
+	read_str(start, length, &x);
+	return x;
+}
+
+
 Cell *EVAL (Cell *ast, Cell *env)
 {
-	assert(env);
-
 	while (1)
 	{
-		if (!ast)
-			break;
+		assert(env);
 
+		// Non-lists
 		if (!pairp(ast))
 			return eval_ast(ast, env);
 
-		// Special lists...
-		// String -> itself
-		// Empty list -> itself
-		// Function -> itself
+		// Special lists that are self-evaluating:
+		//   Empty list  []
+		//   String
+		//   Function
 		if (stringp(ast) || emptyp(ast) || functionp(ast))
 			return ast;
 
-		// Normal function application...
+		if (specialp(ast->first))
+		{
+			// Special form...
+			eval_special(ast->first, ast->rest, env, &ast, &env);
+		}
+		else
+		{
+			// Normal function application...
 
-		// Evaluate all list items
-		ast = eval_ast(ast, env);
-		if (!ast)
-			break;
-		Cell *fn = ast->first;
-		Cell *args = ast->rest;
+			// Evaluate all list items
+			Cell *new_ast = eval_ast(ast, env);
+			if (!pairp(new_ast))
+				// Eval ast failed
+				return NULL;
 
-		// Make sure that the arguments are a list
-		if (!pairp(args))
-			args = make_empty_list();
-
-		// Apply the function
-		apply(fn, args, env, &ast, &env);
+			// Apply the function
+			apply(new_ast->first, new_ast->rest, env, &ast, &env);
+		}
 
 		// A null environment signals that a tail call is not necessary.
 		// Otherwise, continue the loop with the new ast and the new env.
 		if (!env)
 			return ast;
 	}
-
-	return make_error_c("eval : invalid ast", &sym_nil);
 }
 
 void PRINT (Cell *expr)
@@ -230,23 +249,22 @@ void rep (const char *start, int length, Cell *env)
 	}
 }
 
-// Returns 0 upon success
-// Note: when n_params == 0, that means the function is variadic
-void env_set_native_fn (Cell *env, const char *name, int n_params, Native_fn func)
+void env_setup_fn (Cell *env, const char *str, Native_fn_t id)
 {
-	assert(env);
-	assert(name);
-	assert(n_params >= 0);
-	assert(func);
+	assert(pairp(env));
+	assert(str);
 
-	// Create lisp string for the name
-	Cell *newname = NULL;
-	string_to_list(name, strlen(name), 0, &newname);
-	assert(stringp(newname));
-
-	Cell *sym = intern_symbol(newname);
+	Cell *name;
+	string_to_list(str, strlen(str), 0, &name);
+	assert(stringp(name));
+	Cell *sym = intern_symbol(name);
 	assert(symbolp(sym));
-	env_set(env, sym, make_wrapped_native_fn(n_params, func));
+
+	Cell *fn = make_fn_native(id);
+	assert(fn);
+
+	int fail = env_set(env, sym, fn);
+	assert(!fail);
 }
 
 // Returns global environment
@@ -261,33 +279,30 @@ Cell *init (int ncells)
 	// Setup the global environment now
 	Cell *env = env_create(&sym_nil, &sym_nil, &sym_nil);
 	assert(env);
-
-	env_set_native_fn(env, "*",            2, fn_mul);
-	env_set_native_fn(env, "+",            2, fn_add);
-	env_set_native_fn(env, "-",            2, fn_sub);
-	env_set_native_fn(env, "/",            2, fn_div);
-	env_set_native_fn(env, "<",            2, fn_lt);
-	env_set_native_fn(env, "<=",           2, fn_lte);
-	env_set_native_fn(env, "=",            2, fn_eq);
-	env_set_native_fn(env, ">",            2, fn_gt);
-	env_set_native_fn(env, ">=",           2, fn_gte);
-	env_set_native_fn(env, "assoc",        2, fn_assoc);
-	env_set_native_fn(env, "concat",       0, fn_concat);
-	env_set_native_fn(env, "count",        1, fn_count);
-	env_set_native_fn(env, "empty?",       1, fn_empty_p);
-	env_set_native_fn(env, "eval",         1, fn_eval);
-	env_set_native_fn(env, "first",        1, fn_first);
-	env_set_native_fn(env, "int?",         1, fn_int_p);
-	env_set_native_fn(env, "list",         0, fn_list);
-	env_set_native_fn(env, "list?",        1, fn_list_p);
-	env_set_native_fn(env, "pair",         2, fn_pair);
-	env_set_native_fn(env, "pr-str",       0, fn_pr_str);
-	env_set_native_fn(env, "println",      0, fn_println);
-	env_set_native_fn(env, "prn",          0, fn_prn);
-	env_set_native_fn(env, "read-string",  1, fn_read_str);
-	env_set_native_fn(env, "rest",         1, fn_rest);
-	env_set_native_fn(env, "slurp",        1, fn_slurp);
-	env_set_native_fn(env, "str",          0, fn_str);
+	env_setup_fn(env, "*", FN_MUL);
+	env_setup_fn(env, "+", FN_ADD);
+	env_setup_fn(env, "-", FN_SUB);
+	env_setup_fn(env, "/", FN_DIV);
+	env_setup_fn(env, "<", FN_LT);
+	env_setup_fn(env, "<=", FN_LTE);
+	env_setup_fn(env, "=", FN_EQ);
+	env_setup_fn(env, ">", FN_GT);
+	env_setup_fn(env, ">=", FN_GTE);
+	env_setup_fn(env, "concat", FN_CONCAT);
+	env_setup_fn(env, "count", FN_COUNT);
+	env_setup_fn(env, "empty?", FN_EMPTY_P);
+	env_setup_fn(env, "eval", FN_EVAL);
+	env_setup_fn(env, "first", FN_FIRST);
+	env_setup_fn(env, "int?", FN_INT_P);
+	env_setup_fn(env, "list", FN_LIST);
+	env_setup_fn(env, "list?", FN_LIST_P);
+	env_setup_fn(env, "pr-str", FN_PR_STR);
+	env_setup_fn(env, "println", FN_PRINTLN);
+	env_setup_fn(env, "prn", FN_PRN);
+	env_setup_fn(env, "read-string", FN_READ_STR);
+	env_setup_fn(env, "rest", FN_REST);
+	env_setup_fn(env, "slurp", FN_SLURP);
+	env_setup_fn(env, "str", FN_STR);
 	return env;
 }
 
