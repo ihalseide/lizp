@@ -41,7 +41,6 @@ enum Cell_kind
 	CK_INTEGER,
 	CK_SYMBOL,
 	CK_PAIR,
-	CK_STREAM,
 };
 
 typedef struct cell Cell;
@@ -86,9 +85,9 @@ Cell *intern_find_symbol(const Cell *name);
 Cell *intern_symbol(Cell *name);
 Cell *list_pop(Cell **list);
 Cell *make_empty_list(void);
+Cell *make_fn(Cell *params, Cell *body);
 Cell *make_fn_native (Native_fn_t id);
 Cell *make_int(int n);
-Cell *make_lizp_fn(Cell *params, Cell *body);
 Cell *make_pair(Cell *first, Cell *rest);
 Cell *make_pair_valid(Cell *first, Cell *rest);
 Cell *make_single_list(Cell *p);

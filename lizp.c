@@ -146,7 +146,8 @@ void eval_special (Cell *sym, Cell *ast, Cell *env, Cell **ast_out, Cell **env_o
 			Cell *p2 = ast->rest->first;
 			if (symbolp(p1) && cell_validp(p2))
 			{
-				if (!env_set(env, p1, p2))
+				p2 = EVAL(p2, env);
+				if (cell_validp(p2) && !env_set(env, p1, p2))
 				{
 					*ast_out = p2;
 					*env_out = NULL;
@@ -214,7 +215,19 @@ void eval_special (Cell *sym, Cell *ast, Cell *env, Cell **ast_out, Cell **env_o
 	else if (sym == &sym_fn_star)
 	{
 		// [fn* [s1 ...] expr]
-		assert(0 && "not implemented");
+		if (2 == list_length(ast))
+		{
+			Cell *a = ast->first;
+			Cell *b = ast->rest->first;
+			if (pairp(a) && cell_validp(b))
+			{
+				*ast_out = make_fn(a, b);
+				*env_out = NULL;
+				return;
+			}
+		}
+		*ast_out = NULL;
+		*env_out = NULL;
 	}
 	else if (sym == &sym_cond)
 	{
@@ -277,6 +290,7 @@ void apply (Cell *fn, Cell *args, Cell *env, Cell **val_out, Cell **env_out)
 
 		if (function_nativep(fn))
 		{
+			// Native / built-in function
 			int id = fn->rest->first->integer;
 			if (id == FN_EVAL)
 			{
@@ -292,7 +306,18 @@ void apply (Cell *fn, Cell *args, Cell *env, Cell **val_out, Cell **env_out)
 		}
 		else
 		{
-			assert(0 && "not implemented");
+			// Lizp-defined function (by fn*)
+			Cell *new_env = env_create(env, fn->rest->first, args); // use function parameters
+			if (new_env)
+			{
+				*val_out = fn->rest->rest->first; // use function body
+				*env_out = new_env;
+			}
+			else
+			{
+				*val_out = NULL;
+				*env_out = NULL;
+			}
 		}
 	}
 	else
