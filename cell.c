@@ -191,9 +191,10 @@ Cell *make_pair(Cell *first, Cell *rest)
 // Like make_pair, but fails if any of the arguments are invalid
 Cell *make_pair_valid(Cell *first, Cell *rest)
 {
-	if (!cell_validp(first) || !cell_validp(rest))
+	if (cell_validp(first) && cell_validp(rest))
+		return make_pair(first, rest);
+	else
 		return NULL;
-	return make_pair(first, rest);
 }
 
 // Returns: []
