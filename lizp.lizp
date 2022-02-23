@@ -1,5 +1,12 @@
 ;;;; This file can be loaded by the main program
 
+;;; Assert true. Used for making sure that a quoted form is true
+[def! assert
+  [fn* [x]
+    [cond [eval x] #t
+          #t [do [println "Assertion failed:" x "\n"]]]]]
+[assert assert]
+
 ;;; Modulus operator
 [def! %
   [fn* [n d]
@@ -29,12 +36,14 @@
 ;;; Not equal
 [def! /= [fn* [x y] [not [= x y]]]]
 
-;;; Assert true. Used for making sure that a quoted form is true
-[def! assert
-  [fn* [x]
-    [cond [eval x] #t
-          #t [do [println "Assertion failed:" x "\n"]]
-                 #f]]]
+;;; = True
+[def! true? [fn* [x] [= #t x]]]
+
+;;; = False
+[def! false? [fn* [x] [= #f x]]]
+
+;;; = False
+[def! nil? [fn* [x] [= nil x]]]
 
 ;;; Non-empty list predicate
 [def! some-list?
@@ -49,6 +58,32 @@
                                #t [member? e [rest L]]]
           #t #f]]]
 
+;;; Return a symbol that represents the type of x
+[def! type-of
+  [fn* [x]
+    [cond [int? x]      'int
+	      [symbol? x]   'symbol
+		  [string? x]   'string
+		  [function? x] 'function
+		  [list? x]     'list
+		  #t nil]]]
+
+;;; N is negative?
+[def! negative?
+  [fn* [n]
+    [cond [int? n] [< n 0]
+	      #t #f]]]
+
+;;; Get the Nth item of a list
+[def! nth
+  [fn* [L n]
+    [assert '[list? L]]
+    [assert '[int? n]]
+	[cond [negative? n] "error: n must be non-negative"
+	      [empty? L]    "error: n is bigger than the length of L"
+	      [= n 0]       [first L]
+	      #t            [nth [rest L] [- n 1]]]]]
+
 ;;; Calculate the sum of a list of numbers
 [def! sum-start
   [fn* [L n]
@@ -62,30 +97,29 @@
 ;; Do some assertion tests
 [assert #t]
 [assert ""]
-[assert assert]
-[assert [quote ""]]
-[assert [quote [not #f]]]
-[assert [quote [not nil]]]
-[assert [quote [/= #t #f]]]
-[assert [quote [/= #f nil]]]
-[assert [quote [/= #t nil]]]
-[assert [quote [/= "" nil]]]
-[assert [quote [/= "" "str"]]]
-[assert [quote [= "" ""]]]
-[assert [quote [= 0 0]]]
-[assert [quote [= = =]]]
-[assert [quote [= 3 [+ 1 2]]]]
-[assert [quote [= 3 [- 6 3]]]]
-[assert [quote [= 48 [* 6 8]]]]
-[assert [quote [= [neg 3] [/ 9 [neg 3]]]]]
-[assert [quote [= [] []]]]
-[assert [quote [= [] [list]]]]
-[assert [quote [/= [] nil]]]
-[assert [quote [= + +]]]
-[assert [quote [= "string" "string"]]]
-[assert [quote [/= "string" "stringbig"]]]
-[assert [quote [/= "string" "stringbig"]]]
+[assert 'assert]
+[assert '[not #f]]
+[assert '[not nil]]
+[assert '[/= #t #f]]
+[assert '[/= #f nil]]
+[assert '[/= #t nil]]
+[assert '[/= "" nil]]
+[assert '[/= "" "str"]]
+[assert '[= "" ""]]
+[assert '[= 0 0]]
+[assert '[= = =]]
+[assert '[= 3 [+ 1 2]]]
+[assert '[= 3 [- 6 3]]]
+[assert '[= 48 [* 6 8]]]
+[assert '[= [neg 3] [/ 9 [neg 3]]]]
+[assert '[= [] []]]
+[assert '[= [] [list]]]
+[assert '[/= [] nil]]
+[assert '[= + +]]
+[assert '[= "string" "string"]]
+[assert '[/= "string" "stringbig"]]
+[assert '[/= "string" "stringbig"]]
 
 ;; Welcome message
-[println "Welcome to the LIZP read-eval-print-loop.\n"]
+[println "Welcome to the LIZP read-eval-print loop.\n"]
 
