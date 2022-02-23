@@ -9,6 +9,7 @@
 
 // Handle errors with longjmp
 jmp_buf eval_error;
+static const char *error_msg = NULL;
 
 // Cell allocator
 static Cell *cell_pool = NULL;
@@ -34,6 +35,17 @@ Cell sym_nil,
 	 sym_do,
 	 sym_quote,
 	 sym_string;
+
+static _Noreturn void error(const char *msg)
+{
+	error_msg = msg;
+	longjmp(eval_error, 99);
+}
+
+const char *get_error_msg(void)
+{
+	return error_msg;
+}
 
 int specialp(const Cell *p)
 {
@@ -93,8 +105,7 @@ int cell_can_alloc(int n_cells)
 Cell *cell_alloc(void)
 {
 	if (!cell_pool)
-		// error : cells not initialized
-		return NULL;
+		error("cells not initialized");
 
 	Cell *p = cell_pool->rest;
 
@@ -106,8 +117,7 @@ Cell *cell_alloc(void)
 	}
 	else
 	{
-		fprintf(stderr, "cell_alloc : error : out of memory\n");
-		return NULL;
+		error("cell_alloc : error : out of memory");
 	}
 }
 
@@ -232,8 +242,7 @@ Cell *make_fn(Cell *params, Cell *body)
 	while (nonempty_listp(p))
 	{
 		if (!symbolp(p->first))
-			// parameter list must all be symbols
-			return NULL;
+			error("parameter list must all be symbols");
 
 		// Next
 		p = p->rest;
@@ -855,8 +864,7 @@ static Cell *apply_built_in_var (Native_fn_t id, Cell *args)
 					// Current list from arguments
 					Cell *a = args->first;
 					if (!pairp(a) || functionp(a) || stringp(a))
-						//arguments must be lists
-						return NULL;
+						error("arguments must be lists");
 
 					// Add all of the items from the current list
 					while (nonempty_listp(a))
@@ -886,13 +894,11 @@ static Cell *apply_built_in_var (Native_fn_t id, Cell *args)
 static Cell *apply_built_in_1 (Native_fn_t id, Cell *args)
 {
 	if (1 != list_length(args))
-		// Incorrect number of arguments
-		return NULL;
+		error("function takes 1 argument");
 
 	Cell *p1 = args->first;
 	if (!cell_validp(p1))
-		// Invalid argument
-		return NULL;
+		error("invalid argument");
 
 	switch (id)
 	{
@@ -905,8 +911,7 @@ static Cell *apply_built_in_1 (Native_fn_t id, Cell *args)
 			{
 				// Validate arguments
 				if (!stringp(p1))
-					//1st argument must be a string file name
-					return NULL;
+					error("1st argument must be a string file name");
 
 				// Get string of file name
 				char path[1024];
@@ -915,8 +920,7 @@ static Cell *apply_built_in_1 (Native_fn_t id, Cell *args)
 
 				FILE *f = fopen(path, "r");
 				if (!f)
-					// could not read file
-					return NULL;
+					error("could not read file");
 
 				// Get file length
 				fseek(f, 0, SEEK_END);
@@ -926,9 +930,8 @@ static Cell *apply_built_in_1 (Native_fn_t id, Cell *args)
 				// See if we have enough room for this string data
 				if (!cell_can_alloc(fsize + 1))
 				{
-					// not enough memory to read file
 					fclose(f);
-					return NULL;
+					error("not enough memory to read file");
 				}
 
 				// Read the char data and null-terminate it.
@@ -960,8 +963,7 @@ static Cell *apply_built_in_1 (Native_fn_t id, Cell *args)
 				}
 				else
 				{
-					// argument must be a string
-					return NULL;
+					error("argument must be a string");
 				}
 			}
 		case FN_EMPTY_P:
@@ -978,8 +980,7 @@ static Cell *apply_built_in_1 (Native_fn_t id, Cell *args)
 			if (pairp(p1))
 				return make_int(list_length(p1));
 			else
-				// first argument must be a list
-				return NULL;
+				error("first argument must be a list");
 		case FN_LIST_P:
 			// [list? x]
 			return get_bool_sym(pairp(p1));
@@ -993,7 +994,7 @@ static Cell *apply_built_in_1 (Native_fn_t id, Cell *args)
 			else if (pairp(p1))
 				return p1->first;
 			else
-				return NULL;
+				error("first argument must be a list");
 		case FN_REST:
 			// [rest pair]
 			if (emptyp(p1))
@@ -1001,7 +1002,7 @@ static Cell *apply_built_in_1 (Native_fn_t id, Cell *args)
 			else if (pairp(p1))
 				return p1->rest;
 			else
-				return NULL;
+				error("first argument must be a list");
 		default:
 			assert(0);
 	}
@@ -1014,14 +1015,12 @@ static Cell *apply_built_in_2int (Native_fn_t id, Cell *p1, Cell *p2)
 	if (intp(p1))
 		n1 = p1->integer;
 	else
-		// p1 must be an int type
-		return NULL;
+		error("first argument must be an integer");
 
 	if (intp(p2))
 		n2 = p2->integer;
 	else
-		// p2 must be an int type
-		return NULL;
+		error("second argument must be an integer");
 
 	switch (id)
 	{
@@ -1041,8 +1040,7 @@ static Cell *apply_built_in_2int (Native_fn_t id, Cell *p1, Cell *p2)
 			return make_int(n1 * n2);
 		case FN_DIV:
 			if (n2 == 0)
-				// Division by zero
-				return NULL;
+				error("division by zero");
 			else
 				return make_int(n1 / n2);
 		default:
@@ -1055,18 +1053,15 @@ static Cell *apply_built_in_2 (Native_fn_t id, Cell *args)
 	assert(pairp(args));
 	
 	if (2 != list_length(args))
-		// Incorrect number of arguments
-		return NULL;
+		error("functions requires 2 arguments");
 
 	Cell *p1 = args->first;
 	if (!cell_validp(p1))
-		// Invalid argument
-		return NULL;
+		error("invalid first argument");
 
 	Cell *p2 = args->rest->first;
 	if (!cell_validp(p2))
-		// Invalid argument
-		return NULL;
+		error("invalid second argument");
 
 	switch (id)
 	{
@@ -1170,8 +1165,10 @@ Cell *eval_ast (Cell *ast, Cell *env)
 {
 	// Validate args
 	assert(env);
-	if (!cell_validp(ast) || !pairp(env))
-		return NULL;
+	if (!cell_validp(ast))
+		error("eval : invalid expression");
+	if (!pairp(env))
+		error("eval : invalid environment");
 
 	switch (ast->kind)
 	{
@@ -1192,11 +1189,13 @@ Cell *eval_ast (Cell *ast, Cell *env)
 			{
 				// Get the value out of the environment's slot
 				Cell *slot = env_get(env, ast);
-				if (cell_validp(slot))
+				if (pairp(slot))
 					return slot->rest;
 				else
-					// undefined symbol : ast
-					return NULL;
+				{
+					PRINT(ast);
+					error("undefined symbol");
+				}
 			}
 		default:
 			assert(0);
@@ -1489,8 +1488,7 @@ Cell *EVAL (Cell *ast, Cell *env)
 			// Evaluate all list items
 			Cell *new_ast = eval_ast(ast, env);
 			if (!pairp(new_ast))
-				// Eval ast failed
-				return NULL;
+				error("eval: could not evaluate items in list");
 
 			// Apply the function
 			apply(new_ast->first, new_ast->rest, env, &ast, &env);
@@ -1522,7 +1520,7 @@ void rep (const char *start, int length, Cell *env)
 
 	if (!cell_validp(p))
 	{
-		printf("read error\n");
+		printf("read error: %s\n", get_error_msg());
 		return;
 	}
 
@@ -1533,7 +1531,7 @@ void rep (const char *start, int length, Cell *env)
 
 	if (!cell_validp(p))
 	{
-		printf("eval error\n");
+		printf("error: %s\n", get_error_msg());
 		return;
 	}
 
@@ -1917,10 +1915,7 @@ int read_quoted_string (const char *start, int length, Cell **out)
 	}
 	else
 	{
-		// unexpected end of input in quoted string
-		if (out)
-			*out = NULL;
-		return view - start;
+		error("unexpected end of input in string literal");
 	}
 }
 
@@ -1965,8 +1960,7 @@ int read_list (const char *start, int length, Cell **out)
 			Cell *e = NULL;
 			if (!string_step(&view, &length, read_str(view, length, &e)) || !e)
 			{
-				// could not read item
-				*out = NULL;
+				error("could not read item in list");
 				return view - start;
 			}
 
@@ -1983,8 +1977,7 @@ int read_list (const char *start, int length, Cell **out)
 	}
 	else
 	{
-		// unexpected end of input
-		*out = NULL;
+		error("unexpected end of input");
 	}
 
 	return view - start;
@@ -2028,9 +2021,7 @@ int read_str (const char *start, int length, Cell **out)
 				loop = 1;
 				break;
 			case ']':
-				// unmatched closing ']'
-				*out = NULL; 
-				break;
+				error("unmatched closing ']'");
 			case '[':
 				// Opening paren, for lists
 				string_step(&view, &rem, read_list(view, rem, out));

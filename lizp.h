@@ -1,5 +1,7 @@
 #ifndef _LIZP_H
 
+#include <setjmp.h>
+
 // Number of special form symbols
 #define SPECIAL_COUNT 6
 
@@ -77,6 +79,9 @@ extern Cell sym_nil,
 // Global repl env
 extern Cell *repl_env;
 
+// Global error handler
+extern jmp_buf eval_error;
+
 Cell *READ(const char *start, int length);
 Cell *EVAL(Cell *ast, Cell *env);
 void PRINT(Cell *expr);
@@ -152,6 +157,7 @@ void env_setup_fn(Cell *env, const char *str, Native_fn_t id);
 void eval_special(Cell *sym, Cell *ast, Cell *env, Cell **val_out, Cell **env_out);
 void print_nonreadably (Cell *expr);
 void string_skip_white(const char **stream, int *length);
+const char *get_error_msg(void);
 
 #endif /* _LIZP_H */
 
