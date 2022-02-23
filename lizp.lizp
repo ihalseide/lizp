@@ -1,10 +1,30 @@
 ;;;; This file can be loaded by the main program
 
-;;; Boolean not
+;;; Modulus operator
+[def! %
+  [fn* [n d]
+    [- n [* [/ n d]
+       d]]]]
+
+;;; Boolean NOT
 [def! not
   [fn* [x]
     [cond x #f
           #t #t]]]
+
+;;; Boolean AND
+[def! and
+  [fn* [a b]
+    [cond [not a] #f
+          [not b] #f
+          #t #t]]]
+
+;;; Boolean OR
+[def! or
+  [fn* [a b]
+    [cond a #t
+          b #t
+          #t #f]]]
 
 ;;; Not equal
 [def! /= [fn* [x y] [not [= x y]]]]
@@ -13,7 +33,8 @@
 [def! assert
   [fn* [x]
     [cond [eval x] #t
-	      #t [println "Assertion failed:" x "\n"]]]]
+          #t [do [println "Assertion failed:" x "\n"]]
+                 #f]]]
 
 ;;; Non-empty list predicate
 [def! some-list?
@@ -25,8 +46,8 @@
 [def! member?
   [fn* [e L]
     [cond [some-list? L] [cond [= e [first L]] L
-	                           #t [member? e [rest L]]]
-		  #t #f]]]
+                               #t [member? e [rest L]]]
+          #t #f]]]
 
 ;;; Calculate the sum of a list of numbers
 [def! sum-start
