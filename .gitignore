@@ -1,4 +1,9 @@
-# Object files
+# Build files
 *.o
+*.out
+*.gch
 lizp
+
+# Special names
+_*
 
