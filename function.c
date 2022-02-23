@@ -15,330 +15,314 @@ void print_nonreadably (Cell *expr)
 	printf("%.*s\n", p_len, buffer);
 }
 
-// [str a b c ...] -> "abc..." (prints non-readably)
-Cell *fn_str (Cell *args)
+static Cell *apply_built_in_var (Native_fn_t id, Cell *args)
 {
-	return string_join(args, 0, 0);
-}
-
-// [pr-str a b c ...] -> "a b c ..." (prints readably)
-Cell *fn_pr_str (Cell *args)
-{
-	return string_join(args, ' ', 1);
-}
-
-// [prn a b c ...] -> nil (prints readably)
-Cell *fn_prn (Cell *args)
-{
-	Cell *s = string_join(args, ' ', 1);
-	if (stringp(s))
+	assert(pairp(args));
+	switch (id)
 	{
-		PRINT(s);
-		cell_free_all(s);
-	}
-	return &sym_nil;
-}
+		case FN_STR:
+			// [str a b c ...] -> "abc..." (prints non-readably)
+			return string_join(args, 0, 0);
+		case FN_PR_STR:
+			// [pr-str a b c ...] -> "a b c ..." (prints readably)
+			return string_join(args, ' ', 1);
+		case FN_PRN:
+			// [prn a b c ...] -> nil (prints readably)
+			{
+				Cell *s = string_join(args, ' ', 1);
+				if (stringp(s))
+				{
+					PRINT(s);
+					cell_free_all(s);
+				}
+				return &sym_nil;
+			}
+		case FN_PRINTLN:
+			// [println a b c ...] -> nil (prints non-readably)
+			{
+				Cell *s = string_join(args, ' ', 0);
+				if (stringp(s))
+				{
+					print_nonreadably(s);
+					cell_free_all(s);
+				}
+				return &sym_nil;
+			}
+		case FN_LIST:
+			// [list ...] -> [...] (variadic)
+			return args;
+		case FN_CONCAT:
+			// [concat l1 l2 ...] -> list
+			{
+				Cell *list = make_empty_list();
+				Cell *p = list;
 
-// [println a b c ...] -> nil (prints non-readably)
-Cell *fn_println (Cell *args)
-{
-	Cell *s = string_join(args, ' ', 0);
-	if (stringp(s))
-	{
-		print_nonreadably(s);
-		cell_free_all(s);
-	}
-	return &sym_nil;
-}
+				while (nonempty_listp(args))
+				{
+					// Current list from arguments
+					Cell *a = args->first;
+					if (!pairp(a) || functionp(a) || stringp(a))
+						//arguments must be lists
+						return NULL;
 
-// [list ...] -> [...] (variadic)
-Cell *fn_list (Cell *args)
-{
-	return args;
-}
+					// Add all of the items from the current list
+					while (nonempty_listp(a))
+					{
+						// Put item into the list
+						p->first = a->first;
+						p->rest = make_empty_list();
+						p = p->rest;
 
-// [eval expr]
-Cell *fn_eval (Cell *args)
-{
-	(void) args;
-	assert(0 && "Not to be implemented. This function is only needed for its pointer value.");
-}
+						// Next argument
+						a = a->rest;
+					}
+					// The list should end with null instead of an empty list
+					p->rest = NULL;
 
-// [slurp "file name"] -> "file contents"
-Cell *fn_slurp (Cell *args)
-{
-	Cell *a = args->first;
+					// Next argument
+					args = args->rest;
+				}
 
-	// Validate arguments
-	if (!stringp(a))
-		return make_error_c("slurp : 1st argument must be a string file name", &sym_nil);
-
-	// Get string of file name
-	char path[1024];
-	int len = pr_str(a, path, sizeof(path) - 1, 0);
-	path[len] = '\0';
-
-	FILE *f = fopen(path, "r");
-	if (!f)
-		return make_error_c("slurp : could not read file", &sym_nil);
-
-	// Get file length
-	fseek(f, 0, SEEK_END);
-	long fsize = ftell(f);
-	fseek(f, 0, SEEK_SET);
-
-	// See if we have enough room for this string data
-	if (!cell_can_alloc(fsize + 1))
-	{
-		fclose(f);
-		return make_error_c("slurp : not enough memory to read file", &sym_nil);
-	}
-
-	// Read the char data and null-terminate it.
-	// Stack allocate the file contents because it's
-	// getting converte to a lisp string anyways...
-	char content[fsize + 1];
-	fread(content, fsize, 1, f);
-	fclose(f);
-	content[fsize] = 0;
-
-	// Convert to lisp string
-	Cell *s;
-	int parse = string_to_list(content, fsize, 0, &s);
-	assert(parse == fsize);
-
-	return s;
-}
-
-// [read-string "str"] -> any value
-Cell *fn_read_str (Cell *args)
-{
-	Cell *a = args->first;
-	if (stringp(a))
-	{
-		char buffer[4 * 1024];
-		int len = pr_str(a, buffer, sizeof(buffer), 0);
-		assert((unsigned) len < sizeof(buffer));
-		Cell *b;
-		read_str(buffer, len, &b);
-		return b;
-	}
-	else
-	{
-		return make_error_c("read-string : argument must be a string", &sym_nil);
+				return list;
+			}
+		default:
+			assert(0);
 	}
 }
 
-// [empty? x]
-Cell *fn_empty_p (Cell *args)
+static Cell *apply_built_in_1 (Native_fn_t id, Cell *args)
 {
-	return get_bool_sym(emptyp(args->first));
-}
-
-// [count list]
-Cell *fn_count (Cell *args)
-{
-	if (pairp(args->first))
-		return make_int(list_length(args->first));
-	else
-		return make_error_c("count : first argument must be a list", &sym_nil);
-}
-
-// [list? x]
-Cell *fn_list_p (Cell *args)
-{
-	return get_bool_sym(pairp(args->first));
-}
-
-// [int? x]
-Cell *fn_int_p (Cell *args)
-{
-	return get_bool_sym(intp(args->first));
-}
-
-// [= x y]
-Cell *fn_eq (Cell *args)
-{
-	return get_bool_sym(cell_eq(args->first,
-				args->rest->first));
-}
-
-// [< n1 n2]
-Cell *fn_lt (Cell *args)
-{
-	Cell *a = args->first;
-	Cell *b = args->rest->first;
-	if (intp(a) && intp(b))
-		return get_bool_sym(a->integer < b->integer);
-	else
-		return make_error_c("< : both arguments must be integers", &sym_nil);
-}
-
-// [> n1 n2]
-Cell *fn_gt (Cell *args)
-{
-	Cell *a = args->first;
-	Cell *b = args->rest->first;
-	if (intp(a) && intp(b))
-		return get_bool_sym(a->integer > b->integer);
-	else
-		return make_error_c("> : both arguments must be integers", &sym_nil);
-}
-
-// [<= n1 n2]
-Cell *fn_lte (Cell *args)
-{
-	Cell *a = args->first;
-	Cell *b = args->rest->first;
-	if (intp(a) && intp(b))
-		return get_bool_sym(a->integer <= b->integer);
-	else
-		return make_error_c("<= : both arguments must be integers", &sym_nil);
-}
-
-// [>= n1 n2]
-Cell *fn_gte (Cell *args)
-{
-	Cell *a = args->first;
-	Cell *b = args->rest->first;
-	if (intp(a) && intp(b))
-		return get_bool_sym(a->integer >= b->integer);
-	else
-		return make_error_c(">= : both arguments must be integers", &sym_nil);
-}
-
-// [+ n1 n2]
-Cell *fn_add (Cell *args)
-{
-	Cell *a = args->first;
-	Cell *b = args->rest->first;
-	if (intp(a) && intp(b))
-		return make_int(a->integer + b->integer);
-	else
-		return make_error_c("+ : both arguments must be integers", &sym_nil);
-}
-
-// [- n1 n2]
-Cell *fn_sub (Cell *args)
-{
-	Cell *a = args->first;
-	Cell *b = args->rest->first;
-	if (intp(a) && intp(b))
-		return make_int(a->integer - b->integer);
-	else
-		return make_error_c("- : both arguments must be integers", &sym_nil);
-}
-
-// [* n1 n2]
-Cell *fn_mul (Cell *args)
-{
-	Cell *a = args->first;
-	Cell *b = args->rest->first;
-	if (intp(a) && intp(b))
-		return make_int(a->integer * b->integer);
-	else
-		return make_error_c("* : both arguments must be integers", &sym_nil);
-}
-
-// [/ n1 n2]
-Cell *fn_div (Cell *args)
-{
-	Cell *a = args->first;
-	Cell *b = args->rest->first;
-	if (intp(a) && intp(b))
-		if (b->integer == 0)
-			return make_error_c("/ : division by zero", &sym_nil);
-		else
-			return make_int(a->integer / b->integer);
-	else
-		return make_error_c("/ : both arguments must be integers", &sym_nil);
-}
-
-// [pair x y] -> [x | y]
-Cell *fn_pair (Cell *args)
-{
-	return make_pair_valid(args->first, args->rest->first);
-}
-
-// [concat l1 l2 ...] -> list
-Cell *fn_concat (Cell *args)
-{
-	Cell *list = make_empty_list();
-	Cell *p = list;
-
-	while (nonempty_listp(args))
-	{
-		// Current list from arguments
-		Cell *a = args->first;
-		if (!pairp(a) || functionp(a) || stringp(a))
-			return make_error_c("fn_concat : arguments must be lists", &sym_nil);
-
-		// Add all of the items from the current list
-		while (nonempty_listp(a))
-		{
-			// Put item into the list
-			p->first = a->first;
-			p->rest = make_empty_list();
-			p = p->rest;
-
-			// Next argument
-			a = a->rest;
-		}
-		// The list should end with null instead of an empty list
-		p->rest = NULL;
-
-		// Next argument
-		args = args->rest;
-	}
-
-	return list;
-}
-
-// [assoc item alist]
-Cell *fn_assoc (Cell *args)
-{
-	if (pairp(args->rest->first))
-	{
-		Cell *slot = alist_assoc(args->first, args->rest->first);
-		if (slot)
-			return slot;
-		else
-			return &sym_nil;
-	}
-	else
-	{
-		return make_error_c("assoc : second argument must be a list", &sym_nil);
-	}
-}
-
-// [first pair]
-Cell *fn_first (Cell *args)
-{
-	Cell *a = args->first;
-	if (emptyp(a))
-	{
-		return &sym_nil;
-	}
-	else if (pairp(a))
-	{
-		return a->first;
-	}
-	else
-	{
-		return make_error_c("first : not a list", &sym_nil);
+	if (1 != list_length(args))
+		// Incorrect number of arguments
 		return NULL;
+
+	Cell *p1 = args->first;
+	if (!cell_validp(p1))
+		// Invalid argument
+		return NULL;
+
+	switch (id)
+	{
+		case FN_EVAL:
+			assert(0 && "not implemented yet");
+		case FN_SLURP:
+			// [slurp "file name"] -> "file contents"
+			{
+				// Validate arguments
+				if (!stringp(p1))
+					//1st argument must be a string file name
+					return NULL;
+
+				// Get string of file name
+				char path[1024];
+				int len = pr_str(p1, path, sizeof(path) - 1, 0);
+				path[len] = '\0';
+
+				FILE *f = fopen(path, "r");
+				if (!f)
+					// could not read file
+					return NULL;
+
+				// Get file length
+				fseek(f, 0, SEEK_END);
+				long fsize = ftell(f);
+				fseek(f, 0, SEEK_SET);
+
+				// See if we have enough room for this string data
+				if (!cell_can_alloc(fsize + 1))
+				{
+					// not enough memory to read file
+					fclose(f);
+					return NULL;
+				}
+
+				// Read the char data and null-terminate it.
+				// Stack allocate the file contents because it's
+				// getting converte to a lisp string anyways...
+				char content[fsize + 1];
+				fread(content, fsize, 1, f);
+				fclose(f);
+				content[fsize] = 0;
+
+				// Convert to lisp string
+				Cell *s;
+				int parse = string_to_list(content, fsize, 0, &s);
+				assert(parse == fsize);
+
+				return s;
+			}
+		case FN_READ_STR:
+			// [read-string "str"] -> any value
+			{
+				if (stringp(p1))
+				{
+					char buffer[4 * 1024];
+					int len = pr_str(p1, buffer, sizeof(buffer), 0);
+					assert((unsigned) len < sizeof(buffer));
+					Cell *b;
+					read_str(buffer, len, &b);
+					return b;
+				}
+				else
+				{
+					// argument must be a string
+					return NULL;
+				}
+			}
+		case FN_EMPTY_P:
+			// [empty? x]
+			return get_bool_sym(emptyp(p1));
+		case FN_COUNT:
+			// [count list]
+			if (pairp(p1))
+				return make_int(list_length(p1));
+			else
+				// first argument must be a list
+				return NULL;
+		case FN_LIST_P:
+			// [list? x]
+			return get_bool_sym(pairp(p1));
+		case FN_INT_P:
+			// [int? x]
+			return get_bool_sym(intp(p1));
+		case FN_FIRST:
+			// [first pair]
+			if (emptyp(p1))
+				return &sym_nil;
+			else if (pairp(p1))
+				return p1->first;
+			else
+				return NULL;
+		case FN_REST:
+			// [rest pair]
+			if (emptyp(p1))
+				return &sym_nil;
+			else if (pairp(p1))
+				return p1->rest;
+			else
+				return NULL;
+		default:
+			assert(0);
 	}
 }
 
-// [rest pair]
-Cell *fn_rest (Cell *args)
+static Cell *apply_built_in_2int (Native_fn_t id, Cell *p1, Cell *p2)
 {
-	Cell *a = args->first;
-	if (emptyp(a))
-		return &sym_nil;
-	else if (pairp(a))
-		return a->rest;
+	int n1, n2;
+
+	if (intp(p1))
+		n1 = p1->integer;
 	else
-		return make_error_c("first : not a list", &sym_nil);
+		// p1 must be an int type
+		return NULL;
+
+	if (intp(p2))
+		n2 = p2->integer;
+	else
+		// p2 must be an int type
+		return NULL;
+
+	switch (id)
+	{
+		case FN_LT: 
+			return get_bool_sym(n1 < n2);
+		case FN_GT: 
+			return get_bool_sym(n1 > n2);
+		case FN_LTE:
+			return get_bool_sym(n1 <= n2);
+		case FN_GTE:
+			return get_bool_sym(n1 >= n2);
+		case FN_ADD:
+			return make_int(n1 + n2);
+		case FN_SUB:
+			return make_int(n1 - n2);
+		case FN_MUL:
+			return make_int(n1 * n2);
+		case FN_DIV:
+			if (n2 == 0)
+				// Division by zero
+				return NULL;
+			else
+				return make_int(n1 / n2);
+		default:
+			assert(0);
+	}
+}
+
+static Cell *apply_built_in_2 (Native_fn_t id, Cell *args)
+{
+	assert(pairp(args));
+	
+	if (2 != list_length(args))
+		// Incorrect number of arguments
+		return NULL;
+
+	Cell *p1 = args->first;
+	if (!cell_validp(p1))
+		// Invalid argument
+		return NULL;
+
+	Cell *p2 = args->rest->first;
+	if (!cell_validp(p2))
+		// Invalid argument
+		return NULL;
+
+	switch (id)
+	{
+		case FN_EQ:
+			// [= x y]
+			return get_bool_sym(cell_eq(p1, p2));
+		case FN_LT:
+		case FN_GT:
+		case FN_LTE:
+		case FN_GTE:
+		case FN_ADD:
+		case FN_SUB:
+		case FN_MUL:
+		case FN_DIV:
+			return apply_built_in_2int(id, p1, p2);
+		default:
+			assert(0);
+	}
+}
+
+Cell *apply_built_in (Native_fn_t id, Cell *args)
+{
+	assert(pairp(args));
+
+	switch (id)
+	{
+		case FN_EVAL:
+			assert(0 && "should not be handled here");
+		case FN_SLURP:
+		case FN_READ_STR:
+		case FN_EMPTY_P:
+		case FN_COUNT:
+		case FN_LIST_P:
+		case FN_INT_P:
+		case FN_FIRST:
+		case FN_REST:
+			return apply_built_in_1(id, args);
+		case FN_EQ:
+		case FN_LT:
+		case FN_GT:
+		case FN_LTE:
+		case FN_GTE:
+		case FN_ADD:
+		case FN_SUB:
+		case FN_MUL:
+		case FN_DIV:
+			return apply_built_in_2(id, args);
+		case FN_STR:
+		case FN_PR_STR:
+		case FN_PRN:
+		case FN_PRINTLN:
+		case FN_LIST:
+		case FN_CONCAT:
+			return apply_built_in_var(id, args);
+		case FN_INVALID:
+		default:
+			assert(0 && "invalid built-in function id");
+	}
 }
 
