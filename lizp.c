@@ -892,7 +892,9 @@ static Cell *apply_built_in_1 (Native_fn_t id, Cell *args)
 	switch (id)
 	{
 		case FN_EVAL:
-			assert(0 && "not implemented yet");
+			assert(0 && "should not reach here");
+		case FN_SYMBOL_P:
+			return get_bool_sym(symbolp(p1));
 		case FN_SLURP:
 			// [slurp "file name"] -> "file contents"
 			{
@@ -1098,6 +1100,7 @@ Cell *apply_built_in (Native_fn_t id, Cell *args)
 		case FN_REST:
 		case FN_STRING_P:
 		case FN_FUNCTION_P:
+		case FN_SYMBOL_P:
 			return apply_built_in_1(id, args);
 		case FN_EQ:
 		case FN_LT:
@@ -1564,6 +1567,7 @@ Cell *init (int ncells)
 	env_setup_fn(env, "list?", FN_LIST_P);
 	env_setup_fn(env, "string?", FN_STRING_P);
 	env_setup_fn(env, "function?", FN_FUNCTION_P);
+	env_setup_fn(env, "symbol?", FN_SYMBOL_P);
 	env_setup_fn(env, "eval", FN_EVAL);
 	env_setup_fn(env, "first", FN_FIRST);
 	env_setup_fn(env, "int?", FN_INT_P);

@@ -20,6 +20,7 @@ enum Native_fn
 	FN_INT_P,
 	FN_STRING_P,
 	FN_FUNCTION_P,
+	FN_SYMBOL_P,
 	FN_COUNT,
 	FN_EQ,
 	FN_LT,
