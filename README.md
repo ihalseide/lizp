@@ -27,7 +27,7 @@ The impemented special forms are:
 * [def! symbol expr]
 * [do ...]
 * [fn\* [...] body]
-* [if condition then-do (optional else-do)]
+* [cond condition1 result1 condition2 result2 ... conditionN resultN]
 * [let\* [...] body]
 * [quote expr]
 
