@@ -3,13 +3,12 @@
 #include <assert.h>
 #include <string.h>
 
-#include "error.h"
 #include "lizp.h"
 
-int main (void)
+int main (int argc, char **argv)
 {
 	// Initialize the REPL environment symbols
-	Cell *repl_env = init(10000);
+	repl_env = init(20000);
 	if (!repl_env)
 		return 1;
 
@@ -21,6 +20,14 @@ int main (void)
 	                   "  [load-file \"lizp.lizp\"]]\n";
 	EVAL(READ(code, strlen(code)), repl_env);
 
+	// Load a source file if given one
+	if (argc > 1 && argv[1])
+	{
+		char buf[1024];
+		int len = snprintf(buf, sizeof(buf), "[load-file \"%s\"]\n", argv[1]);
+		EVAL(READ(buf, len), repl_env);
+	}
+
 	// REPL
 	char buffer[2 * 1024];
 	while (1)
@@ -29,11 +36,7 @@ int main (void)
 		if(!fgets(buffer, sizeof(buffer), stdin))
 			break;
 
-		// Do a REP, catching errors
-		if (!setjmp(jb_top_level))
-			rep(buffer, strlen(buffer), repl_env);
-		else
-			error_display();
+		rep(buffer, strlen(buffer), repl_env);
 	}
 
 	return 0;

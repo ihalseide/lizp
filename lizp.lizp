@@ -1,7 +1,30 @@
 ;;;; This file can be loaded by the main program
 
-;;; Boolean not
-[def! not [fn* [x] [if x #f #t]]]
+;;; Modulus operator
+[def! %
+  [fn* [n d]
+    [- n [* [/ n d]
+       d]]]]
+
+;;; Boolean NOT
+[def! not
+  [fn* [x]
+    [cond x #f
+          #t #t]]]
+
+;;; Boolean AND
+[def! and
+  [fn* [a b]
+    [cond [not a] #f
+          [not b] #f
+          #t #t]]]
+
+;;; Boolean OR
+[def! or
+  [fn* [a b]
+    [cond a #t
+          b #t
+          #t #f]]]
 
 ;;; Not equal
 [def! /= [fn* [x y] [not [= x y]]]]
@@ -9,23 +32,28 @@
 ;;; Assert true. Used for making sure that a quoted form is true
 [def! assert
   [fn* [x]
-    [if [not [eval x]]
-        [println "Assertion failed:" x "\n"]
-        #t]]]
+    [cond [eval x] #t
+          #t [do [println "Assertion failed:" x "\n"]]
+                 #f]]]
 
 ;;; Non-empty list predicate
 [def! some-list?
   [fn* [x]
-    [if [list? x]
-        [not [empty? x]]
-        #f]]]
+    [cond [list? x] [not [empty? x]]
+          #t #f]]]
+
+;;; See if a list contains the element
+[def! member?
+  [fn* [e L]
+    [cond [some-list? L] [cond [= e [first L]] L
+                               #t [member? e [rest L]]]
+          #t #f]]]
 
 ;;; Calculate the sum of a list of numbers
 [def! sum-start
   [fn* [L n]
-    [if [some-list? L]
-        [sum-start [rest L] [+ n [first L]]]
-        n]]]
+    [cond [some-list? L] [sum-start [rest L] [+ n [first L]]]
+          #t n]]]
 [def! sum [fn* [L] [sum-start L 0]]]
 
 ;;; Negative numbers

@@ -1,9 +1,9 @@
 CC = clang
-COpts = -std=c99 -g -Wall -Wextra
+COpts = -std=c99 -g -Wall
 
 default: lizp
 
-lizp: main.c cell.o function.o reader.o printer.o lizp.o env.o error.o
+lizp: main.c lizp.o
 	$(CC) $(COpts) -o $@ $^
 
 %.o: %.c %.h
