@@ -21,6 +21,13 @@
     [cond [list? x] [not [empty? x]]
           #t #f]]]
 
+;;; See if a list contains the element
+[def! member?
+  [fn* [e L]
+    [cond [some-list? L] [cond [= e [first L]] L
+	                           #t [member? e [rest L]]]
+		  #t #f]]]
+
 ;;; Calculate the sum of a list of numbers
 [def! sum-start
   [fn* [L n]
@@ -31,7 +38,6 @@
 ;;; Negative numbers
 [def! neg [fn* [n] [- 0 n]]]
 
-[cond #f
 ;; Do some assertion tests
 [assert #t]
 [assert ""]
@@ -58,7 +64,6 @@
 [assert [quote [= "string" "string"]]]
 [assert [quote [/= "string" "stringbig"]]]
 [assert [quote [/= "string" "stringbig"]]]
-#t nil]
 
 ;; Welcome message
 [println "Welcome to the LIZP read-eval-print-loop.\n"]
