@@ -3,8 +3,12 @@
 #include <stdlib.h>
 #include <ctype.h>
 #include <assert.h>
+#include <setjmp.h>
 
 #include "lizp.h"
+
+// Handle errors with longjmp
+jmp_buf eval_error;
 
 // Cell allocator
 static Cell *cell_pool = NULL;
@@ -12,6 +16,9 @@ static int cell_pool_cap = 0;
 
 // List of internal symbols
 static Cell *symbol_list = NULL;
+
+// Top-level REPL environment
+Cell *repl_env;
 
 // Constant built-in symbols
 // "static"
@@ -450,7 +457,6 @@ Cell *intern_symbol(Cell *name)
 	}
 }
 
-
 Cell *get_bool_sym(int v)
 {
 	if (v)
@@ -795,7 +801,6 @@ Cell *env_create (Cell *env_outer, Cell *binds, Cell *exprs)
 		return env;
 }
 
-
 void print_nonreadably (Cell *expr)
 {
 	static char buffer[2 * 1024];
@@ -1124,10 +1129,6 @@ Cell *apply_built_in (Native_fn_t id, Cell *args)
 			assert(0 && "invalid built-in function id");
 	}
 }
-
-
-// Top-level REPL environment
-Cell *repl_env;
 
 // Does: evaluate each item of list x, without modifying x.
 // Returns: a new list.
@@ -1459,7 +1460,6 @@ Cell *READ (const char *start, int length)
 	return x;
 }
 
-
 Cell *EVAL (Cell *ast, Cell *env)
 {
 	while (1)
@@ -1513,13 +1513,31 @@ void PRINT (Cell *expr)
 // Do one read, eval, and print cycle on a string.
 void rep (const char *start, int length, Cell *env)
 {
-	Cell * form = READ(start, length);
-	if (form)
+	Cell *p;
+
+	if (!setjmp(eval_error))
+		p = READ(start, length);
+	else
+		p = NULL;
+
+	if (!cell_validp(p))
 	{
-		Cell *value = EVAL(form, env);
-		if (value)
-			PRINT(value);
+		printf("read error\n");
+		return;
 	}
+
+	if (!setjmp(eval_error))
+		p = EVAL(p, env);
+	else
+		p = NULL;
+
+	if (!cell_validp(p))
+	{
+		printf("eval error\n");
+		return;
+	}
+
+	PRINT(p);
 }
 
 void env_setup_fn (Cell *env, const char *str, Native_fn_t id)
@@ -1790,7 +1808,6 @@ int pr_str(Cell *p, char *out, int length, int readable)
 			assert(0);
 	}
 }
-
 
 int char_symbolp (char c)
 {
