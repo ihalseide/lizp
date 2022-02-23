@@ -98,6 +98,7 @@ void eval_special (Cell *sym, Cell *ast, Cell *env, Cell **ast_out, Cell **env_o
 		ast = make_empty_list();
 	assert(pairp(ast));
 
+	_Static_assert(SPECIAL_COUNT == 6, "handle all special form symbols");
 	if (sym == &sym_do)
 	{
 		// [do ... last] -> last:
@@ -156,6 +157,69 @@ void eval_special (Cell *sym, Cell *ast, Cell *env, Cell **ast_out, Cell **env_o
 		// Fall-through to error
 		*ast_out = NULL;
 		*env_out = NULL;
+	}
+	else if (sym == &sym_let_star)
+	{
+		// [let* [s1 expr1 s2 expr2 ...] expr]
+		if (2 == list_length(ast))
+		{
+			Cell *p1 = ast->first;
+			Cell *p2 = ast->rest->first;
+			if (pairp(p1) && cell_validp(p2))
+			{
+				if (list_length(p1) % 2 == 0)
+				{
+					Cell *new_env = env_create(env, &sym_nil, &sym_nil);
+					if (pairp(new_env))
+					{
+						Cell *p = p1;
+						int fail = 0;
+						while (nonempty_listp(p))
+						{
+							Cell *a, *b;
+							a = p->first;
+							b = p->rest->first;
+							if (!symbolp(a) || !cell_validp(b))
+							{
+								fail = 1;
+								break;
+							}
+
+							b = EVAL(b, new_env);
+							if (!cell_validp(b))
+							{
+								fail = 1;
+								break;
+							}
+
+							env_set(new_env, a, b);
+
+							// next x2
+							p = p->rest->rest;
+						}
+
+						if (!fail)
+						{
+							*ast_out = p2;
+							*env_out = new_env;
+							return;
+						}
+					}
+				}
+			}
+		}
+		*ast_out = NULL;
+		*env_out = NULL;
+	}
+	else if (sym == &sym_fn_star)
+	{
+		// [fn* [s1 ...] expr]
+		assert(0 && "not implemented");
+	}
+	else if (sym == &sym_cond)
+	{
+		// [cond c1 r1 c2 r2 ...]
+		assert(0 && "not implemented");
 	}
 	else
 	{
