@@ -3,6 +3,8 @@
 
 #include "cell.h"
 
+extern Cell *repl_env;
+
 void rep(const char *start, int length, Cell *env);
 Cell *init(int ncells);
 

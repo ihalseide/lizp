@@ -11,6 +11,9 @@
 #include "printer.h"
 #include "reader.h"
 
+// Top-level REPL environment
+Cell *repl_env;
+
 // Does: evaluate each item of list x, without modifying x.
 // Returns: a new list.
 Cell *eval_each (Cell *list, Cell *env)
@@ -147,7 +150,7 @@ void eval_special (Cell *sym, Cell *ast, Cell *env, Cell **ast_out, Cell **env_o
 			if (symbolp(p1) && cell_validp(p2))
 			{
 				p2 = EVAL(p2, env);
-				if (cell_validp(p2) && !env_set(env, p1, p2))
+				if (cell_validp(p2) && !env_set(repl_env, p1, p2))
 				{
 					*ast_out = p2;
 					*env_out = NULL;
@@ -446,11 +449,13 @@ Cell *init (int ncells)
 	env_setup_fn(env, "concat", FN_CONCAT);
 	env_setup_fn(env, "count", FN_COUNT);
 	env_setup_fn(env, "empty?", FN_EMPTY_P);
+	env_setup_fn(env, "list?", FN_LIST_P);
+	env_setup_fn(env, "string?", FN_STRING_P);
+	env_setup_fn(env, "function?", FN_FUNCTION_P);
 	env_setup_fn(env, "eval", FN_EVAL);
 	env_setup_fn(env, "first", FN_FIRST);
 	env_setup_fn(env, "int?", FN_INT_P);
 	env_setup_fn(env, "list", FN_LIST);
-	env_setup_fn(env, "list?", FN_LIST_P);
 	env_setup_fn(env, "pr-str", FN_PR_STR);
 	env_setup_fn(env, "println", FN_PRINTLN);
 	env_setup_fn(env, "prn", FN_PRN);

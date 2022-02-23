@@ -172,6 +172,12 @@ static Cell *apply_built_in_1 (Native_fn_t id, Cell *args)
 		case FN_EMPTY_P:
 			// [empty? x]
 			return get_bool_sym(emptyp(p1));
+		case FN_STRING_P:
+			// [string? x]
+			return get_bool_sym(stringp(p1));
+		case FN_FUNCTION_P:
+			// [function? x]
+			return get_bool_sym(function_nativep(p1));
 		case FN_COUNT:
 			// [count list]
 			if (pairp(p1))
@@ -302,6 +308,8 @@ Cell *apply_built_in (Native_fn_t id, Cell *args)
 		case FN_INT_P:
 		case FN_FIRST:
 		case FN_REST:
+		case FN_STRING_P:
+		case FN_FUNCTION_P:
 			return apply_built_in_1(id, args);
 		case FN_EQ:
 		case FN_LT:
