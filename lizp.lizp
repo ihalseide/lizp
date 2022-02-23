@@ -77,12 +77,13 @@
 ;;; Get the Nth item of a list
 [def! nth
   [fn* [L n]
-    [assert '[list? L]]
-    [assert '[int? n]]
-	[cond [negative? n] "error: n must be non-negative"
-	      [empty? L]    "error: n is bigger than the length of L"
-	      [= n 0]       [first L]
-	      #t            [nth [rest L] [- n 1]]]]]
+    [do
+      [assert '[list? L]]
+      [assert '[int? n]]
+	  [cond [negative? n] "error: n must be non-negative"
+	        [empty? L]    "error: n is bigger than the length of L"
+	        [= n 0]       [first L]
+	        #t            [nth [rest L] [- n 1]]]]]]
 
 ;;; Calculate the sum of a list of numbers
 [def! sum-start

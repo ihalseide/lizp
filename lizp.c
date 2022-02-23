@@ -1339,19 +1339,21 @@ void eval_special (Cell *sym, Cell *ast, Cell *env, Cell **ast_out, Cell **env_o
 	else if (sym == &sym_fn_star)
 	{
 		// [fn* [s1 ...] expr]
-		if (2 == list_length(ast))
-		{
-			Cell *a = ast->first;
-			Cell *b = ast->rest->first;
-			if (pairp(a) && cell_validp(b))
-			{
-				*ast_out = make_fn(a, b);
-				*env_out = NULL;
-				return;
-			}
-		}
-		*ast_out = NULL;
+		if (2 != list_length(ast))
+			error("fn* requires 2 arguments");
+
+		Cell *a = ast->first;
+		if (!pairp(a))
+			error("fn* requires the first argument to be a list");
+
+		Cell *b = ast->rest->first;
+		if (!cell_validp(b))
+			error("fn* requires the second argument to be valid");
+
+		*ast_out = make_fn(a, b);
 		*env_out = NULL;
+		if (!ast_out)
+			error("fn* argument list is invalid");
 	}
 	else if (sym == &sym_cond)
 	{
