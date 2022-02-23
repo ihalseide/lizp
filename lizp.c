@@ -136,6 +136,27 @@ void eval_special (Cell *sym, Cell *ast, Cell *env, Cell **ast_out, Cell **env_o
 			*env_out = NULL;
 		}
 	}
+	else if (sym == &sym_def_bang)
+	{
+		// [def! symbol expr]
+		if (2 == list_length(ast))
+		{
+			Cell *p1 = ast->first;
+			Cell *p2 = ast->rest->first;
+			if (symbolp(p1) && cell_validp(p2))
+			{
+				if (!env_set(env, p1, p2))
+				{
+					*ast_out = p2;
+					*env_out = NULL;
+					return;
+				}
+			}
+		}
+		// Fall-through to error
+		*ast_out = NULL;
+		*env_out = NULL;
+	}
 	else
 	{
 		assert(0);
