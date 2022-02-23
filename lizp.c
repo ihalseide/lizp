@@ -219,7 +219,37 @@ void eval_special (Cell *sym, Cell *ast, Cell *env, Cell **ast_out, Cell **env_o
 	else if (sym == &sym_cond)
 	{
 		// [cond c1 r1 c2 r2 ...]
-		assert(0 && "not implemented");
+		if (list_length(ast) % 2 == 0)
+		{
+			Cell *p = ast;
+			while (nonempty_listp(p))
+			{
+				Cell *a, *b;
+				a = p->first;
+				b = p->rest->first;
+
+				if (!cell_validp(a) || !cell_validp(b))
+					break;
+
+				// Evaluate condition a
+				a = EVAL(a, env);
+				if (!cell_validp(a))
+					break;
+
+				// If a is true, do a tail call to eval b
+				if (truthy(a))
+				{
+					*ast_out = b;
+					*env_out = env;
+					return;
+				}
+
+				// Next x2
+				p = p->rest->rest;
+			}
+		}
+		*ast_out = NULL;
+		*env_out = NULL;
 	}
 	else
 	{
