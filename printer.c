@@ -6,7 +6,8 @@
 #include "cell.h"
 #include "printer.h"
 
-int print_char (char c, char *out, int length)
+// Returns: number of chars written
+int print_char(char c, char *out, int length)
 {
 	// Validate arguments
 	if (!out || length <= 0)
@@ -16,69 +17,75 @@ int print_char (char c, char *out, int length)
 	return 1;
 }
 
-// returns number of chars written
-int print_cstr (const char *s, char *out, int length)
+// Returns: number of chars written
+int print_cstr(const char *s, char *out, int len)
 {
 	// Validate inputs
-	if (!s || !out || (length <= 0))
+	if (!s || !out)
 		return 0;
 
 	int i;
-	for (i = 0; s[i] && i < length; i++)
+	for (i = 0; s[i] && i < len; i++)
 		out[i] = s[i];
 
 	return i;
 }
 
-// returns number of chars written
-int print_int (int n, char *out, int length)
+// Returns: number of chars written
+int print_int(int n, char *out, int len)
 {
+	assert(out);
+
+	// Zero -> special case
+	if (len >= 0 && n == 0)
+	{
+		*out = '0';
+		return 1;
+	}
+
 	char buf[20];
+	const int sz = sizeof(buf);
+
+	// U = magnitude of N
 	int u = (n >= 0)? n : -n;
 
-	// Remaining length
-	int rem = length;
-
-	int i = sizeof(buf) - 1;
-	while ((rem > 0) && (i >= 0))
+	int i;
+	for (i = 0; (u > 0) && (i < len) && (i < sz); i++)
 	{
-		buf[i] = '0' + (u % 10);
+		buf[sz - i - 1] = '0' + (u % 10);
 		u /= 10;
-		if (u <= 0) { break; }
-		rem--;
-		i--;
 	}
 
-	// Add minus sign
+	// Loop should run at least once, even for n == 0
+	assert(i >= 1);
+
+	// Minus sign for negative numbers
 	if (n < 0)
-	{
 		buf[--i] = '-';
-	}
 
-	int len = sizeof(buf) - i;
-	memcpy(out, buf + i, len);
-	return len;
+	memcpy(out, buf + sz - i, i);
+	return i;
 }
 
-int print_list_as_string (const Cell *list, char *out, int length, int readable)
+int print_list_as_string(const Cell *list, char *out, int length, int readable)
 {
 	// Validate inputs
 	if (!(pairp(list) || cell_eq(list, &sym_nil)) || !out || length <= 0)
 		return 0;
 
 	char *view = out;
-	int rem = length;
 
 	// Opening quote
 	if (readable)
-		string_step((const char**) &view, &rem, print_char('"', view, rem));
+		string_step((const char**) &view, &length, print_char('"', view, length));
 
 	// String contents
 	const Cell *p = list;
-	while ((rem > 1) && nonempty_listp(p))
+	while ((length > 1) && nonempty_listp(p))
 	{
 		// Get character value in list
 		Cell *e = p->first;
+		// If an element is not an integer, the string stops printing out
 		if (!intp(e))
 			break;
 		char c = (char) e->integer;
@@ -86,27 +93,26 @@ int print_list_as_string (const Cell *list, char *out, int length, int readable)
 		if (readable)
 		{
 			// Do string escaping...
-			if (rem < 2)
-				break;
-
-			char esc = 0;
+			char esc;
 			switch (c)
 			{
 				case '\n': esc = 'n'; break;
 				case '\t': esc = 't'; break;
 				case '\0': esc = '0'; break;
 				case '\\': esc = '\\'; break;
+				default: esc = 0; break;
 			}
 
 			if (esc)
 			{
-				string_step((const char**) &view, &rem, print_char('\\', view, rem));
+				// Print a slash and get ready to print the escape char next
+				string_step((const char**) &view, &length, print_char('\\', view, length));
 				c = esc;
 			}
 		}
 
 		// Write char
-		string_step((const char**) &view, &rem, print_char(c, view, rem));
+		string_step((const char**) &view, &length, print_char(c, view, length));
 
 		// Next list item
 		p = p->rest;
@@ -114,117 +120,93 @@ int print_list_as_string (const Cell *list, char *out, int length, int readable)
 
 	// Closing quote
 	if (readable)
-		string_step((const char**) &view, &rem, print_char('"', view, rem));
+		string_step((const char**) &view, &length, print_char('"', view, length));
 
 	// Return length, including quotes that were written
 	return view - out;
 }
 
-int print_list (Cell *list, char *out, int length, int readable)
+int print_list(Cell *list, char *out, int length, int readable)
 {
 	// Validate arguments
-	if (!pairp(list) || !out || (length <= 0))
+	assert(pairp(list));
+	if (!out || (length <= 0))
 		return 0;
 
 	char *view = out;
-	int rem = length;
 
-	// Print opening char
-	string_step((const char**)&view, &rem, print_char('[', view, rem));
+	// Print opening '['
+	string_step(&view, &length, print_char('[', view, length));
 
-	// Print the first item with no leading space
 	if (nonempty_listp(list))
 	{
-		string_step((const char**)&view, &rem, pr_str(list->first, view, rem, readable));
+		// Print the first item with no leading space
+		string_step(&view, &length, pr_str(list->first, view, length, readable));
+		// Next item
 		list = list->rest;
 
-		// Print the rest of the normal list elements
+		// Print the rest of the items
 		while (nonempty_listp(list))
 		{
-			string_step((const char**)&view, &rem, print_char(' ', view, rem));
-			string_step((const char**)&view, &rem, pr_str(list->first, view, rem, readable));
-
-			// Next
+			// Print item with leading space
+			string_step(&view, &length, print_char(' ', view, length));
+			string_step(&view, &length, pr_str(list->first, view, length, readable));
+			// Next item
 			list = list->rest;
 		}
-
-		// List will be the last item in the 'rest' slot of the list at this point
-		// If there is a value (except nil) in the final rest slot, then print it dotted
-		if (cell_validp(list) && !cell_eq(list, &sym_nil))
-		{
-			string_step((const char**)&view, &rem, print_cstr(" | ", view, rem));
-			string_step((const char**)&view, &rem, pr_str(list, view, rem, readable));
-		}
+		assert(cell_eq(list, &sym_nil));
 	}
 
-	// Print closing char
-	string_step((const char**)&view, &rem, print_char(']', view, rem));
+	// Print closing ']'
+	string_step(&view, &length, print_char(']', view, length));
 
-	return length - rem;
+	return view - out;
 }
 
-int print_symbol (Cell *sym, char *out, int length)
+int print_symbol(Cell *sym, char *out, int length)
 {
 	assert(symbolp(sym));
 	assert(stringp(sym->sym_name));
 	return print_list_as_string(sym->sym_name->rest, out, length, 0);
 }
 
-int print_error (Cell *list, char *out, int length)
-{
-	char *view = out;
-	string_step((const char**)&view, &length, print_cstr("ERROR : ", out, length));
-	while (nonempty_listp(list))
-	{
-		string_step((const char**)&view, &length, pr_str(list->first, view, length, 0));
-		list = list->rest;
-	}
-	return view - out;
-}
-
 // This function is necessary because there are a bunch of special types of pairs
-int print_pair (Cell *p, char *out, int length, int readable)
+int print_pair(Cell *p, char *out, int length, int readable)
 {
 	assert(out);
 	assert(pairp(p));
 	if (length <= 0)
 		return 0;
 
-	if (errorp(p))
-		return print_error(p->rest, out, length);
 	if (stringp(p))
-		// Print the characters of a string
 		return print_list_as_string(p->rest, out, length, readable);
 	else if (functionp(p))
-		// Don't print actual function values out
 		return print_cstr("#<function>", out, length);
 	else
-		// Print list normally
 		return print_list(p, out, length, readable);
 }
 
-// Does: Prints form X to output stream
+// Does: Prints p to the given output stream
 // Returns: number of chars written
-int pr_str (Cell *x, char *out, int length, int readable)
+int pr_str(Cell *p, char *out, int length, int readable)
 {
+	// Validate arguments
 	assert(out);
 	if (length <= 0)
 		return 0;
 
-	if (!cell_validp(x))
+	if (!cell_validp(p))
 		return print_cstr("#<invalid>", out, length);
-	switch (x->kind)
+	switch (p->kind)
 	{
 		case CK_INTEGER:
-			return print_int(x->integer, out, length);
+			return print_int(p->integer, out, length);
 		case CK_SYMBOL:
-			return print_symbol(x, out, length);
+			return print_symbol(p, out, length);
 		case CK_PAIR:
-			return print_pair(x, out, length, readable);
-		case CK_FUNCTION:
-			return print_cstr("#<code>", out, length);
+			return print_pair(p, out, length, readable);
 		default:
-			return print_cstr("#<invalid>", out, length);
+			assert(0);
 	}
 }
 
