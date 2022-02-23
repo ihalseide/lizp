@@ -974,7 +974,7 @@ static Cell *apply_built_in_1 (Native_fn_t id, Cell *args)
 			return get_bool_sym(stringp(p1));
 		case FN_FUNCTION_P:
 			// [function? x]
-			return get_bool_sym(function_nativep(p1));
+			return get_bool_sym(functionp(p1));
 		case FN_COUNT:
 			// [count list]
 			if (pairp(p1))
