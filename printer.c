@@ -50,8 +50,9 @@ int print_int(int n, char *out, int len)
 	int u = (n >= 0)? n : -n;
 
 	int i;
-	for (i = 0; (u > 0) && (i < len) && (i < sz); i++)
+	for (i = 0; (u > 0) && (i < len); i++)
 	{
+		assert(i < sz);
 		buf[sz - i - 1] = '0' + (u % 10);
 		u /= 10;
 	}
@@ -61,7 +62,11 @@ int print_int(int n, char *out, int len)
 
 	// Minus sign for negative numbers
 	if (n < 0)
-		buf[--i] = '-';
+	{
+		assert(i < sz);
+		buf[sz - i - 1] = '-';
+		i++;
+	}
 
 	memcpy(out, buf + sz - i, i);
 	return i;
