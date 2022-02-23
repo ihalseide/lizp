@@ -62,28 +62,28 @@
 [def! type-of
   [fn* [x]
     [cond [int? x]      'int
-	      [symbol? x]   'symbol
-		  [string? x]   'string
-		  [function? x] 'function
-		  [list? x]     'list
-		  #t nil]]]
+          [symbol? x]   'symbol
+          [string? x]   'string
+          [function? x] 'function
+          [list? x]     'list
+          #t nil]]]
 
 ;;; N is negative?
 [def! negative?
   [fn* [n]
     [cond [int? n] [< n 0]
-	      #t #f]]]
+          #t #f]]]
 
 ;;; Get the Nth item of a list
 [def! nth
-  [fn* [L n]
-    [do
-      [assert '[list? L]]
-      [assert '[int? n]]
-	  [cond [negative? n] "error: n must be non-negative"
-	        [empty? L]    "error: n is bigger than the length of L"
-	        [= n 0]       [first L]
-	        #t            [nth [rest L] [- n 1]]]]]]
+  [fn* [n L]
+    [cond [not [list? L]] "error: L must be a list"
+          [not [int? n]]  "error: n must be an int"
+          [negative? n]   "error: n must be non-negative"
+          [empty? L]      "error: n >= [count L]"
+          [= n 0]         [first L]
+          [not [rest L]]  "error: n >= [count L]"
+          #t              [nth [- n 1] [rest L]]]]]
 
 ;;; Calculate the sum of a list of numbers
 [def! sum-start
