@@ -1522,26 +1522,30 @@ void rep (const char *start, int length, Cell *env)
 	Cell *p;
 
 	if (!setjmp(eval_error))
+	{
 		p = READ(start, length);
+	}
 	else
-		p = NULL;
-
-	if (!cell_validp(p))
 	{
 		printf("read error: %s\n", get_error_msg());
 		return;
 	}
 
-	if (!setjmp(eval_error))
-		p = EVAL(p, env);
-	else
-		p = NULL;
+	if (!p)
+		return;
 
-	if (!cell_validp(p))
+	if (!setjmp(eval_error))
 	{
-		printf("error: %s\n", get_error_msg());
+		p = EVAL(p, env);
+	}
+	else
+	{
+		printf("eval error: %s\n", get_error_msg());
 		return;
 	}
+
+	if (!p)
+		return;
 
 	PRINT(p);
 }
