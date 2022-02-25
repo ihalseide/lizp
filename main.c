@@ -16,10 +16,12 @@ int main (int argc, char **argv)
 	// Initial lizp code
 	if (!setjmp(eval_error))
 	{
-		const char *code = "[do\n"
+		const char *code =
+			"[do\n"
 			"  [def! load-file\n"
 			"    [fn* [f]\n"
-			"      [eval [read-string [str \"[do \" [slurp f] \"\nnil]\n\"]]]]]\n"
+			"      [cond [string? f] [eval [read-string [str \"[do \" [slurp f] \"\n#t]\n\"]]]\n"
+			"            #t #f]]]\n"
 			"  [load-file \"lizp.lizp\"]]\n";
 		EVAL(READ(code, strlen(code)), repl_env);
 
