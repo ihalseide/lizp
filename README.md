@@ -1,6 +1,6 @@
 # Lizp
 
-This is my own (work-in-progress) implementation of a Lisp programming language. My inspiration is the "Make a Lisp" project at https://github.com/kanaka/mal.
+This is my own (work-in-progress) implementation of a Lisp programming language. My inspiration is the "Make a Lisp" project at https://github.com/kanaka/mal. Warning: there is no garbage collection.
 
 ## Quick Start
 
@@ -70,8 +70,3 @@ The built-in fuctions (defined by lisp code) are:
 * [/= x y] -> x not equal to y
 * [assert form]
 * [neg n] -> negative n
-
-// TODO: tail calls still create a bunch of new cells and environments,
-
-//       so add garbage collection?
-
