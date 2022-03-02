@@ -265,7 +265,7 @@ int PrintVal(Val *p, char *out, int length, int readable)
 	}
 	else
 	{
-		return PrintCStr("(NULL)", out, length);
+		return PrintCStr("(none)", out, length);
 	}
 }
 
