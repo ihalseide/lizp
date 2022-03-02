@@ -12,7 +12,7 @@ Seq *SeqAlloc(void);                  // Allocate new Seq
 Seq *SeqInit(int capacity);           // Allocate and initialize new Seq
 void SeqFree(Seq *p);                 
 
-void *SeqGet(Seq *p, int i);          // Get the i-th item of p
+void *SeqGet(const Seq *p, int i);    // Get the i-th item of p
 void SeqSet(Seq *p, int i, void *e);  // Set the i-th item of p to e
 
 bool SeqIsEmpty(Seq *p);              // Predicate function for if a Seq is empty (no items fill)

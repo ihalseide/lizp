@@ -76,7 +76,7 @@ void SeqSet(Seq *p, int i, void *e)
 	}
 }
 
-void *SeqGet(Seq *p, int i)
+void *SeqGet(const Seq *p, int i)
 {
 	if (!p)
 	{
