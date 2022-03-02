@@ -44,7 +44,5 @@ Val *EVAL(Val *ast, Val *env);
 void PRINT(Val *expr);
 void rep(const char *start, int length, Val *env);
 
-bool ValEqual(const Val *a, const Val *b);
-
 #endif /* _LIZP_H */
 
