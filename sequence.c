@@ -5,6 +5,13 @@
 
 #include "sequence.h"
 
+struct Seq
+{
+	int cap;  // total capacity
+	int fill;  // index to next slot
+	void **start;  // start of array
+};
+
 Seq *SeqAlloc(void)
 {
 	Seq *new;
@@ -26,6 +33,10 @@ Seq *SeqInit(int capacity)
 
 void SeqFree(Seq *p)
 {
+	if (p->start)
+	{
+		free(p->start);
+	}
 	free(p);
 }
 
@@ -84,6 +95,17 @@ void *SeqGet(Seq *p, int i)
 	}
 }
 
+bool SeqIsEmpty(Seq *p)
+{
+	if (!p)
+	{
+		fprintf(stderr, "%s : invalid seq %p\n", __func__, p);
+		return 0;
+	}
+
+	return p->fill == 0;
+}
+
 bool SeqIsFull(Seq *p)
 {
 	if (!p)
@@ -116,6 +138,23 @@ void SeqGrow(Seq *p)
 		p->start = malloc(sizeof(*p->start) * newCap);
 	}
 	p->cap = newCap;
+}
+
+// Set capacity to fill value
+void SeqTrim(Seq *p)
+{
+	// Validate inputs
+	if (!p)
+	{
+		fprintf(stderr, "%s : invalid seq %p\n", __func__, p);
+		return;
+	}
+
+	if (p->start)
+	{
+		p->start = realloc(p->start, sizeof(*p->start) * p->fill);
+	}
+	p->cap = p->fill;
 }
 
 void SeqAppend(Seq *p, void *item)
@@ -245,12 +284,8 @@ void SeqAppendTest(void)
 
 void SequenceTest(void)
 {
-	printf("<%s>\n", __func__);
-
 	SeqIsFullTest();
 	SeqGrowTest();
 	SeqAppendTest();
-
-	printf("</%s>\n", __func__);
 }
 
