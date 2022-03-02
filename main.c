@@ -5,15 +5,19 @@
 #include <setjmp.h>
 
 #include "reader.h"
+#include "printer.h"
 #include "sequence.h"
 #include "lizp.h"
 
 int main (int argc, char **argv)
 {
-	SequenceTest();
-	ReaderTest();
+	if (0)
+	{
+		SequenceTest();
+		ReaderTest();
+	}
 
-	printf("Hello, world!\n");
+	PrinterSetBase(10);
 
 	// REPL
 	char buffer[2 * 1024];

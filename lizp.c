@@ -28,7 +28,6 @@ Val *EVAL (Val *ast, Val *env)
 	return ast;
 }
 
-
 void PRINT (Val *expr)
 {
 	static char buffer[2 * 1024];

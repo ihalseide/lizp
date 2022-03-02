@@ -138,8 +138,6 @@ void SeqAppend(Seq *p, void *item)
 
 void SeqIsFullTest(void)
 {
-	printf("<%s>\n", __func__);
-
 	Seq *s;
 
 	// Empty-capacity list is full
@@ -159,14 +157,10 @@ void SeqIsFullTest(void)
 	assert(SeqCapacity(s) == 1);
 	assert(SeqIsFull(s));
 	SeqFree(s);
-
-	printf("</%s>\n", __func__);
 }
 
 void SeqGrowTest(void)
 {
-	printf("<%s>\n", __func__);
-
 	Seq *s;
 
 	// Grow 0-length 
@@ -212,14 +206,10 @@ void SeqGrowTest(void)
 	assert(SeqCapacity(s) > 3);
 	assert(SeqLength(s) == 2);
 	SeqFree(s);
-
-	printf("</%s>\n", __func__);
 }
 
 void SeqAppendTest(void)
 {
-	printf("<%s>\n", __func__);
-
 	Seq *s;
 	void *p = SeqAppendTest;
 
@@ -251,8 +241,6 @@ void SeqAppendTest(void)
 	assert(SeqCapacity(s) >= 1);
 	assert(SeqGet(s, 0) == p);
 	SeqFree(s);
-
-	printf("</%s>\n", __func__);
 }
 
 void SequenceTest(void)

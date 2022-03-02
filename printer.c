@@ -1,7 +1,41 @@
 #include <assert.h>
 #include <string.h>
+#include <stdbool.h>
 
 #include "printer.h"
+
+static int printNumBase = 10;
+static bool printNumUpper = false;
+
+int PrinterGetBase(void)
+{
+	return printNumBase;
+}
+
+void PrinterSetBase(int b)
+{
+	switch (b)
+	{
+		case 2:
+		case 10:
+		case 16:
+		case 36:
+			printNumBase = b;
+			break;
+		default:
+			break;
+	}
+}
+
+bool PrinterGetUpper(void)
+{
+	return printNumUpper;
+}
+
+void PrinterSetUpper(bool b)
+{
+	printNumUpper = b? true : false;
+}
 
 // Returns: number of chars written
 int PrintChar(char c, char *out, int length)
@@ -28,8 +62,32 @@ int PrintCStr(const char *s, char *out, int len)
 	return i;
 }
 
+char ValueToDigit(int d, bool upper)
+{
+	if (0 <= d && d <= 9)
+	{
+		return '0' + d;
+	}
+	else if (10 <= d && d <= 35)
+	{
+		if (upper)
+		{
+			return 'A' + d - 10;
+		}
+		else
+		{
+			return 'a' + d - 10;
+		}
+	}
+	else
+	{
+		return '?';
+	}
+}
+
+// TODO: print out full representation of binary numbers
 // Returns: number of chars written
-int PrintInt(int n, char *out, int len, int base)
+int PrintInt(int n, char *out, int len, int readable, int base, bool upper)
 {
 	assert(base > 1);
 	assert(out);
@@ -51,15 +109,39 @@ int PrintInt(int n, char *out, int len, int base)
 	for (i = 0; (u > 0) && (i < len); i++)
 	{
 		assert(i < sz);
-		buf[sz - i - 1] = '0' + (u % 10);
-		u /= 10;
+		buf[sz - i - 1] = ValueToDigit(u % base, upper);
+		u /= base;
 	}
 
 	// Loop should run at least once, even for n == 0
 	assert(i >= 1);
 
+	// Sigil for base
+	if (readable)
+	{
+		switch (base)
+		{
+			case 2:
+				buf[sz - i - 1] = '+';
+				i++;
+				break;
+			case 10:
+				buf[sz - i - 1] = '#';
+				i++;
+				break;
+			case 16:
+				buf[sz - i - 1] = '$';
+				i++;
+				break;
+			case 36:
+				break;
+			default:
+				assert(0 && "not implemented");
+		}
+	}
+
 	// Minus sign for negative numbers
-	if (n < 0)
+	if (base != 2 && n < 0)
 	{
 		assert(i < sz);
 		buf[sz - i - 1] = '-';
@@ -174,7 +256,7 @@ int PrintVal(Val *p, char *out, int length, int readable)
 		switch (p->kind)
 		{
 			case CK_INT:
-				return PrintInt(p->integer, out, length, 10);
+				return PrintInt(p->integer, out, length, readable, printNumBase, printNumUpper);
 			case CK_SEQ:
 				return PrintSeq(p->sequence, out, length, readable);
 			default:

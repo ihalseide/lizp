@@ -130,7 +130,7 @@ int ReadInt(const char *start, int length, int *valOut)
 			else
 			{
 				// Invalid digit for base
-				fprintf(stderr, "Invalid digit '%c' for base %d", *view, base);
+				fprintf(stderr, "invalid digit '%c' for base %d\n", *view, base);
 				if (valOut)
 				{
 					*valOut = 0;
@@ -217,7 +217,7 @@ int ReadSeq(const char *start, int length, Seq *toList)
 	else
 	{
 		// Reading error
-		fprintf(stderr, "error reading list: unexpected end of input");
+		fprintf(stderr, "error reading list: unexpected end of input\n");
 		return 0;
 	}
 }
@@ -340,8 +340,6 @@ int read_quoted_string (const char *start, int length, Val **out)
 
 void DigitValueTest(void)
 {
-	printf("<%s>\n", __func__);
-
 	assert(DigitValue('\0') < 0);
 	assert(DigitValue('+') < 0);
 	assert(DigitValue('[') < 0);
@@ -357,14 +355,10 @@ void DigitValueTest(void)
 	assert(DigitValue('F') == 15);
 	assert(DigitValue('z') == 35);
 	assert(DigitValue('Z') == 35);
-
-	printf("</%s>\n", __func__);
 }
 
 void ReadIntTest(void)
 {
-	printf("<%s>\n", __func__);
-
 	const char *s;
 	int n;
 
@@ -453,14 +447,10 @@ void ReadIntTest(void)
 	s = "-+1001";
 	assert(ReadInt(s, strlen(s), &n) == 0);
 	assert(n == 0);
-
-	printf("</%s>\n", __func__);
 }
 
 void ReadSeqTest(void)
 {
-	printf("<%s>\n", __func__);
-	
 	const char *s;
 	int len;
 	Seq *seq;
@@ -506,14 +496,10 @@ void ReadSeqTest(void)
 	assert(((Val*)SeqGet(seq, 1))->integer == 2);
 	assert(((Val*)SeqGet(seq, 2))->integer == 3);
 	SeqFree(seq);
-
-	printf("</%s>\n", __func__);
 }
 
 void ReadValTest(void)
 {
-	printf("<%s>\n", __func__);
-
 	const char *s;
 	int len;
 	Val *v;
@@ -540,8 +526,6 @@ void ReadValTest(void)
 	ValFree(SeqGet(v->sequence, 0));
 	SeqFree(v->sequence);
 	ValFree(v);
-
-	printf("</%s>\n", __func__);
 }
 
 void ReaderTest(void)
