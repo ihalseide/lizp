@@ -6,6 +6,7 @@
 
 void ReaderTest(void);
 
+bool CharIsSpace(char c);
 int DigitValue(char d);
 int ReadInt(const char *start, int length, int *valOut);
 int ReadList(const char *start, int length, Seq *toList);

@@ -9,10 +9,34 @@
 #include "sequence.h"
 #include "value.h"
 
+bool CharIsSpace(char c)
+{
+	if (!c)
+	{
+		// Don't consider NULL char a space!
+		return false;
+	}
+	else if (c == '[' || c == ']')
+	{
+		// Don't consider list characters as space
+		return false;
+	}
+	else if (c == '#' || c == '$' || c == '+' || c == '-' || c == '_')
+	{
+		// Don't consider integer sigils as space either
+		return false;
+	}
+	else
+	{
+		// All other non-alphanumeric characters are space
+		return !isalnum(c);
+	}
+}
+
 int ReadSpace(const char *s, int len)
 {
 	const char *view = s;
-	while ((view - s) < len && isspace(*view))
+	while ((view - s) < len && CharIsSpace(*view))
 	{
 		view++;
 	}
@@ -530,13 +554,9 @@ void ReadValTest(void)
 
 void ReaderTest(void)
 {
-	printf("<%s>\n", __func__);
-
 	DigitValueTest();
 	ReadIntTest();
 	ReadSeqTest();
 	ReadValTest();
-
-	printf("</%s>\n", __func__);
 }
 
