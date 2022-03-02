@@ -72,16 +72,12 @@ bool SeqEqual(const Seq *a, const Seq *b)
 	{
 		return false;
 	}
-	else if (a->start == b->start)
-	{
-		return true;
-	}
 	else
 	{
 		for (int i = 0; i < SeqLength(a); i++)
 		{
-			Val *aVal = (Val*)(a->start[i]);
-			Val *bVal = (Val*)(b->start[i]);
+			Val *aVal = (Val*)SeqGet(a, i);
+			Val *bVal = (Val*)SeqGet(b, i);
 			if (!ValEqual(aVal, bVal))
 			{
 				return false;
