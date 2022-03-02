@@ -30,5 +30,6 @@ bool ValEqual(const Val *a, const Val *b);
 int ValIsInt(const Val *p);
 int ValIsSeq(const Val *p);
 void ValFree(Val *p);
+void ValFreeRec(Val *p);
 
 #endif /* __VALUE_H */

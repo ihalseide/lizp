@@ -15,6 +15,21 @@ void ValFree(Val *p)
 	free(p);
 }
 
+// Recursively free everything under value
+void ValFreeRec(Val *p)
+{
+	if (ValIsSeq(p))
+	{
+		Seq *s = p->sequence;
+		for (int i = 0; i < SeqLength(s); i++)
+		{
+			ValFreeRec(SeqGet(s, i));
+		}
+		SeqFree(s);
+	}
+	ValFree(p);
+}
+
 int ValIsSeq(const Val *p)
 {
 	return p && p->kind == CK_SEQ;
