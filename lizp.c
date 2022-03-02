@@ -16,8 +16,21 @@ Val *READ (const char *start, int length)
 		return NULL;
 
 	Val *x;
-	ReadVal(start, length, &x);
-	return x;
+	int len = ReadVal(start, length, &x);
+
+	// If len is 0, the reading failed
+	if (len)
+	{
+		return x;
+	}
+	else
+	{
+		if (x)
+		{
+			ValFreeRec(x);
+		}
+		return NULL;
+	}
 }
 
 Val *EVAL (Val *ast, Val *env)
