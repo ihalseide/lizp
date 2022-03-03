@@ -13,6 +13,7 @@ int main (int argc, char **argv)
 {
 	SequenceTest();
 	ReaderTest();
+	PrinterTest();
 
 	PrinterSetBase(10);
 
