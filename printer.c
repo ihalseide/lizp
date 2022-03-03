@@ -152,29 +152,36 @@ int PrintInt(int n, char *out, int len, int readable, int base, bool upper)
 	return i;
 }
 
-/*
-int print_list_as_string(const Val *list, char *out, int length, int readable)
+int PrintListAsChars(const Seq *p, char *out, int length, int readable)
 {
 	// Validate inputs
-	if (!(pairp(list) || cell_eq(list, &sym_nil)) || !out || length <= 0)
+	if (!out || length <= 0)
 		return 0;
 
 	char *view = out;
 
 	// Opening quote
 	if (readable)
-		string_step((const char**) &view, &length, PrintChar('"', view, length));
+	{
+		view += PrintChar('"', view, length-(view-out));
+	}
 
 	// String contents
-	const Val *p = list;
-	while ((length > 1) && nonempty_listp(p))
+	const int len = SeqLength(p);
+	for (int i = 0; i < len && (view-out) < length; i++)
 	{
 		// Get character value in list
-		Val *e = p->first;
-		// If an element is not an integer, the string stops printing out
-		if (!intp(e))
+		Val *e = SeqGet(p, i);
+		char c;
+		if (ValIsInt(e))
+		{
+			c = (char) e->integer;
+		}
+		else
+		{
+			// If an element is not an integer, the string stops printing out
 			break;
-		char c = (char) e->integer;
+		}
 
 		if (readable)
 		{
@@ -189,29 +196,28 @@ int print_list_as_string(const Val *list, char *out, int length, int readable)
 				default: esc = 0; break;
 			}
 
+			// Write escaped code
 			if (esc)
 			{
 				// Print a slash and get ready to print the escape char next
-				string_step((const char**) &view, &length, PrintChar('\\', view, length));
+				view += PrintChar('\\', view, length-(view-out));
 				c = esc;
 			}
 		}
 
 		// Write char
-		string_step((const char**) &view, &length, PrintChar(c, view, length));
-
-		// Next list item
-		p = p->rest;
+		view += PrintChar(c, view, length-(view-out));
 	}
 
 	// Closing quote
 	if (readable)
-		string_step((const char**) &view, &length, PrintChar('"', view, length));
+	{
+		view += PrintChar('"', view, length-(view-out));
+	}
 
 	// Return length, including quotes that were written
 	return view - out;
 }
-*/
 
 int PrintSeq(Seq *list, char *out, int length, int readable)
 {
@@ -267,5 +273,10 @@ int PrintVal(Val *p, char *out, int length, int readable)
 	{
 		return PrintCStr("(none)", out, length);
 	}
+}
+
+void PrinterTest(void)
+{
+	assert(0 && "not implemented yet");
 }
 
