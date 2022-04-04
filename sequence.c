@@ -47,8 +47,15 @@ int SeqLength(const Seq *p)
 		fprintf(stderr, "%s : invalid seq %p\n", __func__, p);
 		return 0;
 	}
-
-	return p->fill;
+	int fill = p->fill;
+	if (fill >= 0)
+	{
+		return fill;
+	}
+	else
+	{
+		return 0;
+	}
 }
 
 int SeqCapacity(const Seq *p)

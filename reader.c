@@ -85,59 +85,60 @@ int ReadInt(const char *start, int length, int *valOut)
 	// Read prefix sigil(s)
 	bool neg = false;
 	int base = 0;
-	while (1)
+	if (*view == '-')
 	{
-		switch (*view)
-		{
-			case '#':
-				base = 10;
-				break;
-			case '$':
-				base = 16;
-				break;
-			case '+':
-				if (neg)
-				{
-					// Cannot have negative base-2 numbers
-					fprintf(stderr, "Cannot have negative base-2 numbers\n");
-					if (valOut)
-					{
-						*valOut = 0;
-					}
-					return 0;
-				}
-				else
-				{
-					base = 2;
-				}
-				break;
-			case '-':
-				neg = !neg;
-				view++;
-				continue;
-			default:
-				if (isalnum(*view))
-				{
-					base = 36;
-					view--;
-				}
-				else
-				{
-					// Invalid beginning of integer
-					printf("Invalid beginning of integer\n");
-					if (valOut)
-					{
-						*valOut = 0;
-					}
-					return 0;
-				}
-				break;
-		}
-
+		neg = true;
 		view++;
-		break;
+	}
+	switch (*view)
+	{
+		case '#':
+			// Decimal
+			base = 10;
+			view++;
+			break;
+		case '$':
+			// Hexadecimal
+			base = 16;
+			view++;
+			break;
+		case '+':
+			// Binary
+			if (neg)
+			{
+				// Cannot have negative base-2 numbers
+				fprintf(stderr, "ReadInt: base-2 numbers cannot be negative\n");
+				if (valOut)
+				{
+					*valOut = 0;
+				}
+				return 0;
+			}
+			else
+			{
+				base = 2;
+				view++;
+			}
+			break;
+		default:
+			if (isalnum(*view))
+			{
+				base = 36;
+			}
+			else
+			{
+				// Invalid beginning of integer
+				printf("ReadInt: invalid beginning of integer\n");
+				if (valOut)
+				{
+					*valOut = 0;
+				}
+				return 0;
+			}
+			break;
 	}
 
+	// Keep a pointer to where the digits start
 	const char *viewDigits = view;
 
 	int n = 0;
@@ -150,11 +151,18 @@ int ReadInt(const char *start, int length, int *valOut)
 			if (0 <= d && d < base)
 			{
 				n = (n * base) + d;
+				if (n < 0)
+				{
+					// There was an overflow
+					int intLen = view - start;
+					fprintf(stderr, "ReadInt: overflow while parsing integer starting with \"%.*s\"",
+							intLen, start);
+				}
 			}
 			else
 			{
 				// Invalid digit for base
-				fprintf(stderr, "invalid digit '%c' for base %d\n", *view, base);
+				fprintf(stderr, "ReadInt: invalid digit '%c' for base %d\n", *view, base);
 				if (valOut)
 				{
 					*valOut = 0;
@@ -176,7 +184,7 @@ int ReadInt(const char *start, int length, int *valOut)
 	if (view == viewDigits)
 	{
 		// No valid digits were read after the sigils
-		fprintf(stderr, "No valid digits were read after the sigils\n");
+		fprintf(stderr, "ReadInt: no valid digits were read after the sigil(s)\n");
 		if (valOut)
 		{
 			*valOut = 0;
@@ -309,60 +317,7 @@ int ReadVal(const char *start, int length, Val **out)
 	return view - start;
 }
 
-/*
-// Convert a string to a list of characters
-int read_quoted_string (const char *start, int length, Val **out)
-{
-	// Validate inputs
-	if (!start || length <= 0 || *start != '"')
-		return 0;
-
-	const char *view = start;
-
-	// Read opening quote
-	string_step(&view, &length, 1);
-	
-	// Do a pass to find the end quote
-	int quoted_len = read_until(view, length, '"');
-	string_step(&view, &length, quoted_len);
-
-	if (length && *view == '"')
-	{
-		// Read closing quote
-		string_step(&view, &length, 1);
-
-		Val *string = NULL;
-		int parsed_len = string_to_list(start + 1, quoted_len, 1, &string);
-		if (parsed_len == 0 && quoted_len == 0)
-		{
-			// Empty string
-			if (out)
-				*out = make_string_start();
-			return view - start;
-		}
-		else if (parsed_len == quoted_len && cell_validp(string))
-		{
-			// Successfully processed non-empty string
-			if (out)
-				*out = string;
-			return view - start;
-		}
-		else
-		{
-			// could not parse string contents
-			if (out)
-				*out = NULL;
-			return view - start;
-		}
-	}
-	else
-	{
-		error("unexpected end of input in string literal");
-	}
-}
-*/
-
-void DigitValueTest(void)
+static void DigitValueTest(void)
 {
 	assert(DigitValue('\0') < 0);
 	assert(DigitValue('+') < 0);
@@ -381,7 +336,7 @@ void DigitValueTest(void)
 	assert(DigitValue('Z') == 35);
 }
 
-void ReadIntTest(void)
+static void ReadIntTest(void)
 {
 	const char *s;
 	int n;
@@ -473,7 +428,7 @@ void ReadIntTest(void)
 	assert(n == 0);
 }
 
-void ReadSeqTest(void)
+static void ReadSeqTest(void)
 {
 	const char *s;
 	int len;
@@ -522,7 +477,7 @@ void ReadSeqTest(void)
 	SeqFree(seq);
 }
 
-void ReadValTest(void)
+static void ReadValTest(void)
 {
 	const char *s;
 	int len;

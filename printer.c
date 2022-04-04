@@ -12,6 +12,7 @@ int PrinterGetBase(void)
 	return printNumBase;
 }
 
+// Set base to 2, 10, 16, or 36
 void PrinterSetBase(int b)
 {
 	switch (b)
@@ -23,6 +24,7 @@ void PrinterSetBase(int b)
 			printNumBase = b;
 			break;
 		default:
+			// Do not set to any other base
 			break;
 	}
 }
@@ -41,11 +43,15 @@ void PrinterSetUpper(bool b)
 int PrintChar(char c, char *out, int length)
 {
 	// Validate arguments
-	if (!out || length <= 0)
+	if (out && length > 0)
+	{
+		*out = c;
+		return 1;
+	}
+	else
+	{
 		return 0;
-
-	*out = c;
-	return 1;
+	}
 }
 
 // Returns: number of chars written
@@ -53,12 +59,14 @@ int PrintCStr(const char *s, char *out, int len)
 {
 	// Validate inputs
 	if (!s || !out)
+	{
 		return 0;
-
+	}
 	int i;
 	for (i = 0; s[i] && i < len; i++)
+	{
 		out[i] = s[i];
-
+	}
 	return i;
 }
 
@@ -152,20 +160,21 @@ int PrintInt(int n, char *out, int len, int readable, int base, bool upper)
 	return i;
 }
 
+// Print a seq/list of numbers as a string.
+// String is escaped and quoted if readable is true.
 int PrintListAsChars(const Seq *p, char *out, int length, int readable)
 {
 	// Validate inputs
 	if (!out || length <= 0)
+	{
 		return 0;
-
+	}
 	char *view = out;
-
 	// Opening quote
 	if (readable)
 	{
 		view += PrintChar('"', view, length-(view-out));
 	}
-
 	// String contents
 	const int len = SeqLength(p);
 	for (int i = 0; i < len && (view-out) < length; i++)
@@ -208,13 +217,11 @@ int PrintListAsChars(const Seq *p, char *out, int length, int readable)
 		// Write char
 		view += PrintChar(c, view, length-(view-out));
 	}
-
 	// Closing quote
 	if (readable)
 	{
 		view += PrintChar('"', view, length-(view-out));
 	}
-
 	// Return length, including quotes that were written
 	return view - out;
 }
@@ -223,29 +230,25 @@ int PrintSeq(Seq *list, char *out, int length, int readable)
 {
 	// Validate arguments
 	if (!list || !out || (length <= 0))
+	{
 		return 0;
-
+	}
 	char *view = out;
-
 	// Print opening '['
 	view += PrintChar('[', view, length);
-
 	// Print 1st without a space
 	if (SeqLength(list) && view < (out+length))
 	{
 		view += PrintVal(SeqGet(list, 0), view, length-(view-out), readable);
 	}
-
 	// Print list contents
 	for (int i = 1; i < SeqLength(list) && view < (out+length); i++)
 	{
 		view += PrintChar(' ', view, length-(view-out));
 		view += PrintVal(SeqGet(list, i), view, length-(view-out), readable);
 	}
-
 	// Print closing ']'
 	view += PrintChar(']', view, length-(view-out));
-
 	return view - out;
 }
 
@@ -275,7 +278,7 @@ int PrintVal(Val *p, char *out, int length, int readable)
 	}
 }
 
-void ValueToDigitTest(void)
+static void ValueToDigitTest(void)
 {
 	assert(ValueToDigit(1, false) == '1');
 	assert(ValueToDigit(1, true) == '1');

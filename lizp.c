@@ -5,6 +5,7 @@
 #include "lizp.h"
 #include "sequence.h"
 #include "reader.h"
+#include "eval.h"
 #include "printer.h"
 
 // Does: Read a form from the stream
@@ -13,7 +14,9 @@ Val *READ (const char *start, int length)
 {
 	// Validate inputs
 	if (!start || (length < 0))
+	{
 		return NULL;
+	}
 
 	Val *x;
 	int len = ReadVal(start, length, &x);
@@ -35,7 +38,7 @@ Val *READ (const char *start, int length)
 
 Val *EVAL (Val *ast, Val *env)
 {
-	return ast;
+	return EvalVal(ast, env);
 }
 
 void PRINT (Val *expr, bool readable)
@@ -51,5 +54,12 @@ void rep (const char *start, int length, Val *env)
 	Val *a = READ(start, length);
 	Val *b = EVAL(a, env);
 	PRINT(b, 1);
+}
+
+void LizpTest(void)
+{
+	SequenceTest();
+	ReaderTest();
+	PrinterTest();
 }
 

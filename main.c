@@ -11,9 +11,7 @@
 
 int main (int argc, char **argv)
 {
-	SequenceTest();
-	ReaderTest();
-	PrinterTest();
+	LizpTest();
 
 	PrinterSetBase(10);
 
