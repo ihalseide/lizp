@@ -7,251 +7,116 @@
 
 struct Seq
 {
-	int cap;  // total capacity
-	int fill;  // index to next slot
-	void **start;  // start of array
+	void *first;
+	Seq *rest;
 };
 
-Seq *SeqAlloc(void)
+static Seq *SeqAlloc(void)
 {
 	Seq *new;
 	new = malloc(sizeof(*new));
 	return new;
 }
 
-Seq *SeqInit(int capacity)
+Seq *SeqInit(void *first, Seq *rest)
 {
 	Seq *new = SeqAlloc();
 	if (new)
 	{
-		new->cap = capacity;
-		new->start = malloc(sizeof(*new->start) * capacity);
-		new->fill = 0;
+		new->first = first;
+		new->rest = rest;
 	}
 	return new;
 }
 
 void SeqFree(Seq *p)
 {
-	if (p->start)
+	if (p)
 	{
-		free(p->start);
+		free(p);
 	}
-	free(p);
 }
 
 int SeqLength(const Seq *p)
 {
-	if (!p)
+	int len = 0;
+	while (p)
 	{
-		fprintf(stderr, "%s : invalid seq %p\n", __func__, p);
-		return 0;
+		len++;
+		p = p->rest;
 	}
-	int fill = p->fill;
-	if (fill >= 0)
-	{
-		return fill;
-	}
-	else
-	{
-		return 0;
-	}
+	return len;
 }
 
-int SeqCapacity(const Seq *p)
+// Get N'th first slot
+void **SeqNth(Seq *p, int n)
 {
-	if (!p)
+	while (n > 0)
 	{
-		fprintf(stderr, "%s : invalid seq %p\n", __func__, p);
-		return 0;
+		if (!p)
+		{
+			return NULL;
+		}
+		p = p->rest;
+		n--;
 	}
-
-	return p->cap;
+	return &p->first;
 }
 
 void SeqSet(Seq *p, int i, void *e)
 {
-	if (!p)
+	if (i >= 0 && i < SeqLength(p))
 	{
-		fprintf(stderr, "%s : invalid seq %p\n", __func__, p);
-		return;
-	}
-
-	if (i < SeqLength(p))
-	{
-		p->start[i] = e;
+		void **slot = SeqNth(p, i);
+		if (slot)
+		{
+			*slot = e;
+		}
 	}
 }
 
-void *SeqGet(const Seq *p, int i)
+void *SeqGet(Seq *p, int i)
+{
+	if (i >= 0 && i < SeqLength(p))
+	{
+		return *SeqNth(p, i);
+	}
+	return NULL;
+}
+
+// Get the last slot in a sequence
+Seq *SeqLast(Seq *p)
 {
 	if (!p)
 	{
-		fprintf(stderr, "%s : invalid seq %p\n", __func__, p);
-		return 0;
-	}
-
-	if (i < SeqLength(p))
-	{
-		return p->start[i];
-	}
-	else
-	{
-		fprintf(stderr, "%s : index %d out of seq range %p\n", __func__, i, p);
 		return NULL;
 	}
+	while(p->rest)
+	{
+		p = p->rest;
+	}
+	return p;
 }
 
 bool SeqIsEmpty(Seq *p)
 {
-	if (!p)
-	{
-		fprintf(stderr, "%s : invalid seq %p\n", __func__, p);
-		return 0;
-	}
-
-	return p->fill == 0;
+	return !p;
 }
 
-bool SeqIsFull(Seq *p)
+void SeqAppend(Seq **p, void *item)
 {
-	if (!p)
+	Seq *newCell = SeqInit(item, NULL);
+	assert(newCell);
+	if (*p)
 	{
-		fprintf(stderr, "%s : invalid seq %p\n", __func__, p);
-		return 0;
-	}
-
-	return p->fill == p->cap;
-}
-
-void SeqGrow(Seq *p)
-{
-	// Validate inputs
-	if (!p)
-	{
-		fprintf(stderr, "%s : invalid seq %p\n", __func__, p);
-		return;
-	}
-
-	int newCap = 1 + p->cap * 2;
-	if (p->start)
-	{
-		// start is valid pointer
-		p->start = realloc(p->start, sizeof(*p->start) * newCap);
+		Seq *last = SeqLast(*p);
+		assert(last);
+		last->rest = newCell;
 	}
 	else
 	{
-		// start is null
-		p->start = malloc(sizeof(*p->start) * newCap);
+		*p = newCell;
 	}
-	p->cap = newCap;
-}
-
-// Set capacity to fill value
-void SeqTrim(Seq *p)
-{
-	// Validate inputs
-	if (!p)
-	{
-		fprintf(stderr, "%s : invalid seq %p\n", __func__, p);
-		return;
-	}
-
-	if (p->start)
-	{
-		p->start = realloc(p->start, sizeof(*p->start) * p->fill);
-	}
-	p->cap = p->fill;
-}
-
-void SeqAppend(Seq *p, void *item)
-{
-	// Validate inputs
-	if (!p)
-	{
-		fprintf(stderr, "%s : invalid seq %p\n", __func__, p);
-		return;
-	}
-
-	if (SeqIsFull(p))
-	{
-		SeqGrow(p);
-	}
-
-	p->start[p->fill] = item;
-	p->fill++;
-}
-
-void SeqIsFullTest(void)
-{
-	Seq *s;
-
-	// Empty-capacity list is full
-	s = SeqInit(0);
-	assert(SeqLength(s) == 0);
-	assert(SeqCapacity(s) == 0);
-	assert(SeqIsFull(s));
-	SeqFree(s);
-
-	// 1-item list
-	s = SeqInit(1);
-	assert(SeqLength(s) == 0);
-	assert(SeqCapacity(s) == 1);
-	assert(!SeqIsFull(s));
-	s->fill++;
-	assert(SeqLength(s) == 1);
-	assert(SeqCapacity(s) == 1);
-	assert(SeqIsFull(s));
-	SeqFree(s);
-}
-
-void SeqGrowTest(void)
-{
-	Seq *s;
-
-	// Grow 0-length 
-	s = SeqInit(0);
-	SeqGrow(s);
-	assert(SeqLength(s) == 0);
-	assert(SeqCapacity(s) > 0);
-	SeqFree(s);
-
-	// Grow 0-length twice
-	s = SeqInit(0);
-	SeqGrow(s);
-	assert(SeqLength(s) == 0);
-	assert(SeqCapacity(s) > 0);
-	SeqGrow(s);
-	assert(SeqLength(s) == 0);
-	assert(SeqCapacity(s) > 1);
-	SeqFree(s);
-
-	// Grow 1-length 
-	s = SeqInit(1);
-	SeqGrow(s);
-	assert(SeqCapacity(s) > 1);
-	assert(SeqLength(s) == 0);
-	SeqFree(s);
-
-	// Grow 1-length twice
-	s = SeqInit(1);
-	SeqGrow(s);
-	assert(SeqCapacity(s) > 1);
-	assert(SeqLength(s) == 0);
-	SeqGrow(s);
-	assert(SeqCapacity(s) > 2);
-	assert(SeqLength(s) == 0);
-	SeqFree(s);
-
-	// Grow 3-length with 2 items
-	s = SeqInit(3);
-	assert(SeqCapacity(s) == 3);
-	assert(SeqLength(s) == 0);
-	s->fill = 2;
-	SeqGrow(s);
-	assert(SeqCapacity(s) > 3);
-	assert(SeqLength(s) == 2);
-	SeqFree(s);
 }
 
 void SeqAppendTest(void)
@@ -260,39 +125,39 @@ void SeqAppendTest(void)
 	void *p = SeqAppendTest;
 
 	// Append to empty once
-	s = SeqInit(0);
-	SeqAppend(s, p);
+	s = NULL;
+	SeqAppend(&s, p);
+	assert(s);
 	assert(SeqLength(s) == 1);
-	assert(SeqCapacity(s) >= 1);
 	assert(SeqGet(s, 0) == p);
 	SeqFree(s);
 
 	// Append to empty twice
-	s = SeqInit(0);
-	SeqAppend(s, p);
+	s = NULL;
+	SeqAppend(&s, p);
+	assert(s);
 	assert(SeqLength(s) == 1);
-	assert(SeqCapacity(s) >= 1);
 	assert(SeqGet(s, 0) == p);
-	SeqAppend(s, p);
+	SeqAppend(&s, p);
+	assert(s);
 	assert(SeqLength(s) == 2);
-	assert(SeqCapacity(s) >= 2);
 	assert(SeqGet(s, 0) == p);
 	assert(SeqGet(s, 1) == p);
 	SeqFree(s);
 
-	// Append to cap-1 once
-	s = SeqInit(1);
-	SeqAppend(s, p);
-	assert(SeqLength(s) == 1);
-	assert(SeqCapacity(s) >= 1);
-	assert(SeqGet(s, 0) == p);
+	// Append
+	s = SeqInit(NULL, NULL);
+	assert(s);
+	SeqAppend(&s, p);
+	assert(s);
+	assert(SeqLength(s) == 2);
+	assert(SeqGet(s, 0) == NULL);
+	assert(SeqGet(s, 1) == p);
 	SeqFree(s);
 }
 
 void SequenceTest(void)
 {
-	SeqIsFullTest();
-	SeqGrowTest();
 	SeqAppendTest();
 }
 
