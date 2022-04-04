@@ -3,7 +3,7 @@ COpts = -std=c99 -g -Wall
 
 default: lizp
 
-lizp: main.c lizp.o sequence.o printer.o reader.o value.o
+lizp: main.c lizp.o sequence.o printer.o reader.o value.o eval.o
 	$(CC) $(COpts) -o $@ $^
 
 %.o: %.c %.h
