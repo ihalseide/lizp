@@ -28,6 +28,5 @@ Val *ValMakeSeq(Seq *s);
 int ValIsInt(const Val *p);
 int ValIsSeq(const Val *p);
 void ValFree(Val *p);
-void ValFreeRec(Val *p);
 
 #endif /* __VALUE_H */
