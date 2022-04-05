@@ -202,7 +202,7 @@ Val *EvalAst(Val *ast, Seq **env)
 			evSeq = NULL;
 			while (seq)
 			{
-				SeqAppend(&evSeq, EvalAst((Val*)SeqVal(seq), NULL));
+				SeqAppend(&evSeq, EvalAst((Val*)SeqVal(seq), env));
 				seq = SeqNext(seq);
 			}
 		}
