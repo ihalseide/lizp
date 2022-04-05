@@ -25,8 +25,6 @@ struct Val
 Val *ValAlloc(void);
 Val *ValMakeInt(int n);
 Val *ValMakeSeq(Seq *s);
-bool SeqEqual(const Seq *a, const Seq *b);
-bool ValEqual(const Val *a, const Val *b);
 int ValIsInt(const Val *p);
 int ValIsSeq(const Val *p);
 void ValFree(Val *p);

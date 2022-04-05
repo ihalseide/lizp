@@ -9,7 +9,6 @@ typedef struct Func
 	int numParams;  // number of parameters
 } Func;
 
-Val *EvalVal(Val *ast, Val *env);
 Val *EvalAst(Val *ast, Val *env);
 
 #endif /* _EVAL_H */

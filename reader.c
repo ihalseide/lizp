@@ -207,7 +207,7 @@ int ReadInt(const char *start, int length, int *valOut)
 }
 
 // Returns number of chars read
-int ReadSeq(const char *start, int length, Seq *toList)
+int ReadSeq(const char *start, int length, Seq **toList)
 {
 	// Validate arguments
 	if (!start || length <= 0)
@@ -280,8 +280,8 @@ int ReadVal(const char *start, int length, Val **out)
 			case '[':
 				// Read sequence / list
 				{
-					Seq *s = SeqInit(0);
-					int len = ReadSeq(view, start+length-view, s);
+					Seq *s = NULL;
+					int len = ReadSeq(view, start+length-view, &s);
 					if (len)
 					{
 						view += len;
@@ -435,30 +435,30 @@ static void ReadSeqTest(void)
 	Seq *seq;
 
 	s = "[]";
-	seq = SeqInit(0);
-	len = ReadSeq(s, strlen(s), seq);
+	seq = NULL;
+	len = ReadSeq(s, strlen(s), &seq);
 	assert(len == 2);
 	assert(SeqLength(seq) == 0);
 	SeqFree(seq);
 
 	s = "[ ]";
-	seq = SeqInit(0);
-	len = ReadSeq(s, strlen(s), seq);
+	seq = NULL;
+	len = ReadSeq(s, strlen(s), &seq);
 	assert(len == 3);
 	assert(SeqLength(seq) == 0);
 	SeqFree(seq);
 
 	s = "[0]";
-	seq = SeqInit(0);
-	len = ReadSeq(s, strlen(s), seq);
+	seq = NULL;
+	len = ReadSeq(s, strlen(s), &seq);
 	assert(len == 3);
 	assert(SeqLength(seq) == 1);
 	assert(((Val*)SeqGet(seq, 0))->integer == 0);
 	SeqFree(seq);
 
 	s = "[1 2 3]";
-	seq = SeqInit(0);
-	len = ReadSeq(s, strlen(s), seq);
+	seq = NULL;
+	len = ReadSeq(s, strlen(s), &seq);
 	assert(len == 7);
 	assert(SeqLength(seq) == 3);
 	assert(((Val*)SeqGet(seq, 0))->integer == 1);
@@ -467,8 +467,8 @@ static void ReadSeqTest(void)
 	SeqFree(seq);
 
 	s = "[ 1 2 3 ]";
-	seq = SeqInit(0);
-	len = ReadSeq(s, strlen(s), seq);
+	seq = NULL;
+	len = ReadSeq(s, strlen(s), &seq);
 	assert(len == 9);
 	assert(SeqLength(seq) == 3);
 	assert(((Val*)SeqGet(seq, 0))->integer == 1);

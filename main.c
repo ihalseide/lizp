@@ -12,10 +12,9 @@
 int main (int argc, char **argv)
 {
 	LizpTest();
-
-	PrinterSetBase(10);
-
+	printf("tests complete\n");
 	// REPL
+	PrinterSetBase(10);
 	char buffer[2 * 1024];
 	while (1)
 	{
@@ -25,7 +24,6 @@ int main (int argc, char **argv)
 
 		rep(buffer, strlen(buffer), NULL);
 	}
-
 	return 0;
 }
 

@@ -119,6 +119,30 @@ void SeqAppend(Seq **p, void *item)
 	}
 }
 
+void *SeqVal(Seq *p)
+{
+	if (p)
+	{
+		return p->first;
+	}
+	else
+	{
+		return NULL;
+	}
+}
+
+Seq *SeqNext(Seq *p)
+{
+	if (p)
+	{
+		return p->rest;
+	}
+	else
+	{
+		return NULL;
+	}
+}
+
 void SeqAppendTest(void)
 {
 	Seq *s;

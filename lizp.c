@@ -28,17 +28,13 @@ Val *READ (const char *start, int length)
 	}
 	else
 	{
-		if (x)
-		{
-			ValFreeRec(x);
-		}
 		return NULL;
 	}
 }
 
 Val *EVAL (Val *ast, Val *env)
 {
-	return EvalVal(ast, env);
+	return EvalAst(ast, env);
 }
 
 void PRINT (Val *expr, bool readable)

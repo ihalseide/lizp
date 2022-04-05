@@ -162,7 +162,7 @@ int PrintInt(int n, char *out, int len, int readable, int base, bool upper)
 
 // Print a seq/list of numbers as a string.
 // String is escaped and quoted if readable is true.
-int PrintListAsChars(const Seq *p, char *out, int length, int readable)
+int PrintListAsChars(Seq *p, char *out, int length, int readable)
 {
 	// Validate inputs
 	if (!out || length <= 0)
@@ -229,20 +229,21 @@ int PrintListAsChars(const Seq *p, char *out, int length, int readable)
 int PrintSeq(Seq *list, char *out, int length, int readable)
 {
 	// Validate arguments
-	if (!list || !out || (length <= 0))
+	if (!out || (length <= 0))
 	{
 		return 0;
 	}
 	char *view = out;
+	const int seqLen   = SeqLength(list);
 	// Print opening '['
 	view += PrintChar('[', view, length);
 	// Print 1st without a space
-	if (SeqLength(list) && view < (out+length))
+	if (seqLen && view < (out+length))
 	{
 		view += PrintVal(SeqGet(list, 0), view, length-(view-out), readable);
 	}
 	// Print list contents
-	for (int i = 1; i < SeqLength(list) && view < (out+length); i++)
+	for (int i = 1; i < seqLen && view < (out+length); i++)
 	{
 		view += PrintChar(' ', view, length-(view-out));
 		view += PrintVal(SeqGet(list, i), view, length-(view-out), readable);
