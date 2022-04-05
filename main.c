@@ -12,7 +12,7 @@
 int main (int argc, char **argv)
 {
 	LizpTest();
-	printf("tests complete\n");
+	fprintf(stderr, "Tests complete.\n");
 	// REPL
 	PrinterSetBase(10);
 	char buffer[2 * 1024];
@@ -20,8 +20,10 @@ int main (int argc, char **argv)
 	{
 		printf("LIZP> ");
 		if(!fgets(buffer, sizeof(buffer), stdin))
+		{
+			putchar('\n');
 			break;
-
+		}
 		rep(buffer, strlen(buffer), NULL);
 	}
 	return 0;
