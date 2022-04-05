@@ -1,12 +1,76 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdbool.h>
+#include <setjmp.h>
 
 #include "lizp.h"
 #include "sequence.h"
 #include "reader.h"
 #include "eval.h"
 #include "printer.h"
+
+static jmp_buf jbLizp;
+
+_Noreturn void LizpError(int val)
+{
+	longjmp(jbLizp, val);
+}
+
+static void LizpPrintMessage(int val)
+{
+	const char *msg;
+	bool isError = true;
+	switch (val)
+	{
+		case LE_INVALID_INT:
+			msg = "invalid integer value";
+			break;
+		case LE_INVALID_INT_OVERFLOW:
+			msg = "integer overflow";
+			break;
+		case LE_INVALID_INT_DIGIT:
+			msg = "invalid digit for base";
+			break;
+		case LE_LIST_UNFINISHED:
+			msg = "unexpected end of string while reading list";
+			break;
+		case LE_BRACKET_MISMATCH:
+			msg = "unmatched ']'";
+			break;
+		case LE_UNKNOWN_FUNCTION:
+			msg = "unknown function number";
+			break;
+		case LE_APPLY_NOT_FUNCTION:
+			msg = "first item in list is not a function number";
+			break;
+		case LE_INVALID_VAL:
+			msg = "invalid lizp value";
+			break;
+		case LE_INVALID_INT_BASE:
+			msg = "invalid base when printing integer";
+			break;
+		case LE_NO_FUNCTION:
+			msg = "undefined function";
+			break;
+		case LE_UNKNOWN_SYM:
+			msg = "undefined symbol";
+			break;
+		default:
+			msg = "(unknown error type)";
+			break;
+	}
+	if (msg)
+	{
+		if (isError)
+		{
+			fprintf(stderr, "error: %s\n", msg);
+		}
+		else
+		{
+			fprintf(stderr, "%s\n", msg);
+		}
+	}
+}
 
 // Does: Read a form from the stream
 // Returns: the form, which may be NULL
@@ -32,7 +96,7 @@ Val *READ (const char *start, int length)
 	}
 }
 
-Val *EVAL (Val *ast, Val *env)
+Val *EVAL (Val *ast, Seq **env)
 {
 	return EvalAst(ast, env);
 }
@@ -45,11 +109,22 @@ void PRINT (Val *expr, bool readable)
 }
 
 // Do one read, eval, and print cycle on a string.
-void rep (const char *start, int length, Val *env)
+void rep (const char *start, int length, Seq **env)
 {
-	Val *a = READ(start, length);
-	Val *b = EVAL(a, env);
-	PRINT(b, 1);
+	int val = setjmp(jbLizp);
+	if (!val)
+	{
+		Val *a = READ(start, length);
+		Val *b = EVAL(a, env);
+		if (b)
+		{
+			PRINT(b, 1);
+		}
+	}
+	else
+	{
+		LizpPrintMessage(val);
+	}
 }
 
 void LizpTest(void)

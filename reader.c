@@ -3,11 +3,11 @@
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdio.h>
 
 #include "reader.h"
 #include "sequence.h"
 #include "value.h"
+#include "lizp.h"
 
 bool CharIsSpace(char c)
 {
@@ -104,23 +104,12 @@ int ReadInt(const char *start, int length, int *valOut)
 			break;
 		case '+':
 			// Binary
-			if (neg)
-			{
-				// Cannot have negative base-2 numbers
-				fprintf(stderr, "ReadInt: base-2 numbers cannot be negative\n");
-				if (valOut)
-				{
-					*valOut = 0;
-				}
-				return 0;
-			}
-			else
-			{
-				base = 2;
-				view++;
-			}
+			base = 2;
+			view++;
 			break;
 		default:
+			// Default is base 36.
+			// There is no sigil, so view does not need to be incremented
 			if (isalnum(*view))
 			{
 				base = 36;
@@ -128,12 +117,7 @@ int ReadInt(const char *start, int length, int *valOut)
 			else
 			{
 				// Invalid beginning of integer
-				printf("ReadInt: invalid beginning of integer\n");
-				if (valOut)
-				{
-					*valOut = 0;
-				}
-				return 0;
+				LizpError(LE_INVALID_INT);
 			}
 			break;
 	}
@@ -154,15 +138,13 @@ int ReadInt(const char *start, int length, int *valOut)
 				if (n < 0)
 				{
 					// There was an overflow
-					int intLen = view - start;
-					fprintf(stderr, "ReadInt: overflow while parsing integer starting with \"%.*s\"",
-							intLen, start);
+					LizpError(LE_INVALID_INT_OVERFLOW);
 				}
 			}
 			else
 			{
 				// Invalid digit for base
-				fprintf(stderr, "ReadInt: invalid digit '%c' for base %d\n", *view, base);
+				LizpError(LE_INVALID_INT_DIGIT);
 				if (valOut)
 				{
 					*valOut = 0;
@@ -184,7 +166,7 @@ int ReadInt(const char *start, int length, int *valOut)
 	if (view == viewDigits)
 	{
 		// No valid digits were read after the sigils
-		fprintf(stderr, "ReadInt: no valid digits were read after the sigil(s)\n");
+		LizpError(LE_INVALID_INT);
 		if (valOut)
 		{
 			*valOut = 0;
@@ -249,7 +231,7 @@ int ReadSeq(const char *start, int length, Seq **toList)
 	else
 	{
 		// Reading error
-		fprintf(stderr, "error reading list: unexpected end of input\n");
+		LizpError(LE_LIST_UNFINISHED);
 		return 0;
 	}
 }
@@ -274,7 +256,7 @@ int ReadVal(const char *start, int length, Val **out)
 				break;
 			case ']':
 				// Unmatched list
-				fprintf(stderr, "error unmatched closing ']'\n");
+				LizpError(LE_BRACKET_MISMATCH);
 				*out = NULL;
 				break;
 			case '[':
@@ -345,17 +327,20 @@ static void ReadIntTest(void)
 	assert(ReadInt(s, strlen(s), &n) == 0);
 	assert(n == 0);
 
-	s = "!";
-	assert(ReadInt(s, strlen(s), &n) == 0);
-	assert(n == 0);
+	// error
+	//s = "!";
+	//assert(ReadInt(s, strlen(s), &n) == 0);
+	//assert(n == 0);
 
-	s = "-";
-	assert(ReadInt(s, strlen(s), &n) == 0);
-	assert(n == 0);
+	// error
+	//s = "-";
+	//assert(ReadInt(s, strlen(s), &n) == 0);
+	//assert(n == 0);
 
-	s = "+";
-	assert(ReadInt(s, strlen(s), &n) == 0);
-	assert(n == 0);
+	// error
+	//s = "+";
+	//assert(ReadInt(s, strlen(s), &n) == 0);
+	//assert(n == 0);
 
 	s = "0]";
 	assert(ReadInt(s, strlen(s), &n) == 1);
@@ -421,11 +406,6 @@ static void ReadIntTest(void)
 	s = "+1001";
 	assert(ReadInt(s, strlen(s), &n) == 5);
 	assert(n == 9);
-
-	// This is a failure condition
-	s = "-+1001";
-	assert(ReadInt(s, strlen(s), &n) == 0);
-	assert(n == 0);
 }
 
 static void ReadSeqTest(void)

@@ -22,8 +22,7 @@ bool SeqIsFull(Seq *p);               // Predicate function for if a Seq is full
 
 int SeqLength(const Seq *p);          // Get length of p
 
-void SeqAppend(Seq **p, void *item);  // Add item to p and grow the capacity if needed
-void SeqGrow(Seq *p);                 // Increase the capacity of p
-void SeqTrim(Seq *p);                 // Reduce the capacity of p to it's length
+void SeqPush(Seq **p, void *item);    // Add item to front of list
+void SeqAppend(Seq **p, void *item);  // Add item to end of list
 
 #endif /* __SEQUENCE_H */

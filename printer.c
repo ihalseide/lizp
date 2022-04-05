@@ -3,6 +3,7 @@
 #include <stdbool.h>
 
 #include "printer.h"
+#include "lizp.h"
 
 static int printNumBase = 10;
 static bool printNumUpper = false;
@@ -144,7 +145,7 @@ int PrintInt(int n, char *out, int len, int readable, int base, bool upper)
 			case 36:
 				break;
 			default:
-				assert(0 && "not implemented");
+				LizpError(LE_INVALID_INT_BASE);
 		}
 	}
 
@@ -259,9 +260,10 @@ int PrintVal(Val *p, char *out, int length, int readable)
 {
 	// Validate arguments
 	if (length <= 0)
+	{
 		return 0;
-
-	if (p)
+	}
+	else if (p)
 	{
 		switch (p->kind)
 		{

@@ -103,8 +103,15 @@ bool SeqIsEmpty(Seq *p)
 	return !p;
 }
 
+void SeqPush(Seq **p, void *item)
+{
+	assert(p);
+	*p = SeqInit(item, *p);
+}
+
 void SeqAppend(Seq **p, void *item)
 {
+	assert(p);
 	Seq *newCell = SeqInit(item, NULL);
 	assert(newCell);
 	if (*p)

@@ -1,8 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <assert.h>
 #include <string.h>
-#include <setjmp.h>
 
 #include "reader.h"
 #include "printer.h"
@@ -15,6 +13,7 @@ int main (int argc, char **argv)
 	fprintf(stderr, "Tests complete.\n");
 	// REPL
 	PrinterSetBase(10);
+	Seq *env = NULL;
 	char buffer[2 * 1024];
 	while (1)
 	{
@@ -24,7 +23,7 @@ int main (int argc, char **argv)
 			putchar('\n');
 			break;
 		}
-		rep(buffer, strlen(buffer), NULL);
+		rep(buffer, strlen(buffer), &env);
 	}
 	return 0;
 }

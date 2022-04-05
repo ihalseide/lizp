@@ -2,6 +2,7 @@
 #define _EVAL_H
 
 #include "value.h"
+#include "sequence.h"
 
 typedef struct Func
 {
@@ -9,6 +10,6 @@ typedef struct Func
 	int numParams;  // number of parameters
 } Func;
 
-Val *EvalAst(Val *ast, Val *env);
+Val *EvalAst(Val *ast, Seq **env);
 
 #endif /* _EVAL_H */
