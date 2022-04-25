@@ -46,6 +46,33 @@ static Val *EvalApply(Seq *seq, Seq **env)
 	int numArgs = SeqLength(seq) - 1;
 	switch (nameBase36)
 	{
+        case 42517598 /* pbase */:
+            // Print in base
+            // [pbase base expr]
+            if (numArgs == 2)
+            {
+                int prevBase = PrinterGetBase();
+                PrinterSetBase(((Val*)SeqGet(seq, 1))->integer);
+                PRINT((Val*)SeqGet(seq, 2), 1);
+                PrinterSetBase(prevBase);
+                return NULL;
+            }
+            break;
+        case 1530633558 /* pbaseu */:
+            // Print in base, uppercase
+            // [pbaseu base expr]
+            if (numArgs == 2)
+            {
+                int prevBase = PrinterGetBase();
+                int prevU = PrinterGetUpper();
+                PrinterSetBase(((Val*)SeqGet(seq, 1))->integer);
+                PrinterSetUpper(1);
+                PRINT((Val*)SeqGet(seq, 2), 1);
+                PrinterSetBase(prevBase);
+                PrinterSetUpper(prevU);
+                return NULL;
+            }
+            break;
 		case 13441 /* add */:
 			if (numArgs == 2)
 			{

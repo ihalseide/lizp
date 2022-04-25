@@ -131,7 +131,7 @@ int PrintInt(int n, char *out, int len, int readable, int base, bool upper)
 		switch (base)
 		{
 			case 2:
-				buf[sz - i - 1] = '+';
+				buf[sz - i - 1] = '%';
 				i++;
 				break;
 			case 10:
@@ -280,3 +280,4 @@ int PrintVal(Val *p, char *out, int length, int readable)
 		return PrintCStr("(none)", out, length);
 	}
 }
+
