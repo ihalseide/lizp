@@ -21,7 +21,7 @@ bool CharIsSpace(char c)
 		// Don't consider list characters as space
 		return false;
 	}
-	else if (c == '#' || c == '$' || c == '+' || c == '-' || c == '_')
+	else if (c == '#' || c == '$' || c == '%' || c == '-' || c == '_')
 	{
 		// Don't consider integer sigils as space either
 		return false;
@@ -102,7 +102,7 @@ int ReadInt(const char *start, int length, int *valOut)
 			base = 16;
 			view++;
 			break;
-		case '+':
+		case '%':
 			// Binary
 			base = 2;
 			view++;
