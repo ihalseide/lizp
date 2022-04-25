@@ -5,17 +5,30 @@
 
 #include "sequence.h"
 
-struct Seq
-{
-	void *first;
-	Seq *rest;
-};
-
 static Seq *SeqAlloc(void)
 {
 	Seq *new;
 	new = malloc(sizeof(*new));
 	return new;
+}
+
+void SeqFree(Seq *p)
+{
+	if (p)
+	{
+		free(p);
+	}
+}
+
+// Free every Seq node in a sequence
+void SeqFreeAll(Seq *p)
+{
+	while (p)
+	{
+		Seq *q = p->rest;
+		SeqFree(p);
+		p = q;
+	}
 }
 
 Seq *SeqInit(void *first, Seq *rest)
@@ -29,12 +42,10 @@ Seq *SeqInit(void *first, Seq *rest)
 	return new;
 }
 
-void SeqFree(Seq *p)
+// In-place
+void SeqReverse(Seq **p)
 {
-	if (p)
-	{
-		free(p);
-	}
+    assert(0 && "not implemented");
 }
 
 int SeqLength(const Seq *p)
@@ -51,13 +62,17 @@ int SeqLength(const Seq *p)
 // Get N'th first slot
 void **SeqNth(Seq *p, int n)
 {
+	if (!p)
+	{
+		return NULL;
+	}
 	while (n > 0)
 	{
+		p = p->rest;
 		if (!p)
 		{
 			return NULL;
 		}
-		p = p->rest;
 		n--;
 	}
 	return &p->first;
@@ -65,21 +80,19 @@ void **SeqNth(Seq *p, int n)
 
 void SeqSet(Seq *p, int i, void *e)
 {
-	if (i >= 0 && i < SeqLength(p))
+	void **slot = SeqNth(p, i);
+	if (slot)
 	{
-		void **slot = SeqNth(p, i);
-		if (slot)
-		{
-			*slot = e;
-		}
+		*slot = e;
 	}
 }
 
 void *SeqGet(Seq *p, int i)
 {
-	if (i >= 0 && i < SeqLength(p))
+	void **slot = SeqNth(p, i);
+	if (slot)
 	{
-		return *SeqNth(p, i);
+		return *slot;
 	}
 	return NULL;
 }
@@ -91,14 +104,18 @@ Seq *SeqLast(Seq *p)
 	{
 		return NULL;
 	}
-	while(p->rest)
+	while (p->rest)
 	{
 		p = p->rest;
+		if (!p)
+		{
+			return NULL;
+		}
 	}
 	return p;
 }
 
-bool SeqIsEmpty(Seq *p)
+int SeqIsEmpty(Seq *p)
 {
 	return !p;
 }
@@ -148,47 +165,5 @@ Seq *SeqNext(Seq *p)
 	{
 		return NULL;
 	}
-}
-
-void SeqAppendTest(void)
-{
-	Seq *s;
-	void *p = SeqAppendTest;
-
-	// Append to empty once
-	s = NULL;
-	SeqAppend(&s, p);
-	assert(s);
-	assert(SeqLength(s) == 1);
-	assert(SeqGet(s, 0) == p);
-	SeqFree(s);
-
-	// Append to empty twice
-	s = NULL;
-	SeqAppend(&s, p);
-	assert(s);
-	assert(SeqLength(s) == 1);
-	assert(SeqGet(s, 0) == p);
-	SeqAppend(&s, p);
-	assert(s);
-	assert(SeqLength(s) == 2);
-	assert(SeqGet(s, 0) == p);
-	assert(SeqGet(s, 1) == p);
-	SeqFree(s);
-
-	// Append
-	s = SeqInit(NULL, NULL);
-	assert(s);
-	SeqAppend(&s, p);
-	assert(s);
-	assert(SeqLength(s) == 2);
-	assert(SeqGet(s, 0) == NULL);
-	assert(SeqGet(s, 1) == p);
-	SeqFree(s);
-}
-
-void SequenceTest(void)
-{
-	SeqAppendTest();
 }
 

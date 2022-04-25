@@ -9,7 +9,6 @@
 
 int main (int argc, char **argv)
 {
-	LizpTest();
 	fprintf(stderr, "Tests complete.\n");
 	// REPL
 	PrinterSetBase(10);

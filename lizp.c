@@ -127,10 +127,3 @@ void rep (const char *start, int length, Seq **env)
 	}
 }
 
-void LizpTest(void)
-{
-	SequenceTest();
-	ReaderTest();
-	PrinterTest();
-}
-

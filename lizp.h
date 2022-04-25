@@ -1,7 +1,6 @@
 #ifndef _LIZP_H
 
 #include "value.h"
-#include <stdbool.h>
 
 enum
 {
@@ -18,14 +17,11 @@ enum
 	LE_UNKNOWN_SYM,
 };
 
-void LizpTest(void);
-
+_Noreturn void LizpError(int val);
 Val *READ(const char *start, int length);
 Val *EVAL(Val *ast, Seq **env);
 void PRINT(Val *expr, bool readable);
-
 void rep(const char *start, int length, Seq **env);
-_Noreturn void LizpError(int val);
 
 #endif /* _LIZP_H */
 
