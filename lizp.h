@@ -2,7 +2,7 @@
 
 #include "value.h"
 
-enum
+enum LizpErrorEnum
 {
 	LE_INVALID_INT = 1,
 	LE_INVALID_INT_OVERFLOW,
