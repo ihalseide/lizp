@@ -85,7 +85,7 @@ static void ReadIntTest(void)
 	assert(n == 0xB3);
 
 	// 1011 0011 == $B3
-	s = "+1011_0011 ";
+	s = "%1011_0011 ";
 	assert(ReadInt(s, strlen(s), &n) == 10);
 	assert(n == 0xB3);
 
@@ -109,7 +109,7 @@ static void ReadIntTest(void)
 	assert(ReadInt(s, strlen(s), &n) == 3);
 	assert(n == -9);
 
-	s = "+1001";
+	s = "%1001";
 	assert(ReadInt(s, strlen(s), &n) == 5);
 	assert(n == 9);
 }

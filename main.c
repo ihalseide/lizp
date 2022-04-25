@@ -9,9 +9,9 @@
 
 int main (int argc, char **argv)
 {
-	fprintf(stderr, "Tests complete.\n");
 	// REPL
 	PrinterSetBase(10);
+    PrinterSetUpper(0);
 	Seq *env = NULL;
 	char buffer[2 * 1024];
 	while (1)

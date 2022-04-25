@@ -9,7 +9,7 @@
 #include "eval.h"
 #include "printer.h"
 
-static jmp_buf jbLizp;
+static jmp_buf jbLizp = {0};
 
 _Noreturn void LizpError(int val)
 {
