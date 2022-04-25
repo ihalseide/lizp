@@ -111,11 +111,13 @@ void PRINT (Val *expr, bool readable)
 // Do one read, eval, and print cycle on a string.
 void rep (const char *start, int length, Seq **env)
 {
+    Val *a = NULL, *b = NULL;
+
 	int val = setjmp(jbLizp);
 	if (!val)
 	{
-		Val *a = READ(start, length);
-		Val *b = EVAL(a, env);
+		a = READ(start, length);
+		b = EVAL(a, env);
 		if (b)
 		{
 			PRINT(b, 1);
@@ -123,7 +125,12 @@ void rep (const char *start, int length, Seq **env)
 	}
 	else
 	{
+        // There was an error (jump)
 		LizpPrintMessage(val);
 	}
+
+    // Free the new values
+    if (a) { ValFree(a); }
+    if (b && a != b) { ValFree(b); }
 }
 
