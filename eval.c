@@ -37,7 +37,7 @@ static Val *EvalApply(Seq *seq, Seq **env)
 		return ValMakeSeq(NULL);
 	}
 	Val *fn = (Val*)SeqGet(seq, 0);
-	// First must ve a valid function id number (a base36 name)
+	// First must be a valid function id number (a base36 name)
 	if (!fn || !ValIsInt(fn))
 	{
 		LizpError(LE_APPLY_NOT_FUNCTION);
@@ -46,6 +46,48 @@ static Val *EvalApply(Seq *seq, Seq **env)
 	int numArgs = SeqLength(seq) - 1;
 	switch (nameBase36)
 	{
+        case 43274297 /* print */:
+            if (numArgs == 1)
+            {
+                // [print expr]
+                PRINT((Val*)SeqGet(seq, 1), 1);
+                return NULL;
+            }
+            if (numArgs == 2)
+            {
+                // [print expr readable]
+                PRINT((Val*)SeqGet(seq, 1), ((Val*)SeqGet(seq, 1))->integer);
+                return NULL;
+            }
+            break;
+        case 17364 /* dec */:
+            if (numArgs == 0)
+            {
+                PrinterSetBase(10);
+                return NULL;
+            }
+            break;
+        case 22569 /* hex */:
+            if (numArgs == 0)
+            {
+                PrinterSetBase(16);
+                return NULL;
+            }
+            break;
+        case 14927 /* bin */:
+            if (numArgs == 0)
+            {
+                PrinterSetBase(2);
+                return NULL;
+            }
+            break;
+        case 36 /* 36 */:
+            if (numArgs == 0)
+            {
+                PrinterSetBase(36);
+                return NULL;
+            }
+            break;
         case 42517598 /* pbase */:
             // Print in base
             // [pbase base expr]
