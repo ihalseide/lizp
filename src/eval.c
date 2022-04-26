@@ -30,15 +30,17 @@ static Val *Assoc(Seq *seq, int key)
 }
 
 // Apply function or macro
+// Must not modify/touch/share structure with the original seq
 static Val *EvalApply(Seq *seq, Seq **env)
 {
     if (!seq)
     {
         return ValMakeSeq(NULL);
     }
+
     Val *fn = (Val*)SeqGet(seq, 0);
     // First must be a valid function id number (a base36 name)
-    if (!fn || !ValIsInt(fn))
+    if (!ValIsInt(fn))
     {
         LizpError(LE_APPLY_NOT_FUNCTION);
     }
@@ -51,65 +53,6 @@ static Val *EvalApply(Seq *seq, Seq **env)
             if (numArgs == 1)
             {
                 PRINT((Val*)SeqGet(seq, 1), 1);
-                return NULL;
-            }
-            break;
-        case 17364:
-            // [dec]
-            if (numArgs == 0)
-            {
-                PrinterSetBase(10);
-                return NULL;
-            }
-            break;
-        case 22569:
-            // [hex]
-            if (numArgs == 0)
-            {
-                PrinterSetBase(16);
-                return NULL;
-            }
-            break;
-        case 14927:
-            // [bin]
-            if (numArgs == 0)
-            {
-                PrinterSetBase(2);
-                return NULL;
-            }
-            break;
-        case 36:
-            // [36]
-            if (numArgs == 0)
-            {
-                PrinterSetBase(36);
-                return NULL;
-            }
-            break;
-        case 42517598:
-            // [pbase base expr]
-            // Print in base
-            if (numArgs == 2)
-            {
-                int prevBase = PrinterGetBase();
-                PrinterSetBase(((Val*)SeqGet(seq, 1))->integer);
-                PRINT((Val*)SeqGet(seq, 2), 1);
-                PrinterSetBase(prevBase);
-                return NULL;
-            }
-            break;
-        case 1530633558:
-            // [pbaseu base expr]
-            // Print in base, uppercase
-            if (numArgs == 2)
-            {
-                int prevBase = PrinterGetBase();
-                int prevU = PrinterGetUpper();
-                PrinterSetBase(((Val*)SeqGet(seq, 1))->integer);
-                PrinterSetUpper(1);
-                PRINT((Val*)SeqGet(seq, 2), 1);
-                PrinterSetBase(prevBase);
-                PrinterSetUpper(prevU);
                 return NULL;
             }
             break;
@@ -176,13 +119,12 @@ static Val *EvalApply(Seq *seq, Seq **env)
             break;
         case 1004141:
             // [list ...]
-            return ValMakeSeq(SeqNext(seq));
+            return ValMakeSeq(SeqCopy(SeqNext(seq)));
         case 45101858:
             // [quote expr]
             if (numArgs == 1)
             {
-                Val *q = SeqGet(seq, 1);
-                return ValCopy(q);
+                return ValCopy(SeqGet(seq, 1));
             }
             break;
         case 27749:
@@ -267,7 +209,7 @@ Val *EvalAst(Val *ast, Seq **env)
     }
     else if (ValIsInt(ast))
     {
-        return ValMakeInt(ast->integer);
+        return ValCopy(ast);
     }
     else if (ValIsSeq(ast))
     {
@@ -275,13 +217,13 @@ Val *EvalAst(Val *ast, Seq **env)
         // NULL Seq evaluates to itself. A.k.a: [] -> []
         if (!seq)
         {
-            return ast;
+            return ValCopy(ast);
         }
         // evSeq = evaluated sequence
         Seq *evSeq;
         if (EvalIsMacro(seq))
         {
-            // Do not evaluate sub trees if macro
+            // Do not evaluate subtrees if macro
             evSeq = seq;
         }
         else
@@ -295,7 +237,10 @@ Val *EvalAst(Val *ast, Seq **env)
             }
         }
         // Apply this sequence
-        return EvalApply(evSeq, env);
+        Val *result = EvalApply(evSeq, env);
+        // Free evaluated value and return
+        ValFreeAll(ValMakeSeq(evSeq));
+        return result;
     }
     else
     {
