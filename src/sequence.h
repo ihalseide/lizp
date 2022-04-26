@@ -24,5 +24,6 @@ void SeqSet(Seq *p, int i, void *e);  // Set the i-th item of p to e
 void SeqPush(Seq **p, void *item);    // Add item to front of list
 void SeqAppend(Seq **p, void *item);  // Add item to end of list
 void SeqReverse(Seq **p);             // Reverse nodes of p in-place (modifies it)
+Seq *SeqCopy(const Seq* p);           // Create a copy of a sequence
 
 #endif /* __SEQUENCE_H */

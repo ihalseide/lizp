@@ -24,6 +24,7 @@ int main (int argc, char **argv)
             break;
         }
         rep(buffer, strlen(buffer), &env);
+        printf("values leaked: %d\n", getCount());
     }
     return 0;
 }

@@ -46,51 +46,49 @@ static Val *EvalApply(Seq *seq, Seq **env)
     int numArgs = SeqLength(seq) - 1;
     switch (nameBase36)
     {
-        case 43274297 /* print */:
+        case 43274297:
+            // [print expr]
             if (numArgs == 1)
             {
-                // [print expr]
                 PRINT((Val*)SeqGet(seq, 1), 1);
                 return NULL;
             }
-            if (numArgs == 2)
-            {
-                // [print expr readable]
-                PRINT((Val*)SeqGet(seq, 1), ((Val*)SeqGet(seq, 1))->integer);
-                return NULL;
-            }
             break;
-        case 17364 /* dec */:
+        case 17364:
+            // [dec]
             if (numArgs == 0)
             {
                 PrinterSetBase(10);
                 return NULL;
             }
             break;
-        case 22569 /* hex */:
+        case 22569:
+            // [hex]
             if (numArgs == 0)
             {
                 PrinterSetBase(16);
                 return NULL;
             }
             break;
-        case 14927 /* bin */:
+        case 14927:
+            // [bin]
             if (numArgs == 0)
             {
                 PrinterSetBase(2);
                 return NULL;
             }
             break;
-        case 36 /* 36 */:
+        case 36:
+            // [36]
             if (numArgs == 0)
             {
                 PrinterSetBase(36);
                 return NULL;
             }
             break;
-        case 42517598 /* pbase */:
-            // Print in base
+        case 42517598:
             // [pbase base expr]
+            // Print in base
             if (numArgs == 2)
             {
                 int prevBase = PrinterGetBase();
@@ -100,9 +98,9 @@ static Val *EvalApply(Seq *seq, Seq **env)
                 return NULL;
             }
             break;
-        case 1530633558 /* pbaseu */:
-            // Print in base, uppercase
+        case 1530633558:
             // [pbaseu base expr]
+            // Print in base, uppercase
             if (numArgs == 2)
             {
                 int prevBase = PrinterGetBase();
@@ -115,28 +113,32 @@ static Val *EvalApply(Seq *seq, Seq **env)
                 return NULL;
             }
             break;
-        case 13441 /* add */:
+        case 13441:
+            // [add x y]
             if (numArgs == 2)
             {
                 return ValMakeInt(((Val*)SeqGet(seq, 1))->integer
                         + ((Val*)SeqGet(seq, 2))->integer);
             }
             break;
-        case 37379 /* sub */:
+        case 37379:
+            // [sub x y]
             if (numArgs == 2)
             {
                 return ValMakeInt(((Val*)SeqGet(seq, 1))->integer
                         - ((Val*)SeqGet(seq, 2))->integer);
             }
             break;
-        case 29613 /* mul */:
+        case 29613:
+            // [mul x y]
             if (numArgs == 2)
             {
                 return ValMakeInt(((Val*)SeqGet(seq, 1))->integer
                         * ((Val*)SeqGet(seq, 2))->integer);
             }
             break;
-        case 17527 /* div */:
+        case 17527:
+            // [div x y]
             if (numArgs == 2)
             {
                 int x = ((Val*)SeqGet(seq, 1))->integer;
@@ -148,14 +150,16 @@ static Val *EvalApply(Seq *seq, Seq **env)
                 return ValMakeInt(x / y);
             }
             break;
-        case 30328 /* neg */:
+        case 30328:
+            // [neg x]
             // Negate number
             if (numArgs == 1)
             {
                 return ValMakeInt(-((Val*)SeqGet(seq, 1))->integer);
             }
             break;
-        case 1086854 /* name */:
+        case 1086854:
+            // [name x]
             // Print number as name
             if (numArgs == 1)
             {
@@ -170,31 +174,33 @@ static Val *EvalApply(Seq *seq, Seq **env)
                 }
             }
             break;
-        case 1004141 /* list */:
+        case 1004141:
+            // [list ...]
             return ValMakeSeq(SeqNext(seq));
-            break;
-        case 45101858 /* quote (macro) */:
-            return SeqGet(seq, 1);
-            break;
-        case 27749 /* let (macro) */:
-            if (numArgs == 2)
+        case 45101858:
+            // [quote expr]
+            if (numArgs == 1)
             {
-                Val *arg1 = (Val*)SeqGet(seq, 1);
-                Val *arg2 = EvalAst((Val*)SeqGet(seq, 2), env);
-                Seq *p = SeqInit(arg1, SeqInit(arg2, NULL));
-                Val *pair = ValMakeSeq(p);
-                SeqPush(env, pair);
-                return arg2;
+                Val *q = SeqGet(seq, 1);
+                return ValCopy(q);
             }
             break;
-        case 21269 /* get (macro) */:
+        case 27749:
+            // [let k v]
+            if (numArgs == 2)
+            {
+                assert(0 && "not implemented");
+            }
+            break;
+        case 21269:
+            // [get k]
             if (numArgs == 1)
             {
                 Val *arg1 = (Val*)SeqGet(seq, 1);
                 Val *val1 = Assoc(*env, arg1->integer);
                 if (val1)
                 {
-                    return val1;
+                    return ValCopy(val1);
                 }
                 else
                 {
@@ -202,7 +208,8 @@ static Val *EvalApply(Seq *seq, Seq **env)
                 }
             }
             break;
-        case 492 /* do (macro) */:
+        case 492:
+            // [do ...]
             if (numArgs)
             {
                 Seq *pAst = seq;
@@ -211,6 +218,10 @@ static Val *EvalApply(Seq *seq, Seq **env)
                 {
                     v = EvalAst(SeqVal(pAst), env);
                     pAst = SeqNext(pAst);
+                    if (pAst)
+                    {
+                        ValFreeAll(v);
+                    }
                 }
                 return v;
             }
@@ -237,10 +248,10 @@ bool EvalIsMacro(Seq *seq)
     }
     switch (first->integer)
     {
-        case 27749 /* let */:
-        case 21269 /* get */:
-        case 45101858 /* quote */:
-        case 492 /* do */:
+        case 492:      // do
+        case 21269:    // get
+        case 27749:    // let
+        case 45101858: // quote
             return true;
         default:
             return false;
@@ -266,6 +277,7 @@ Val *EvalAst(Val *ast, Seq **env)
         {
             return ast;
         }
+        // evSeq = evaluated sequence
         Seq *evSeq;
         if (EvalIsMacro(seq))
         {

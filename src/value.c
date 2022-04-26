@@ -1,12 +1,19 @@
+#include <assert.h>
 #include <stdlib.h>
-
 #include "value.h"
 #include "sequence.h"
+
+static int vcount = 0;
+int getCount(void)
+{
+    return vcount;
+}
 
 Val *ValAlloc(void)
 {
     Val *new;
     new = malloc(sizeof(*new));
+    vcount++;
     return new;
 }
 
@@ -15,7 +22,25 @@ void ValFree(Val *p)
     if (p)
     {
         free(p);
+        vcount--;
     }
+}
+
+void ValFreeAll(Val *p)
+{
+    if (ValIsSeq(p))
+    {
+        // Free the values in the sequence
+        Seq *s = p->sequence;
+        while (s)
+        {
+            ValFree((Val*)s->first);
+            s = s->rest;
+        }
+        // Free the sequence nodes
+        SeqFreeAll(s);
+    }
+    ValFree(p);
 }
 
 // A NULL Seq is considered an empty sequence,
@@ -50,5 +75,29 @@ Val *ValMakeSeq(Seq *s)
         p->sequence = s;
     }
     return p;
+}
+
+// New copy, with no structure-sharing
+Val *ValCopy(const Val *p)
+{
+    switch (p->kind)
+    {
+        case CK_INT:
+            return ValMakeInt(p->integer);
+        case CK_SEQ:
+            {
+                Seq *new = NULL;
+                while (p && p->sequence)
+                {
+                    assert(ValIsSeq(p));
+                    SeqAppend(&new, ValCopy((Val*)p->sequence->first));
+                    p = (const Val*)p->sequence->rest;
+                }
+                return ValMakeSeq(new);
+            }
+        default:
+            assert(0);
+            break;
+    }
 }
 

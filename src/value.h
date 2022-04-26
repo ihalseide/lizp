@@ -22,11 +22,15 @@ struct Val
     };
 };
 
+int getCount(void);
+
 Val *ValAlloc(void);
+void ValFree(Val *p);
+void ValFreeAll(Val *p);
 Val *ValMakeInt(int n);
 Val *ValMakeSeq(Seq *s);
+Val *ValCopy(const Val *p);
 int ValIsInt(const Val *p);
 int ValIsSeq(const Val *p);
-void ValFree(Val *p);
 
 #endif /* __VALUE_H */

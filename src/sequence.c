@@ -167,3 +167,14 @@ Seq *SeqNext(Seq *p)
     }
 }
 
+Seq *SeqCopy(const Seq* p)
+{
+    Seq *copy = NULL;
+    while (p)
+    {
+        SeqAppend(&copy, p->first);
+        p = p->rest;
+    }
+    return copy;
+}
+
