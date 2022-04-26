@@ -1,72 +1,35 @@
 # Lizp
 
+![Terminal window screenshot](./screenshot.png)
+
 This is my own (work-in-progress) implementation of a Lisp programming language. My inspiration is the "Make a Lisp" project at https://github.com/kanaka/mal. Warning: there is no garbage collection.
 
 ## Quick Start
 
-To get right into the REPL you just need Make and a C compiler:
+To get right into the REPL you just need Make and a C compiler. Run this:
 
 ```shell
-make
-./lizp
+make && ./lizp
+```
+
+To test and run, run this:
+
+```shell
+make run
 ```
 
 ## Literal values
 
-The only types in this lisp are integers, symbols, and lists. Strings and functions are a special kind of lists.
+There are only 2 data types: lists, and integers. The reader is not sensitive to letter case (it is case-insensitive).
+Unless the invalid character appears in a number, any invalid characters are ignored.
 
-* Lists are delimited by square brackets: [...], (which are the superior brackets because you don't need to press shift in order to type them)
-* symbol: any character that isn't a quotation mark, apostrophe, or brackets
-* special symbols: nil, #f, and #t
-* "quoted string"
-* positive numbers: 3, 0, 1, 20
+* Lists: are delimited by square brackets: [...]
+(which are the superior brackets because you don't need to press shift in order to type them)
 
-## Special forms
+* Integers: can be written with a sign, and in different bases (default base is base 36)
+  * base 36, no sigil, any alphanumeric combination is legal 
+  * base 10, `#` sigil
+  * base 16, `$` sigil
+  * base 2, `%` sigil
 
-The impemented special forms are:
-
-* [def! symbol expr]
-* [do ...]
-* [fn\* [...] body]
-* [cond condition1 result1 condition2 result2 ... conditionN resultN]
-* [let\* [...] body]
-* [quote expr] === 'expr
-
-## Functions
-
-The built-in functions (defined by C code) are:
-
-* [int? x]
-* [list? x]
-* [empty? x]
-* [string? x]
-* [function? x]
-* [+ n1 n2]
-* [- n1 n2]
-* [/ n1 n2]
-* [< n1 n2]
-* [<= n1 n2]
-* [= x y]
-* [> n1 n2]
-* [>= n1 n2]
-* [\* n1 n2]
-* [concat ...]
-* [count list]
-* [eval x]
-* [list ...]
-* [pr-str ...]
-* [println ...]
-* [prn ...]
-* [read-string string]
-* [slurp file-name]
-* [str ...]
-
-The built-in fuctions (defined by lisp code) are:
-* [not x] -> boolean NOT
-* [or x y] -> x is true OR y is true
-* [and x y] -> x is true AND y is true
-* [some-list? x] -> x is a nonempty list
-* [member? e list] -> whether a list contains e
-* [/= x y] -> x not equal to y
-* [assert form]
-* [neg n] -> negative n
+All integers can include `_` underscores to separate the digits anywhere for readability

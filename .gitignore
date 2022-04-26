@@ -3,6 +3,7 @@
 *.out
 *.gch
 lizp
+test
 
 # Special names
 _*
