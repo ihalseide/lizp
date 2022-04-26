@@ -1,8 +1,8 @@
 # Lizp
 
-This is my own list processing programming language.
-
 ![Terminal window screenshot](./screenshot.png)
+
+This is my own (work-in-progress) implementation of a Lisp programming language. My inspiration is the "Make a Lisp" project at https://github.com/kanaka/mal. Warning: there is no garbage collection.
 
 ## Quick Start
 
@@ -33,5 +33,3 @@ Unless the invalid character appears in a number, any invalid characters are ign
   * base 2, `%` sigil
 
 All integers can include `_` underscores to separate the digits anywhere for readability
-
-
