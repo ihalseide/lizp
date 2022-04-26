@@ -155,12 +155,14 @@ static Val *EvalApply(Seq *seq, Seq **env)
 			if (numArgs == 1)
 			{
 				Val *arg1 = (Val*)SeqGet(seq, 1);
-				int n = arg1->integer;
-				char out[64];
-				int count = PrintInt(n, out, sizeof(out), false, 36, false);
-				out[count] = '\0';
-				printf("%s", out);
-				return NULL;
+                if (arg1->kind == CK_INT)
+                {
+                    char out[64];
+                    int count = PrintInt(arg1->integer, out, sizeof(out), false, 36, false);
+                    out[count] = '\0';
+                    printf("%s", out);
+                    return NULL;
+                }
 			}
 			break;
 		case 1004141 /* list */:
@@ -230,10 +232,10 @@ bool EvalIsMacro(Seq *seq)
 	}
 	switch (first->integer)
 	{
-		case 27749 /* let (macro) */:
-		case 21269 /* get (macro) */:
-		case 45101858 /* quote (macro) */:
-		case 492 /* do (macro) */:
+		case 27749 /* let */:
+		case 21269 /* get */:
+		case 45101858 /* quote */:
+		case 492 /* do */:
 			return true;
 		default:
 			return false;
