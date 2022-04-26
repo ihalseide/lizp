@@ -2,6 +2,8 @@
 
 This is my own list processing programming language.
 
+![Terminal window screenshot](./screenshot.png)
+
 ## Quick Start
 
 To get right into the REPL you just need Make and a C compiler. Run this:
