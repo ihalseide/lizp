@@ -139,8 +139,13 @@ static Val *EvalApply(Seq *seq, Seq **env)
         case 17527 /* div */:
             if (numArgs == 2)
             {
-                return ValMakeInt(((Val*)SeqGet(seq, 1))->integer
-                        / ((Val*)SeqGet(seq, 2))->integer);
+                int x = ((Val*)SeqGet(seq, 1))->integer;
+                int y = ((Val*)SeqGet(seq, 2))->integer;
+                if (y == 0)
+                {
+                    LizpError(LE_DIV_ZERO);
+                }
+                return ValMakeInt(x / y);
             }
             break;
         case 30328 /* neg */:

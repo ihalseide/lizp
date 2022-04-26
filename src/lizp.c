@@ -55,6 +55,9 @@ static void LizpPrintMessage(int val)
         case LE_UNKNOWN_SYM:
             msg = "undefined symbol";
             break;
+        case LE_DIV_ZERO:
+            msg = "division by zero";
+            break;
         default:
             msg = "(unknown error type)";
             break;

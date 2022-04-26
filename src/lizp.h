@@ -15,6 +15,7 @@ enum LizpErrorEnum
     LE_INVALID_INT_BASE,
     LE_NO_FUNCTION,
     LE_UNKNOWN_SYM,
+    LE_DIV_ZERO,
 };
 
 _Noreturn void LizpError(int val);
