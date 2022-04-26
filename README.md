@@ -9,7 +9,13 @@ This is my own list processing programming language.
 To get right into the REPL you just need Make and a C compiler. Run this:
 
 ```shell
-make lizp && ./lizp
+make && ./lizp
+```
+
+To test and run, run this:
+
+```shell
+make run
 ```
 
 ## Literal values
