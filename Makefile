@@ -1,25 +1,34 @@
 CC = clang
 COpts = -std=c99 -g -Wall
+SrcDir = src
+BuildDir = objects
+LizpMain = $(SrcDir)/main.c
+TestMain = $(SrcDir)/test.c
+LizpSrc = lizp.c sequence.c printer.c reader.c value.c eval.c
+TestSrc = lizp.test.c sequence.test.c reader.test.c printer.test.c
+LizpObjs = $(addprefix $(BuildDir)/,$(LizpSrc:.c=.o))
+TestObjs = $(addprefix $(BuildDir)/,$(TestSrc:.c=.o))
+	
+default: test lizp
 
-default: lizp
-
-run: lizp test
+run: test lizp
 	./test && ./lizp
 
-test: test.c lizp.test.o sequence.test.o reader.test.o printer.test.o lizp.o sequence.o printer.o reader.o value.o eval.o
+lizp: $(LizpMain) $(LizpObjs)
 	$(CC) $(COpts) -o $@ $^
 
-lizp: main.c lizp.o sequence.o printer.o reader.o value.o eval.o
+test: $(TestMain) $(LizpObjs) $(TestObjs)
 	$(CC) $(COpts) -o $@ $^
 
-%.o: %.c %.h
-	$(CC) $(COpts) -c $^
+$(BuildDir)/%.o: $(SrcDir)/%.c $(SrcDir)/%.h | $(BuildDir)
+	$(CC) $(COpts) -c -o $@ $<
 
-cleanbin:
-	rm *.o
-	rm *.gch
+$(BuildDir):
+	mkdir -p $@
 
-clean: cleanbin
+clean:
+	rm $(LizpObjs)
+	rm $(TestObjs)
 	rm lizp
 	rm test
 

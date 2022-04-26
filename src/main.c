@@ -1,9 +1,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
 #include "reader.h"
 #include "printer.h"
+#include "value.h"
+#include "eval.h"
 #include "sequence.h"
 #include "lizp.h"
 
