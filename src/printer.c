@@ -73,25 +73,18 @@ int PrintCStr(const char *s, char *out, int len)
 
 char ValueToDigit(int d, bool upper)
 {
-    if (0 <= d && d <= 9)
+    if (0 <= d)
     {
-        return '0' + d;
-    }
-    else if (10 <= d && d <= 35)
-    {
-        if (upper)
+        if (d <= 9)
         {
-            return 'A' + d - 10;
+            return '0' + d;
         }
-        else
+        if (d <= 35)
         {
-            return 'a' + d - 10;
+            return (upper? 'A' : 'a') + d - 10;
         }
     }
-    else
-    {
-        return '?';
-    }
+    return '?';
 }
 
 // TODO: print out full representation of binary numbers
@@ -244,7 +237,7 @@ int PrintSeq(Seq *list, char *out, int length, int readable)
         view += PrintVal(SeqGet(list, 0), view, length-(view-out), readable);
     }
     // Print list contents
-    for (int i = 1; i < seqLen && view < (out+length); i++)
+    for (int i = 1; i < seqLen && view < (out + length); i++)
     {
         view += PrintChar(' ', view, length-(view-out));
         view += PrintVal(SeqGet(list, i), view, length-(view-out), readable);
@@ -259,25 +252,24 @@ int PrintSeq(Seq *list, char *out, int length, int readable)
 int PrintVal(Val *p, char *out, int length, int readable)
 {
     // Validate arguments
-    if (length <= 0)
+    if (length > 0)
     {
-        return 0;
-    }
-    else if (p)
-    {
-        switch (p->kind)
+        if (p)
         {
-            case CK_INT:
-                return PrintInt(p->integer, out, length, readable, printNumBase, printNumUpper);
-            case CK_SEQ:
-                return PrintSeq(p->sequence, out, length, readable);
-            default:
-                assert(0);
+            switch (p->kind)
+            {
+                case CK_INT:
+                    return PrintInt(
+                            p->integer, out, length, readable,
+                            printNumBase, printNumUpper);
+                case CK_SEQ:
+                    return PrintSeq(p->sequence, out, length, readable);
+                default:
+                    assert(0 && "invalid ValKind");
+            }
         }
+        return PrintCStr("(null)", out, length);
     }
-    else
-    {
-        return PrintCStr("(none)", out, length);
-    }
+    return 0;
 }
 
