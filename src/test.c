@@ -7,11 +7,11 @@
 void Test(void)
 {
     printf("SequenceTest\n");
-	SequenceTest();
+    SequenceTest();
     printf("ReaderTest\n");
-	ReaderTest();
+    ReaderTest();
     printf("PrinterTest\n");
-	PrinterTest();
+    PrinterTest();
     printf("LizpTest\n");
     LizpTest();
 }
@@ -19,8 +19,8 @@ void Test(void)
 int main(void)
 {
     printf("Testing...\n");
-	Test();
+    Test();
     printf("Good.\n");
-	return 0;
+    return 0;
 }
 

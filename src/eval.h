@@ -6,8 +6,8 @@
 
 typedef struct Func
 {
-	int nameBase36;  // number that represents its name in base-36
-	int numParams;  // number of parameters
+    int nameBase36;  // number that represents its name in base-36
+    int numParams;  // number of parameters
 } Func;
 
 Val *EvalAst(Val *ast, Seq **env);

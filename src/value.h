@@ -7,19 +7,19 @@
 typedef enum ValKind ValKind;
 enum ValKind
 {
-	CK_INT,
-	CK_SEQ,
+    CK_INT,
+    CK_SEQ,
 };
 
 typedef struct Val Val;
 struct Val
 {
-	ValKind kind;
-	union
-	{
-		int integer;
-		Seq *sequence;
-	};
+    ValKind kind;
+    union
+    {
+        int integer;
+        Seq *sequence;
+    };
 };
 
 Val *ValAlloc(void);

@@ -4,8 +4,8 @@
 typedef struct Seq Seq;
 struct Seq
 {
-	void *first;
-	Seq *rest;
+    void *first;
+    Seq *rest;
 };
 
 Seq *SeqInit(void *val, Seq *rest);   // Allocate and initialize new Seq
