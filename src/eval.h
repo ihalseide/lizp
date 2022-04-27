@@ -10,5 +10,6 @@ typedef struct Func
 } Func;
 
 Val *EvalAst(Val *ast, Val **env);
+void EnvSet(Val **env, Val *key, Val *val);
 
 #endif /* _EVAL_H */

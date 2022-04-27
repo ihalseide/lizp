@@ -25,6 +25,7 @@
 #define IF       663
 #define NOT      30701
 #define LAMBDA   21
+#define BASE     527198
 
 typedef struct Val Val;
 struct Val

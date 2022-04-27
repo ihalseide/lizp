@@ -8,11 +8,18 @@
 #include "eval.h"
 #include "lizp.h"
 
+Val *InitEnvironment(void)
+{
+    Val *env = NULL;
+    EnvSet(&env, ValMakeInt(BASE), ValMakeInt(PrinterGetBase()));
+    return env;
+}
+
 int main (int argc, char **argv)
 {
     PrinterSetBase(10);
     PrinterSetUpper(true);
-    Val *env = NULL;
+    Val *env = InitEnvironment();
     while (1)
     {
         printf("LIZP> ");

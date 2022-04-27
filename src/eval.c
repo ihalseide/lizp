@@ -5,6 +5,20 @@
 #include "lizp.h"
 #include "printer.h"
 
+void EnvSet(Val **env, Val *key, Val *val)
+{
+    if (ValIsInt(key))
+    {
+        Val *pair = ValMakeSeq(key, ValMakeSeq(val, NULL));
+        if (*env)
+        {
+            (*env)->first = ValMakeSeq(pair, (*env)->first);
+            return;
+        }
+        *env = ValMakeSeq(ValMakeSeq(pair, NULL), NULL);
+    }
+}
+
 static void EnvPush(Val **env)
 {
     *env = ValMakeSeq(NULL, *env);
@@ -15,15 +29,6 @@ static void EnvPop(Val **env)
     if (*env)
     {
         *env = (*env)->rest;
-    }
-}
-
-static void EnvLet(Val **env, Val *key, Val *val)
-{
-    if (*env && ValIsInt(key))
-    {
-        Val *pair = ValMakeSeq(key, ValMakeSeq(val, NULL));
-        (*env)->first = ValMakeSeq(pair, (*env)->first);
     }
 }
 
@@ -70,7 +75,7 @@ static Val *Apply(Val *seq, Val **env)
         {
             Val *key = p->first;
             Val *val = q->first;
-            EnvLet(env, key, val);
+            EnvSet(env, key, val);
             p = p->rest;
             q = q->rest;
         }
@@ -205,7 +210,14 @@ static Val *Apply(Val *seq, Val **env)
             // [print expr] readable
             if (numArgs == 1)
             {
+                int base = PrinterGetBase();
+                Val *setBase = EnvGet(env, ValMakeInt(BASE));
+                if (ValIsInt(setBase))
+                {
+                    PrinterSetBase(setBase->integer);
+                }
                 print(args->first, 1);
+                PrinterSetBase(base);
                 return NULL;
             }
             break;
@@ -292,7 +304,7 @@ static Val *Apply(Val *seq, Val **env)
                         }
                         Val *key = p->first;
                         Val *val = EvalAst(p->rest->first, env);
-                        EnvLet(env, key, val);
+                        EnvSet(env, key, val);
                         p = p->rest->rest;
                     }
                     Val *result = EvalAst(args->rest->first, env);
