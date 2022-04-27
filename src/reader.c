@@ -12,22 +12,22 @@ bool CharIsSpace(char c)
 {
     if (!c)
     {
-        // Don't consider NULL char a space!
+        // NULL char is not space
         return false;
     }
-    else if (c == '"')
+    else if (c == '"' || c == '@')
     {
-        // Don't consider string literal quote as space
+        // Reader macros
         return false;
     }
     else if (c == '[' || c == ']')
     {
-        // Don't consider list characters as space
+        // list characters
         return false;
     }
     else if (c == '#' || c == '$' || c == '%' || c == '-' || c == '_')
     {
-        // Don't consider integer sigils as space either
+        // integer sigils
         return false;
     }
     else
@@ -313,8 +313,24 @@ int ReadVal(const char *start, int length, Val **out)
                 // End of input
                 *out = NULL;
                 break;
+            case '@':
+                // Variable getter (reader macro)
+                {
+                    Val *v;
+                    int len = 1 + ReadVal(view+1, start+length-view-1, &v);
+                    if (len)
+                    {
+                        view += len;
+                        *out = ValMakeSeq(ValMakeInt(GET), ValMakeSeq(v, NULL));
+                    }
+                    else
+                    {
+                        *out = NULL;
+                    }
+                }
+                break;
             case '"':
-                // String literal
+                // String literal (reader macro)
                 {
                     Val *s = NULL;
                     int len = ReadString(view, start+length-view, &s);

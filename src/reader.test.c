@@ -188,6 +188,18 @@ static void ReadValTest(void)
     assert(ValSeqLength(v->first) == 1);
     assert(ValIsInt(v->first->first));
     assert(v->first->first->integer == 1);
+
+    // Macro for @x -> [get x]
+    v = NULL;
+    s = "@1";
+    len = ReadVal(s, strlen(s), &v);
+    assert(len == 2);
+    assert(ValIsSeq(v));
+    assert(ValSeqLength(v) == 2);
+    assert(ValIsInt(v->first));
+    assert(v->first->integer == GET);
+    assert(ValIsInt(v->rest->first));
+    assert(v->rest->first->integer == 1);
 }
 
 void ReadStringTest(void)

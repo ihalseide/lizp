@@ -3,22 +3,28 @@
 #include "lizp.h"
 #include "lizp.test.h"
 
-void ListTest(void)
+// Read & eval
+static Val * re(const char *s, int len, Val **env)
+{
+    return EVAL(READ(s, len), env);
+}
+
+static void ListTest(void)
 {
     const char *s;
     Val *env = NULL;
     Val *v = NULL;
 
     s = "[]";
-    v = rep(s, strlen(s), &env);
+    v = re(s, strlen(s), &env);
     assert(v == NULL);
 
     s = "[list]";
-    v = rep(s, strlen(s), &env);
+    v = re(s, strlen(s), &env);
     assert(v == NULL);
 
     s = "[list #1]";
-    v = rep(s, strlen(s), &env);
+    v = re(s, strlen(s), &env);
     assert(v != NULL);
     assert(ValIsSeq(v));
     assert(ValIsInt(v->first));
@@ -26,7 +32,7 @@ void ListTest(void)
     assert(v->rest == NULL);
 
     s = "[list #1 #2]";
-    v = rep(s, strlen(s), &env);
+    v = re(s, strlen(s), &env);
     assert(v != NULL);
     assert(ValIsSeq(v));
     assert(ValIsInt(v->first));

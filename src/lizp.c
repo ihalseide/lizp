@@ -1,13 +1,12 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <setjmp.h>
-
 #include "lizp.h"
 #include "reader.h"
 #include "eval.h"
 #include "printer.h"
 
-static jmp_buf jbLizp = {0};
+jmp_buf jbLizp = {0};
 
 _Noreturn void LizpError(int val)
 {
@@ -98,19 +97,16 @@ void PRINT (Val *expr, int readable)
 }
 
 // Do one read, eval, and print cycle on a string.
-Val *rep (const char *start, int length, Val **env)
+void rep (const char *start, int length, Val **env)
 {
     int val = setjmp(jbLizp);
     if (!val)
     {
-        Val *v = EVAL(READ(start, length), env);
-        PRINT(v, 1);
-        return v;
+        PRINT(EVAL(READ(start, length), env), 1);
     }
     else
     {
         LizpPrintMessage(val);
-        return NULL;
     }
 }
 

@@ -1,5 +1,6 @@
 #ifndef _LIZP_H
 
+#include <setjmp.h>
 #include "value.h"
 
 enum LizpErrorEnum
@@ -23,7 +24,9 @@ _Noreturn void LizpError(int val);
 Val *READ(const char *start, int length);
 Val *EVAL(Val *ast, Val **env);
 void PRINT(Val *expr, int readable);
-Val *rep(const char *start, int length, Val **env);
+void rep(const char *start, int length, Val **env);
+
+extern jmp_buf jbLizp;
 
 #endif /* _LIZP_H */
 
