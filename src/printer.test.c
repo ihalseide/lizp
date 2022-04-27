@@ -55,6 +55,14 @@ void PrintIntTest(void)
     }
     {
         char buffer[10] = {0};
+        x = 0; base = 10; readable = true; upper = true;
+        n = PrintInt(x, buffer, sizeof(buffer), readable, base, upper);
+        assert(n == 2);
+        assert(strncmp(buffer, "#0", n) == 0);
+        assert(buffer[n] == 0);
+    }
+    {
+        char buffer[10] = {0};
         x = 35; base = 36; readable = false; upper = true;
         n = PrintInt(x, buffer, sizeof(buffer), readable, base, upper);
         assert(n == 1);

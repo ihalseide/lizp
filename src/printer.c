@@ -91,13 +91,6 @@ int PrintInt(int n, char *out, int len, int readable, int base, bool upper)
     assert(base > 1);
     assert(out);
 
-    // Zero -> special case
-    if (len >= 0 && n == 0)
-    {
-        *out = '0';
-        return 1;
-    }
-
     char buf[32];
     const int sz = sizeof(buf);
 
@@ -105,14 +98,21 @@ int PrintInt(int n, char *out, int len, int readable, int base, bool upper)
     int u = (n >= 0)? n : -n;
 
     int i;
-    for (i = 0; (u > 0) && (i < len); i++)
+    if (u == 0)
     {
-        assert(i < sz);
-        buf[sz - i - 1] = ValueToDigit(u % base, upper);
-        u /= base;
+        buf[sz - 1] = '0';
+        i = 1;
+    }
+    else
+    {
+        for (i = 0; (u > 0) && (i < len); i++)
+        {
+            assert(i < sz);
+            buf[sz - i - 1] = ValueToDigit(u % base, upper);
+            u /= base;
+        }
     }
 
-    // Loop should run at least once, even for n == 0
     assert(i >= 1);
 
     // Sigil for base
