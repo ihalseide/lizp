@@ -1,3 +1,4 @@
+#include <assert.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <setjmp.h>
@@ -13,63 +14,51 @@ _Noreturn void LizpError(int val)
     longjmp(jbLizp, val);
 }
 
-static void LizpPrintMessage(int val)
+const char *LizpGetMessage(int val)
 {
-    const char *msg;
+    _Static_assert(LE_COUNT == 16, "Handle every lizp error in the switch block");
     switch (val)
     {
         case LE_INVALID_INT:
-            msg = "invalid integer value";
-            break;
+            return "invalid integer value";
         case LE_INVALID_INT_OVERFLOW:
-            msg = "integer overflow";
-            break;
+            return "integer overflow";
         case LE_INVALID_INT_DIGIT:
-            msg = "invalid digit for base";
-            break;
+            return "invalid digit for base";
         case LE_INVALID_INT_BASE:
-            msg = "invalid base when printing integer";
-            break;
+            return "invalid base when printing integer";
         case LE_LIST_UNFINISHED:
-            msg = "unexpected end of string while reading list";
-            break;
+            return "unexpected end of string while reading list";
         case LE_BRACKET_MISMATCH:
-            msg = "mismatched ']' closing bracket";
-            break;
+            return "mismatched ']' closing bracket";
         case LE_UNKNOWN_FUNCTION:
-            msg = "unknown function number";
-            break;
+            return "unknown function number";
         case LE_APPLY_NOT_FUNCTION:
-            msg = "first item in list is not a function number";
-            break;
+            return "first item in list is not a function number";
         case LE_NO_FUNCTION:
-            msg = "invalid arguments for function or macro";
-            break;
+            return "invalid arguments for function or macro";
         case LE_INVALID_VAL:
-            msg = "invalid lizp value";
-            break;
+            return "invalid lizp value";
         case LE_UNKNOWN_SYM:
-            msg = "undefined symbol";
-            break;
+            return "undefined symbol";
         case LE_DIV_ZERO:
-            msg = "division by zero";
-            break;
+            return "division by zero";
         case LE_LET_FORM:
-            msg = "invalid binding list for \"let\"";
-            break;
+            return "invalid binding list for \"let\"";
         case LE_COND_FORM:
-            msg = "invalid condition and consequence list for \"cond\"";
-            break;
+            return "invalid condition and consequence list for \"cond\"";
         case LE_LAMBDA_TOO_MANY_ARGS:
-            msg = "too many arguments passed to lambda function";
-            break;
+            return "too many arguments passed to lambda function";
         case LE_LAMBDA_TOO_FEW_ARGS:
-            msg = "too few arguments passed to lambda function";
-            break;
+            return "too few arguments passed to lambda function";
         default:
-            msg = "(unknown error type)";
-            break;
+            return "(unknown error type)";
     }
+}
+
+static void LizpPrintMessage(int val)
+{
+    const char *msg = LizpGetMessage(val);
     fprintf(stderr, "lizp error: %s\n", msg);
 }
 

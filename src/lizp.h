@@ -1,4 +1,5 @@
 #ifndef _LIZP_H
+#define _LIZP_H
 
 #include <setjmp.h>
 #include "value.h"
@@ -21,9 +22,12 @@ enum LizpErrorEnum
     LE_COND_FORM,
     LE_LAMBDA_TOO_MANY_ARGS,
     LE_LAMBDA_TOO_FEW_ARGS,
+    LE_ENUM_END,
 };
+#define LE_COUNT (LE_ENUM_END - LE_INVALID_INT)
 
 _Noreturn void LizpError(int val);
+const char *LizpGetMessage(int val);
 Val *read(const char *start, int length);
 Val *eval(Val *ast, Val **env);
 void print(Val *expr, int readable);
