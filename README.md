@@ -76,6 +76,10 @@ file src/eval.c):
 * \[list val...] create a list from the values
 * \[print expr] print expression out
 * \[str num...] create a string from numbers
+* \[len list] get the length of a list
+* \[first list] get the first item of a list
+* \[rest list] get the rest of the items in a list from removing the first
+* \[equal a b] returns whether the two values a and b are equal
 * macro \[do expr...] evaluate sub-expressions in order
 * macro \[get key] lookup the value for a given "symbol"
 * macro \[let \[key1 value1 key2 value2 ...] expr] execute expr with keys bound to
