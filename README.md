@@ -2,9 +2,9 @@
 
 ![Terminal window screenshot](./screenshot.png)
 
-This is my own (work-in-progress) implementation of a Lisp programming
-language. My inspiration is the "Make a Lisp" project at
-https://github.com/kanaka/mal. Warning: there is no garbage collection.
+This is my own (work-in-progress) implementation of a Lisp programming language.
+My inspiration is the "Make a Lisp" project at https://github.com/kanaka/mal.
+Warning: there is no garbage collection.
 
 ## Quick Start
 
@@ -24,14 +24,13 @@ make run
 
 There are only 2 data types: lists, and integers. The reader always reads in
 base 36 by default (it can be changed per-number with sigils), so that letters
-and numbers can be used for names. In the end, every value is either a list or
-a number. The reader is not sensitive to letter case (it is case-insensitive).
+and numbers can be used for names. In the end, every value is either a list or a
+number. The reader is not sensitive to letter case (it is case-insensitive).
 Unless the invalid character appears in a number, any invalid characters are
 ignored.
 
-* Lists: are delimited by square brackets: [...]
-(which are the superior brackets because you don't need to press shift in order
-to type them)
+* Lists: are delimited by square brackets: [...] (which are the superior
+  brackets because you don't need to press shift in order to type them)
 
 * Integers: can be written with a sign, and in different bases (default base is
   base 36)
@@ -40,7 +39,8 @@ to type them)
   * base 16, `$` sigil
   * base 2, `%` sigil
 
-All integers can include `_` underscores to separate the digits anywhere for readability
+All integers can include `_` underscores to separate the digits anywhere for
+readability
 
 ## Evaluation
 
@@ -53,27 +53,27 @@ evaluated versions of their arguments lists. The arguments in a function call
 are evaluated from left to right, while macros make no such guarantee (if the
 arguments are even evaluated at all).
 
+As expressions are first being read from a string, the "reader macros" execute.
+There are only 2 reader macros: string literals and the "at" sign for variable
+getting.
+* "..." = [str numbers...]
+* @x = [get x]
+
 Functions may be overloaded due to how they are programmed in the C code. This
 is a feature. 
 
-This is the alphabetical list of current functions and macros (defined in
-the file src/eval.c):
-* [36] switch printer base to base 36
+This is the alphabetical list of current functions and macros (defined in the
+file src/eval.c):
 * [add x y]
-* [bin] switch printer base to base 2, binary
-* [dec] switch printer base to base 10, decimal
-* [div x y]
-* [hex] switch printer base to base 16, hexadecimal
-* [list ...] create a list from the arguments
 * [mul x y] multiply integer x by integer y
-* [name x] print out an integer in base 36
-* [neg x] negate integer x
-* [pbase base expr] print expression with given base
-* [pbaseu base expr] print expression with given base, using uppercase
-* [print expr] print expression out
 * [sub x y] subtract y from x
+* [div x y]
+* [neg x] negate integer x
+* [list ...] create a list from the arguments
+* [print expr] print expression out
 * macro [do ...] evaluate sub-expressions in order
-* macro [get k] lookup the value for a given "symbol"
-* macro [let k v] define k to have the value of v when calling "get" (THIS WILL CHANGE soon)
+* macro [get key] lookup the value for a given "symbol"
+* macro [let [key1 value1...] expr] execute expr with the keys bound with the
+  values
 * macro [quote expr] return the expression without evaluating it
 
