@@ -32,9 +32,11 @@ ignored.
 * Lists: are delimited by square brackets: \[...] (which are the superior
   brackets because you don't need to press shift in order to type them)
  
-* Strings: strings are just lists with special elements. A string is just a list
-  of the form \[\[str] num...]. The reader handles double quotes specially so
-  that a string like "cat" is equivalent to \[\[str] 99 97 116]
+* Strings: are delimited by double quotes: "string". Strings are
+  just lists with special elements. A string is just a list of the
+  form \[\[str] num...]. The reader handles double quotes
+  specially so that a string like "cat" is equivalent to \[\[str]
+  99 97 116]
 
 * Integers: can be written with a sign, and in different bases (default base is
   base 36)
@@ -68,18 +70,22 @@ is a feature.
 
 This is the alphabetical list of current functions and macros (defined in the
 file src/eval.c):
-* \[add x y]
-* \[mul x y] multiply integer x by integer y
+* \[add x y] add x and y
+* \[mul x y] multiply x by y
 * \[sub x y] subtract y from x
-* \[div x y]
+* \[div x y] divide x by y
 * \[neg x] negate integer x
-* \[list val...] create a list from the values
+* \[list (val)...] create a list from the values
 * \[print expr] print expression out
-* \[str num...] create a string from numbers
+* \[str (num)...] create a string from numbers
 * \[len list] get the length of a list
 * \[first list] get the first item of a list
 * \[rest list] get the rest of the items in a list from removing the first
 * \[equal a b] returns whether the two values a and b are equal
+* \[not a] returns the boolean compliment of a as 0 or 1
+* macro \[l [(arg)...] expr] create lambda expression (function)
+* macro \[if a b (c)] a=condition, b=consequent, c=alternative, c is optional
+* macro \[cond (a b)...] a=condition b=consequent, returns [] when no condition is true
 * macro \[do expr...] evaluate sub-expressions in order
 * macro \[get key] lookup the value for a given "symbol"
 * macro \[let \[key1 value1 key2 value2 ...] expr] execute expr with keys bound to
