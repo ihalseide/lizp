@@ -17,6 +17,10 @@
 #define GET      21269
 #define DO       492
 #define STR      37359
+#define LEN      27743
+#define FIRST    26070077
+#define REST     1278893
+#define EQUAL    24766941
 
 typedef struct Val Val;
 struct Val
@@ -37,6 +41,7 @@ Val *ValCopy(Val *p);
 bool ValIsInt(Val *p);
 bool ValIsSeq(Val *p);
 bool ValIsStr(Val *p);
+bool ValEqual(Val *x, Val *y);
 int ValSeqLength(Val *p);
 
 #endif /* __VALUE_H */

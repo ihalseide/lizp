@@ -69,6 +69,38 @@ static Val *Apply(Val *seq, Val **env)
     Val *args = seq->rest;
     switch (nameBase36)
     {
+        case LEN:
+            if (numArgs == 1 && ValIsSeq(args->first))
+            {
+                return ValMakeInt(ValSeqLength(args->first));
+            }
+            break;
+        case FIRST:
+            if (numArgs == 1 && ValIsSeq(args->first))
+            {
+                if (args->first)
+                {
+                    return args->first->first;
+                }
+                return NULL;
+            }
+            break;
+        case REST:
+            if (numArgs == 1 && ValIsSeq(args->first))
+            {
+                if (args->first)
+                {
+                    return args->first->rest;
+                }
+                return NULL;
+            }
+            break;
+        case EQUAL:
+            if (numArgs == 2)
+            {
+                return ValMakeInt(ValEqual(args->first, args->rest->first));
+            }
+            break;
         case PRINT:
             // [print expr] readable
             if (numArgs == 1)

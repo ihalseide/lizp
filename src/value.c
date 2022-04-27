@@ -96,3 +96,30 @@ Val *ValCopy(Val *p)
     return NULL;
 }
 
+bool ValEqual(Val *x, Val *y)
+{
+    if (x == NULL || y == NULL)
+    {
+        return x == y;
+    }
+    if (ValIsInt(x))
+    {
+        return ValIsInt(y) && x->integer == y->integer;
+    }
+    if (ValIsSeq(x))
+    {
+        Val *px = x, *py = y;
+        while (px && ValIsSeq(px) && py && ValIsSeq(py))
+        {
+            if (!ValEqual(px->first, py->first))
+            {
+                break;
+            }
+            px = px->rest;
+            py = py->rest;
+        }
+        return px == NULL && py == NULL;
+    }
+    return false;
+}
+

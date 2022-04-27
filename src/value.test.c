@@ -149,6 +149,14 @@ void ValIsStrTest(void)
     assert(ValIsStr(x));
 }
 
+void ValEqualTest(void)
+{
+    assert(ValEqual(NULL, NULL));
+    assert(ValEqual(ValMakeInt(3), ValMakeInt(3)));
+    assert(!ValEqual(ValMakeInt(1), ValMakeInt(3)));
+    assert(!ValEqual(NULL, ValMakeInt(3)));
+}
+
 void ValueTest(void)
 {
     ValIsIntTest();
@@ -156,6 +164,7 @@ void ValueTest(void)
     ValMakeIntTest();
     ValMakeSeqTest();
     ValIsStrTest();
+    ValEqualTest();
     ValCopyTest();
 }
 
