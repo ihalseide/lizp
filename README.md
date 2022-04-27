@@ -1,10 +1,10 @@
 # Lizp
 
-![Terminal window screenshot](./screenshot.png)
-
 This is my own (work-in-progress) implementation of a Lisp programming language.
 My inspiration is the "Make a Lisp" project at https://github.com/kanaka/mal.
 Warning: there is no garbage collection.
+
+![Terminal window screenshot](./screenshot.png)
 
 ## Quick Start
 
