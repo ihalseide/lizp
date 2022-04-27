@@ -4,8 +4,8 @@ SrcDir = src
 BuildDir = objects
 LizpMain = $(SrcDir)/main.c
 TestMain = $(SrcDir)/test.c
-LizpSrc = lizp.c sequence.c printer.c reader.c value.c eval.c
-TestSrc = lizp.test.c sequence.test.c reader.test.c printer.test.c value.test.c
+LizpSrc = lizp.c printer.c reader.c value.c eval.c
+TestSrc = lizp.test.c reader.test.c printer.test.c value.test.c eval.test.c
 LizpObjs = $(addprefix $(BuildDir)/,$(LizpSrc:.c=.o))
 TestObjs = $(addprefix $(BuildDir)/,$(TestSrc:.c=.o))
 	
