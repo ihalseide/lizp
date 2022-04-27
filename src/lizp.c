@@ -101,6 +101,7 @@ void rep (const char *start, int length, Val **env)
     if (!val)
     {
         print(eval(read(start, length), env), 1);
+        putchar('\n');
     }
     else
     {

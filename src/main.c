@@ -12,6 +12,7 @@ Val *InitEnvironment(void)
 {
     Val *env = NULL;
     EnvSet(&env, ValMakeInt(BASE), ValMakeInt(PrinterGetBase()));
+    EnvSet(&env, ValMakeInt(UPPER), ValMakeInt(PrinterGetUpper()));
     return env;
 }
 
@@ -30,7 +31,6 @@ int main (int argc, char **argv)
             break;
         }
         rep(buffer, strlen(buffer), &env);
-        putchar('\n');
     }
     return 0;
 }
