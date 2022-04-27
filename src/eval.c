@@ -59,10 +59,38 @@ static Val *EnvGet(Val **env, Val *key)
 static Val *Apply(Val *seq, Val **env)
 {
     Val *fn = seq->first;
-    if (ValIsLambda(seq))
+    Val *args = seq->rest;
+    if (ValIsLambda(fn))
     {
-        printf("LAMBDA\n");
-        return NULL;
+        EnvPush(env);
+        Val *lArgs = fn->first->rest;
+        Val *p = lArgs;
+        Val *q = args;
+        while (p && ValIsSeq(p) && q && ValIsSeq(q))
+        {
+            Val *key = p->first;
+            Val *val = q->first;
+            EnvLet(env, key, val);
+            p = p->rest;
+            q = q->rest;
+        }
+        if (p == NULL && q == NULL)
+        {
+            Val *lBody = fn->rest->first;
+            Val *result = EvalAst(lBody, env);
+            EnvPop(env);
+            return result;
+        }
+        EnvPop(env);
+        if (p == NULL)
+        {
+            LizpError(LE_LAMBDA_TOO_MANY_ARGS);
+        }
+        if (q == NULL)
+        {
+            LizpError(LE_LAMBDA_TOO_FEW_ARGS);
+        }
+        LizpError(LE_NO_FUNCTION);
     }
     // First must be a valid function id number (a base36 name)
     if (!ValIsInt(fn) && !(ValIsInt(fn->first) && fn->first->integer == STR))
@@ -71,7 +99,6 @@ static Val *Apply(Val *seq, Val **env)
     }
     int nameBase36 = fn->integer;
     int numArgs = ValSeqLength(seq) - 1;
-    Val *args = seq->rest;
     switch (nameBase36)
     {
         case LAMBDA:

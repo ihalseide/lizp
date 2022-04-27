@@ -60,6 +60,12 @@ static void LizpPrintMessage(int val)
         case LE_COND_FORM:
             msg = "invalid condition and consequence list for \"cond\"";
             break;
+        case LE_LAMBDA_TOO_MANY_ARGS:
+            msg = "too many arguments passed to lambda function";
+            break;
+        case LE_LAMBDA_TOO_FEW_ARGS:
+            msg = "too few arguments passed to lambda function";
+            break;
         default:
             msg = "(unknown error type)";
             break;
@@ -96,7 +102,7 @@ void print (Val *expr, int readable)
 {
     static char buffer[2 * 1024];
     int p_len = PrintVal(expr, buffer, sizeof(buffer), readable);
-    printf("%.*s\n", p_len, buffer);
+    printf("%.*s", p_len, buffer);
 }
 
 // Do one read, eval, and print cycle on a string.

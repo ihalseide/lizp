@@ -19,6 +19,8 @@ enum LizpErrorEnum
     LE_DIV_ZERO,
     LE_LET_FORM,
     LE_COND_FORM,
+    LE_LAMBDA_TOO_MANY_ARGS,
+    LE_LAMBDA_TOO_FEW_ARGS,
 };
 
 _Noreturn void LizpError(int val);
