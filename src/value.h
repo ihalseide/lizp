@@ -1,6 +1,8 @@
 #ifndef __VALUE_H
 #define __VALUE_H
 
+#include <stdbool.h>
+
 // Base 36 numbers for names
 #define PRINT_OP 43274297
 #define ADD      13441
@@ -31,9 +33,9 @@ Val *ValMakeInt(long n);
 Val *ValMakeSeq(Val *first, Val *rest);
 Val *ValMakeStr(const char *s, int len);
 Val *ValCopy(Val *p);
-int ValIsInt(Val *p);
-int ValIsSeq(Val *p);
-int ValIsStr(Val *p);
+bool ValIsInt(Val *p);
+bool ValIsSeq(Val *p);
+bool ValIsStr(Val *p);
 int ValSeqLength(Val *p);
 
 #endif /* __VALUE_H */

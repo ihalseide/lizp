@@ -1,4 +1,5 @@
 #include <assert.h>
+#include <stdbool.h>
 #include <stdlib.h>
 #include "value.h"
 
@@ -15,20 +16,21 @@ void ValFree(Val *p)
 }
 
 // A NULL val is considered an empty sequence,
-int ValIsSeq(Val *p)
+bool ValIsSeq(Val *p)
 {
     return !p || p->rest != p;
 }
 
-int ValIsInt(Val *p)
+bool ValIsInt(Val *p)
 {
     return p && p->rest == p;
 }
 
-int ValIsStr(Val *p)
+// form [[str] ...]
+bool ValIsStr(Val *p)
 {
-    return p && p->rest != p && ValIsSeq(p->first) && ValIsInt(p->first->first)
-        && p->first->first->integer == STR;
+    return p && p->rest != p && p->first && ValIsSeq(p->first) &&
+        ValIsInt(p->first->first) && p->first->first->integer == STR;
 }
 
 Val *ValMakeInt(long n)

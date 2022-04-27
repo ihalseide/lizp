@@ -5,6 +5,53 @@
 #include "lizp.h"
 #include "printer.h"
 
+static void EnvPush(Val **env)
+{
+    *env = ValMakeSeq(NULL, *env);
+}
+
+static void EnvPop(Val **env)
+{
+    if (*env)
+    {
+        *env = (*env)->rest;
+    }
+}
+
+static void EnvLet(Val **env, Val *key, Val *val)
+{
+    if (*env && ValIsInt(key))
+    {
+        Val *pair = ValMakeSeq(key, ValMakeSeq(val, NULL));
+        (*env)->first = ValMakeSeq(pair, (*env)->first);
+    }
+}
+
+static Val *EnvGet(Val **env, Val *key)
+{
+    if (*env && ValIsInt(key))
+    {
+        Val *scope = *env;
+        while (scope && ValIsSeq(scope))
+        {
+            Val *p = scope->first;
+            while (p && ValIsSeq(p))
+            {
+                Val *pair = p->first;
+                if (pair->first->integer == key->integer)
+                {
+                    // Found
+                    return pair->rest->first;
+                }
+                p = p->rest;
+            }
+            scope = scope->rest;
+        }
+    }
+    // Not found
+    LizpError(LE_UNKNOWN_SYM);
+}
+
 // Apply function or macro
 // Must not modify/touch/share structure with the original seq
 static Val *Apply(Val *seq, Val **env)
@@ -78,43 +125,64 @@ static Val *Apply(Val *seq, Val **env)
             break;
         case LIST:
             // [list ...]
-            return ValCopy(args);
+            return args;
         case QUOTE:
             // [quote expr]
             if (numArgs == 1)
             {
-                assert(0 && "not implemented");
+                return args->first;
             }
             break;
         case LET:
-            // [let k v]
+            // [let [pairs...] code]
             if (numArgs == 2)
             {
-                assert(0 && "not implemented");
+                if (ValIsSeq(args->first) && args->rest != NULL)
+                {
+                    EnvPush(env);
+                    Val *p = args->first;
+                    while (p && ValIsSeq(p))
+                    {
+                        if (!(p->rest && ValIsSeq(p->rest)))
+                        {
+                            EnvPop(env);
+                            LizpError(LE_LET_FORM);
+                        }
+                        Val *key = p->first;
+                        Val *val = p->rest->first;
+                        EnvLet(env, key, val);
+                        p = p->rest->rest;
+                    }
+                    Val *result = EvalAst(args->rest->first, env);
+                    EnvPop(env);
+                    return result;
+                }
             }
             break;
         case GET:
             // [get k]
-            if (numArgs == 1)
+            if (numArgs == 1 && ValIsInt(args->first))
             {
-                assert(0 && "not implemented");
+                return EnvGet(env, args->first);
             }
             break;
         case DO:
             // [do ...]
-            if (numArgs)
             {
-                assert(0 && "not implemented");
+                Val *p = args;
+                Val *v = NULL;
+                while (p && ValIsSeq(p))
+                {
+                    v = EvalAst(p->first, env);
+                    p = p->rest;
+                }
+                return v;
             }
-            else
-            {
-                return NULL;
-            }
-            break;
         case STR:
             // [str #...]
             if (numArgs)
             {
+                // Make sure the arguments are all numbers
                 bool valid = true;
                 Val *p = args;
                 while (p && ValIsSeq(p))
@@ -153,8 +221,7 @@ static bool IsMacro(Val *seq)
             case GET:
             case LET:
             case QUOTE:
-            default:
-                return false;
+                return true;
         }
     }
     return false;

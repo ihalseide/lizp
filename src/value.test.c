@@ -135,12 +135,27 @@ void ValIsSeqTest(void)
     assert(ValIsSeq(&x));
 }
 
+void ValIsStrTest(void)
+{
+    Val *x;
+
+    x = NULL;
+    assert(!ValIsStr(x));
+
+    x = ValMakeSeq(NULL, NULL);
+    assert(!ValIsStr(x));
+
+    x = ValMakeSeq(ValMakeSeq(ValMakeInt(STR), NULL), NULL);
+    assert(ValIsStr(x));
+}
+
 void ValueTest(void)
 {
     ValIsIntTest();
     ValIsSeqTest();
     ValMakeIntTest();
     ValMakeSeqTest();
+    ValIsStrTest();
     ValCopyTest();
 }
 

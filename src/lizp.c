@@ -55,6 +55,9 @@ static void LizpPrintMessage(int val)
         case LE_DIV_ZERO:
             msg = "division by zero";
             break;
+        case LE_LET_FORM:
+            msg = "invalid binding list for \"let\"";
+            break;
         default:
             msg = "(unknown error type)";
             break;
