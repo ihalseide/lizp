@@ -31,9 +31,11 @@ static Val *EnvGet(Val **env, Val *key)
 {
     if (*env && ValIsInt(key))
     {
+        // Iterate environment scopes
         Val *scope = *env;
         while (scope && ValIsSeq(scope))
         {
+            // Search definition list in current scope
             Val *p = scope->first;
             while (p && ValIsSeq(p))
             {
@@ -48,7 +50,7 @@ static Val *EnvGet(Val **env, Val *key)
             scope = scope->rest;
         }
     }
-    // Not found
+    // Not found anywhere
     LizpError(LE_UNKNOWN_SYM);
 }
 
