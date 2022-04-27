@@ -5,6 +5,11 @@
 #include "lizp.h"
 #include "printer.h"
 
+static bool IsTrue(Val *p)
+{
+    return p && ValIsInt(p) && p->integer;
+}
+
 static void EnvPush(Val **env)
 {
     *env = ValMakeSeq(NULL, *env);
@@ -69,6 +74,53 @@ static Val *Apply(Val *seq, Val **env)
     Val *args = seq->rest;
     switch (nameBase36)
     {
+        case NOT:
+            // [not boolean]
+            if (numArgs == 1)
+            {
+                if (IsTrue(args->first))
+                {
+                    return ValMakeInt(0);
+                }
+                return ValMakeInt(1);
+            }
+            break;
+        case IF:
+            // [if condition consequent alternative]
+            if (numArgs == 2 || numArgs == 3)
+            {
+                if (IsTrue(EvalAst(args->first, env)))
+                {
+                    return EvalAst(args->rest->first, env);
+                }
+                if (numArgs == 3)
+                {
+                    return EvalAst(args->rest->rest->first, env);
+                }
+                return NULL;
+            }
+            break;
+        case COND:
+            // [cond (condition consequent)...]
+            {
+                Val *p = args;
+                while (p && ValIsSeq(p))
+                {
+                    if (!(p->rest && ValIsSeq(p->rest)))
+                    {
+                        LizpError(LE_COND_FORM);
+                    }
+                    Val *cond = p->first;
+                    Val *cons = p->rest->first;
+                    if (IsTrue(EvalAst(cond, env)))
+                    {
+                        return EvalAst(cons, env);
+                    }
+                    p = p->rest->rest;
+                }
+                LizpError(LE_COND_FORM);
+            }
+            break;
         case LEN:
             if (numArgs == 1 && ValIsSeq(args->first))
             {
@@ -191,7 +243,7 @@ static Val *Apply(Val *seq, Val **env)
                             LizpError(LE_LET_FORM);
                         }
                         Val *key = p->first;
-                        Val *val = p->rest->first;
+                        Val *val = EvalAst(p->rest->first, env);
                         EnvLet(env, key, val);
                         p = p->rest->rest;
                     }
@@ -262,6 +314,8 @@ static bool IsMacro(Val *seq)
             case DO:
             case GET:
             case LET:
+            case IF:
+            case COND:
             case QUOTE:
                 return true;
         }

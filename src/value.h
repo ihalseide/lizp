@@ -21,6 +21,9 @@
 #define FIRST    26070077
 #define REST     1278893
 #define EQUAL    24766941
+#define COND     591817
+#define IF       663
+#define NOT      30701
 
 typedef struct Val Val;
 struct Val

@@ -18,6 +18,7 @@ enum LizpErrorEnum
     LE_UNKNOWN_SYM,
     LE_DIV_ZERO,
     LE_LET_FORM,
+    LE_COND_FORM,
 };
 
 _Noreturn void LizpError(int val);

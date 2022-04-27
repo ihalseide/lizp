@@ -57,6 +57,9 @@ static void LizpPrintMessage(int val)
         case LE_LET_FORM:
             msg = "invalid binding list for \"let\"";
             break;
+        case LE_COND_FORM:
+            msg = "invalid condition and consequence list for \"cond\"";
+            break;
         default:
             msg = "(unknown error type)";
             break;
