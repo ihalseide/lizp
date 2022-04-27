@@ -1,36 +1,39 @@
 #ifndef __VALUE_H
 #define __VALUE_H
 
-#include <stdbool.h>
-#include "sequence.h"
-
-typedef enum ValKind ValKind;
-enum ValKind
-{
-    CK_INT,
-    CK_SEQ,
-};
+// Base 36 numbers for names
+#define PRINT_OP 43274297
+#define ADD      13441
+#define SUB      37379
+#define MUL      29613
+#define DIV      17527
+#define NEG      30328 
+#define LIST     1004141
+#define QUOTE    45101858
+#define LET      27749
+#define GET      21269
+#define DO       492
+#define STR      37359
 
 typedef struct Val Val;
 struct Val
 {
-    ValKind kind;
     union
     {
-        int integer;
-        Seq *sequence;
+        long integer;
+        Val *first;
     };
+    Val *rest;
 };
 
-int getCount(void);
-
 Val *ValAlloc(void);
-void ValFree(Val *p);
-void ValFreeAll(Val *p);
-Val *ValMakeInt(int n);
-Val *ValMakeSeq(Seq *s);
-Val *ValCopy(const Val *p);
-int ValIsInt(const Val *p);
-int ValIsSeq(const Val *p);
+Val *ValMakeInt(long n);
+Val *ValMakeSeq(Val *first, Val *rest);
+Val *ValMakeStr(const char *s, int len);
+Val *ValCopy(Val *p);
+int ValIsInt(Val *p);
+int ValIsSeq(Val *p);
+int ValIsStr(Val *p);
+int ValSeqLength(Val *p);
 
 #endif /* __VALUE_H */

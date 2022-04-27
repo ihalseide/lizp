@@ -2,90 +2,65 @@
 #include <stdio.h>
 #include <assert.h>
 #include "eval.h"
-
 #include "lizp.h"
 #include "printer.h"
 
-// Get value for key in this type of seq:
-// [[key1 value1] [key2 value2] [key3 value3]...]
-static Val *Assoc(Seq *seq, int key)
-{
-    while (seq)
-    {
-        Val *entry = SeqVal(seq);
-        assert(entry);
-        assert(ValIsSeq(entry));
-        assert(ValIsSeq(entry));
-        Val *entryKey = SeqVal(entry->sequence);
-        assert(ValIsInt(entryKey));
-        if (entryKey->integer == key)
-        {
-            Seq *val = SeqNext(entry->sequence);
-            assert(val);
-            return SeqVal(val);
-        }
-        seq = SeqNext(seq);
-    }
-    return NULL;
-}
-
 // Apply function or macro
 // Must not modify/touch/share structure with the original seq
-static Val *EvalApply(Seq *seq, Seq **env)
+static Val *Apply(Val *seq, Val **env)
 {
-    if (!seq)
-    {
-        return ValMakeSeq(NULL);
-    }
-
-    Val *fn = (Val*)SeqGet(seq, 0);
+    Val *fn = seq->first;
     // First must be a valid function id number (a base36 name)
-    if (!ValIsInt(fn))
+    if (!ValIsInt(fn) && !(ValIsInt(fn->first) && fn->first->integer == STR))
     {
         LizpError(LE_APPLY_NOT_FUNCTION);
     }
     int nameBase36 = fn->integer;
-    int numArgs = SeqLength(seq) - 1;
+    int numArgs = ValSeqLength(seq) - 1;
+    Val *args = seq->rest;
     switch (nameBase36)
     {
-        case 43274297:
+        case PRINT_OP:
             // [print expr]
             if (numArgs == 1)
             {
-                PRINT((Val*)SeqGet(seq, 1), 1);
+                PRINT(args->first, 1);
                 return NULL;
             }
             break;
-        case 13441:
+        case ADD:
             // [add x y]
             if (numArgs == 2)
             {
-                return ValMakeInt(((Val*)SeqGet(seq, 1))->integer
-                        + ((Val*)SeqGet(seq, 2))->integer);
+                int x = args->first->integer;
+                int y = args->rest->first->integer;
+                return ValMakeInt(x + y);
             }
             break;
-        case 37379:
+        case SUB:
             // [sub x y]
             if (numArgs == 2)
             {
-                return ValMakeInt(((Val*)SeqGet(seq, 1))->integer
-                        - ((Val*)SeqGet(seq, 2))->integer);
+                int x = args->first->integer;
+                int y = args->rest->first->integer;
+                return ValMakeInt(x - y);
             }
             break;
-        case 29613:
+        case MUL:
             // [mul x y]
             if (numArgs == 2)
             {
-                return ValMakeInt(((Val*)SeqGet(seq, 1))->integer
-                        * ((Val*)SeqGet(seq, 2))->integer);
+                int x = args->first->integer;
+                int y = args->rest->first->integer;
+                return ValMakeInt(x * y);
             }
             break;
-        case 17527:
+        case DIV:
             // [div x y]
             if (numArgs == 2)
             {
-                int x = ((Val*)SeqGet(seq, 1))->integer;
-                int y = ((Val*)SeqGet(seq, 2))->integer;
+                int x = args->first->integer;
+                int y = args->rest->first->integer;
                 if (y == 0)
                 {
                     LizpError(LE_DIV_ZERO);
@@ -93,83 +68,68 @@ static Val *EvalApply(Seq *seq, Seq **env)
                 return ValMakeInt(x / y);
             }
             break;
-        case 30328:
+        case NEG:
             // [neg x]
             // Negate number
             if (numArgs == 1)
             {
-                return ValMakeInt(-((Val*)SeqGet(seq, 1))->integer);
+                return ValMakeInt(-(args->first->integer));
             }
             break;
-        case 1086854:
-            // [name x]
-            // Print number as name
-            if (numArgs == 1)
-            {
-                Val *arg1 = (Val*)SeqGet(seq, 1);
-                if (arg1->kind == CK_INT)
-                {
-                    char out[64];
-                    int count = PrintInt(arg1->integer, out, sizeof(out), false, 36, false);
-                    out[count] = '\0';
-                    printf("%s", out);
-                    return NULL;
-                }
-            }
-            break;
-        case 1004141:
+        case LIST:
             // [list ...]
-            return ValMakeSeq(SeqCopy(SeqNext(seq)));
-        case 45101858:
+            return ValCopy(args);
+        case QUOTE:
             // [quote expr]
             if (numArgs == 1)
             {
-                return ValCopy(SeqGet(seq, 1));
+                assert(0 && "not implemented");
             }
             break;
-        case 27749:
+        case LET:
             // [let k v]
             if (numArgs == 2)
             {
                 assert(0 && "not implemented");
             }
             break;
-        case 21269:
+        case GET:
             // [get k]
             if (numArgs == 1)
             {
-                Val *arg1 = (Val*)SeqGet(seq, 1);
-                Val *val1 = Assoc(*env, arg1->integer);
-                if (val1)
-                {
-                    return ValCopy(val1);
-                }
-                else
-                {
-                    LizpError(LE_UNKNOWN_SYM);
-                }
+                assert(0 && "not implemented");
             }
             break;
-        case 492:
+        case DO:
             // [do ...]
             if (numArgs)
             {
-                Seq *pAst = seq;
-                Val *v;
-                while (pAst)
-                {
-                    v = EvalAst(SeqVal(pAst), env);
-                    pAst = SeqNext(pAst);
-                    if (pAst)
-                    {
-                        ValFreeAll(v);
-                    }
-                }
-                return v;
+                assert(0 && "not implemented");
             }
             else
             {
-                return ValMakeSeq(NULL);
+                return NULL;
+            }
+            break;
+        case STR:
+            // [str #...]
+            if (numArgs)
+            {
+                bool valid = true;
+                Val *p = args;
+                while (p && ValIsSeq(p))
+                {
+                    if (!ValIsInt(p->first))
+                    {
+                        valid = false;
+                        break;
+                    }
+                    p = p->rest;
+                }
+                if (valid)
+                {
+                    return ValMakeSeq(ValMakeSeq(ValMakeInt(STR), NULL), args);
+                }
             }
             break;
         default:
@@ -177,74 +137,60 @@ static Val *EvalApply(Seq *seq, Seq **env)
             LizpError(LE_UNKNOWN_FUNCTION);
             break;
     }
+    // Given a function with invalid arguments
     LizpError(LE_NO_FUNCTION);
 }
 
-bool EvalIsMacro(Seq *seq)
+static bool IsMacro(Val *seq)
 {
     assert(seq);
-    Val *first = (Val*)SeqVal(seq);
-    if (!ValIsInt(first))
+    Val *first = seq->first;
+    if (ValIsInt(first))
     {
-        return false;
+        switch (first->integer)
+        {
+            case DO:
+            case GET:
+            case LET:
+            case QUOTE:
+            default:
+                return false;
+        }
     }
-    switch (first->integer)
-    {
-        case 492:      // do
-        case 21269:    // get
-        case 27749:    // let
-        case 45101858: // quote
-            return true;
-        default:
-            return false;
-    }
+    return false;
+}
+
+static bool IsSelfEvaluating(Val *ast)
+{
+    return !ast || ValIsInt(ast) || ValIsStr(ast);
 }
 
 // Always create new Val objects
-Val *EvalAst(Val *ast, Seq **env)
+Val *EvalAst(Val *ast, Val **env)
 {
-    if (!ast)
+    if (IsSelfEvaluating(ast))
     {
-        return NULL;
+        return ast;
     }
-    else if (ValIsInt(ast))
+    if (ValIsSeq(ast))
     {
-        return ValCopy(ast);
-    }
-    else if (ValIsSeq(ast))
-    {
-        Seq *seq = ast->sequence;
-        // NULL Seq evaluates to itself. A.k.a: [] -> []
-        if (!seq)
-        {
-            return ValCopy(ast);
-        }
         // evSeq = evaluated sequence
-        Seq *evSeq;
-        if (EvalIsMacro(seq))
+        Val *evAst = ast;
+        if (!IsMacro(ast))
         {
-            // Do not evaluate subtrees if macro
-            evSeq = seq;
-        }
-        else
-        {
-            // Evalulate sub-trees in ast
-            evSeq = NULL;
-            while (seq)
+            evAst = ValMakeSeq(EvalAst(ast->first, env), NULL);
+            Val *p = evAst;
+            ast = ast->rest;
+            while (ast)
             {
-                SeqAppend(&evSeq, EvalAst((Val*)SeqVal(seq), env));
-                seq = SeqNext(seq);
+                p->rest = ValMakeSeq(EvalAst(ast->first, env), NULL);
+                p = p->rest;
+                ast = ast->rest;
             }
         }
         // Apply this sequence
-        Val *result = EvalApply(evSeq, env);
-        // Free evaluated value and return
-        ValFreeAll(ValMakeSeq(evSeq));
-        return result;
+        return Apply(evAst, env);
     }
-    else
-    {
-        LizpError(LE_INVALID_VAL);
-    }
+    LizpError(LE_INVALID_VAL);
 }
 

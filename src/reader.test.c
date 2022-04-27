@@ -1,7 +1,6 @@
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>
-#include "sequence.h"
 #include "reader.h"
 #include "reader.test.h"
 
@@ -118,49 +117,50 @@ static void ReadSeqTest(void)
 {
     const char *s;
     int len;
-    Seq *seq;
+    Val *seq;
+
+    s = "";
+    seq = NULL;
+    len = ReadSeq(s, strlen(s), &seq);
+    assert(len == 0);
+    assert(ValSeqLength(seq) == 0);
 
     s = "[]";
     seq = NULL;
     len = ReadSeq(s, strlen(s), &seq);
     assert(len == 2);
-    assert(SeqLength(seq) == 0);
-    SeqFree(seq);
+    assert(ValSeqLength(seq) == 0);
 
     s = "[ ]";
     seq = NULL;
     len = ReadSeq(s, strlen(s), &seq);
     assert(len == 3);
-    assert(SeqLength(seq) == 0);
-    SeqFree(seq);
+    assert(ValSeqLength(seq) == 0);
 
     s = "[0]";
     seq = NULL;
     len = ReadSeq(s, strlen(s), &seq);
     assert(len == 3);
-    assert(SeqLength(seq) == 1);
-    assert(((Val*)SeqGet(seq, 0))->integer == 0);
-    SeqFree(seq);
+    assert(ValSeqLength(seq) == 1);
+    assert(seq->first->integer == 0);
 
     s = "[1 2 3]";
     seq = NULL;
     len = ReadSeq(s, strlen(s), &seq);
     assert(len == 7);
-    assert(SeqLength(seq) == 3);
-    assert(((Val*)SeqGet(seq, 0))->integer == 1);
-    assert(((Val*)SeqGet(seq, 1))->integer == 2);
-    assert(((Val*)SeqGet(seq, 2))->integer == 3);
-    SeqFree(seq);
+    assert(ValSeqLength(seq) == 3);
+    assert(seq->first->integer == 1);
+    assert(seq->rest->first->integer == 2);
+    assert(seq->rest->rest->first->integer == 3);
 
     s = "[ 1 2 3 ]";
     seq = NULL;
     len = ReadSeq(s, strlen(s), &seq);
     assert(len == 9);
-    assert(SeqLength(seq) == 3);
-    assert(((Val*)SeqGet(seq, 0))->integer == 1);
-    assert(((Val*)SeqGet(seq, 1))->integer == 2);
-    assert(((Val*)SeqGet(seq, 2))->integer == 3);
-    SeqFree(seq);
+    assert(ValSeqLength(seq) == 3);
+    assert(seq->first->integer == 1);
+    assert(seq->rest->first->integer == 2);
+    assert(seq->rest->rest->first->integer == 3);
 }
 
 static void ReadValTest(void)
@@ -175,22 +175,63 @@ static void ReadValTest(void)
     assert(len == 2);
     assert(ValIsInt(v));
     assert(v->integer == 5);
-    ValFree(v);
 
     v = NULL;
     s = "[[1]2 3]";
     len = ReadVal(s, strlen(s), &v);
     assert(len == 8);
     assert(ValIsSeq(v));
-    assert(SeqLength(v->sequence) == 3);
-    assert(ValIsSeq(SeqGet(v->sequence, 0)));
-    assert(ValIsInt(SeqGet(v->sequence, 1)));
-    assert(ValIsInt(SeqGet(v->sequence, 2)));
-    assert(SeqLength(((Val*)SeqGet(v->sequence, 0))->sequence) == 1);
-    SeqFree(((Val*)SeqGet(v->sequence, 0))->sequence);
-    ValFree(SeqGet(v->sequence, 0));
-    SeqFree(v->sequence);
-    ValFree(v);
+    assert(ValSeqLength(v) == 3);
+    assert(ValIsSeq(v->first));
+    assert(ValIsInt(v->rest->first));
+    assert(ValIsInt(v->rest->rest->first));
+    assert(ValSeqLength(v->first) == 1);
+    assert(ValIsInt(v->first->first));
+    assert(v->first->first->integer == 1);
+}
+
+void ReadStringTest(void)
+{
+    const char *s;
+    int len;
+    Val *v;
+
+    v = NULL;
+    s = "";
+    len = ReadString(s, strlen(s), &v);
+    assert(len == 0);
+
+    v = NULL;
+    s = "\"\"";
+    len = ReadString(s, strlen(s), &v);
+    assert(len == 2);
+    assert(v);
+    assert(ValIsSeq(v));
+    assert(ValIsSeq(v->first));
+    assert(ValIsInt(v->first->first));
+    assert(v->first->first->integer == STR);
+    assert(v->rest == NULL);
+    assert(ValSeqLength(v) == 1);
+
+    v = NULL;
+    s = "\"X\"";
+    len = ReadString(s, strlen(s), &v);
+    assert(len == 3);
+    assert(v);
+    assert(ValSeqLength(v) == 2);
+    assert(ValIsSeq(v->first));
+    assert(ValIsInt(v->rest->first));
+    assert(v->rest->first->integer == 'X');
+
+    v = NULL;
+    s = "\" lizp\"";
+    len = ReadString(s, strlen(s), &v);
+    assert(len == 7);
+    assert(v);
+    assert(ValSeqLength(v) == 6);
+    assert(ValIsSeq(v->first));
+    assert(ValIsInt(v->rest->first));
+    assert(v->rest->first->integer == ' ');
 }
 
 void ReaderTest(void)
@@ -198,6 +239,7 @@ void ReaderTest(void)
     DigitValueTest();
     ReadIntTest();
     ReadSeqTest();
+    ReadStringTest();
     ReadValTest();
 }
 

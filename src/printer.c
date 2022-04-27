@@ -1,7 +1,6 @@
 #include <assert.h>
 #include <string.h>
 #include <stdbool.h>
-
 #include "printer.h"
 #include "lizp.h"
 
@@ -13,7 +12,7 @@ int PrinterGetBase(void)
     return printNumBase;
 }
 
-// Set base to 2, 10, 16, or 36
+// Allow setting the base to only 2, 10, 16, or 36.
 void PrinterSetBase(int b)
 {
     switch (b)
@@ -25,7 +24,6 @@ void PrinterSetBase(int b)
             printNumBase = b;
             break;
         default:
-            // Do not set to any other base
             break;
     }
 }
@@ -59,16 +57,16 @@ int PrintChar(char c, char *out, int length)
 int PrintCStr(const char *s, char *out, int len)
 {
     // Validate inputs
-    if (!s || !out)
+    if (s && out)
     {
-        return 0;
+        int i;
+        for (i = 0; s[i] && i < len; i++)
+        {
+            out[i] = s[i];
+        }
+        return i;
     }
-    int i;
-    for (i = 0; s[i] && i < len; i++)
-    {
-        out[i] = s[i];
-    }
-    return i;
+    return 0;
 }
 
 char ValueToDigit(int d, bool upper)
@@ -87,7 +85,6 @@ char ValueToDigit(int d, bool upper)
     return '?';
 }
 
-// TODO: print out full representation of binary numbers
 // Returns: number of chars written
 int PrintInt(int n, char *out, int len, int readable, int base, bool upper)
 {
@@ -154,121 +151,69 @@ int PrintInt(int n, char *out, int len, int readable, int base, bool upper)
     return i;
 }
 
-// Print a seq/list of numbers as a string.
-// String is escaped and quoted if readable is true.
-int PrintListAsChars(Seq *p, char *out, int length, int readable)
+int PrintStr(Val *seq, char *out, int length)
 {
-    // Validate inputs
-    if (!out || length <= 0)
+    if (length > 0 && out && seq)
     {
-        return 0;
-    }
-    char *view = out;
-    // Opening quote
-    if (readable)
-    {
-        view += PrintChar('"', view, length-(view-out));
-    }
-    // String contents
-    const int len = SeqLength(p);
-    for (int i = 0; i < len && (view-out) < length; i++)
-    {
-        // Get character value in list
-        Val *e = SeqGet(p, i);
-        char c;
-        if (ValIsInt(e))
+        char *view = out;
+        seq = seq->rest;
+        while (ValIsSeq(seq) && seq && view < (out + length))
         {
-            c = (char) e->integer;
+            Val *e = seq->first;
+            assert(ValIsInt(e));
+            view += PrintChar((char)e->integer, view, length-(view-out));
+            seq = seq->rest;
         }
-        else
-        {
-            // If an element is not an integer, the string stops printing out
-            break;
-        }
-
-        if (readable)
-        {
-            // Do string escaping...
-            char esc;
-            switch (c)
-            {
-                case '\n': esc = 'n'; break;
-                case '\t': esc = 't'; break;
-                case '\0': esc = '0'; break;
-                case '\\': esc = '\\'; break;
-                default: esc = 0; break;
-            }
-
-            // Write escaped code
-            if (esc)
-            {
-                // Print a slash and get ready to print the escape char next
-                view += PrintChar('\\', view, length-(view-out));
-                c = esc;
-            }
-        }
-
-        // Write char
-        view += PrintChar(c, view, length-(view-out));
+        return view - out;
     }
-    // Closing quote
-    if (readable)
-    {
-        view += PrintChar('"', view, length-(view-out));
-    }
-    // Return length, including quotes that were written
-    return view - out;
+    return 0;
 }
 
-int PrintSeq(Seq *list, char *out, int length, int readable)
+int PrintSeq(Val *seq, char *out, int length, bool readable)
 {
-    // Validate arguments
-    if (!out || (length <= 0))
+    if (length > 0 && out)
     {
-        return 0;
+        char *view = out;
+        // Print opening '['
+        view += PrintChar('[', view, length);
+        if (seq)
+        {
+            // Print 1st without a space
+            if (view < (out+length))
+            {
+                view += PrintVal(seq->first, view, length-(view-out), readable);
+                seq = seq->rest;
+            }
+            // Print list contents
+            while (ValIsSeq(seq) && seq && view < (out + length))
+            {
+                view += PrintChar(' ', view, length-(view-out));
+                view += PrintVal(seq->first, view, length-(view-out), readable);
+                seq = seq->rest;
+            }
+        }
+        // Print closing ']'
+        view += PrintChar(']', view, length-(view-out));
+        return view - out;
     }
-    char *view = out;
-    const int seqLen   = SeqLength(list);
-    // Print opening '['
-    view += PrintChar('[', view, length);
-    // Print 1st without a space
-    if (seqLen && view < (out+length))
-    {
-        view += PrintVal(SeqGet(list, 0), view, length-(view-out), readable);
-    }
-    // Print list contents
-    for (int i = 1; i < seqLen && view < (out + length); i++)
-    {
-        view += PrintChar(' ', view, length-(view-out));
-        view += PrintVal(SeqGet(list, i), view, length-(view-out), readable);
-    }
-    // Print closing ']'
-    view += PrintChar(']', view, length-(view-out));
-    return view - out;
+    return 0;
 }
 
-// Does: Prints p to the given output stream
+// Prints p to the given output stream
 // Returns: number of chars written
-int PrintVal(Val *p, char *out, int length, int readable)
+int PrintVal(Val *p, char *out, int length, bool readable)
 {
-    // Validate arguments
     if (length > 0)
     {
-        if (p)
+        if (ValIsInt(p))
         {
-            switch (p->kind)
-            {
-                case CK_INT:
-                    return PrintInt(
-                            p->integer, out, length, readable,
-                            printNumBase, printNumUpper);
-                case CK_SEQ:
-                    return PrintSeq(p->sequence, out, length, readable);
-                default:
-                    assert(0 && "invalid ValKind");
-            }
+            return PrintInt(p->integer, out, length, readable, printNumBase, printNumUpper);
         }
-        return PrintCStr("(null)", out, length);
+        if (readable && ValIsStr(p))
+        {
+            return PrintStr(p, out, length);
+        }
+        return PrintSeq(p, out, length, readable);
     }
     return 0;
 }

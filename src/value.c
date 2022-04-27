@@ -1,103 +1,96 @@
 #include <assert.h>
 #include <stdlib.h>
 #include "value.h"
-#include "sequence.h"
-
-static int vcount = 0;
-int getCount(void)
-{
-    return vcount;
-}
 
 Val *ValAlloc(void)
 {
     Val *new;
     new = malloc(sizeof(*new));
-    vcount++;
     return new;
 }
 
 void ValFree(Val *p)
 {
-    if (p)
-    {
-        free(p);
-        vcount--;
-    }
+    free(p);
 }
 
-void ValFreeAll(Val *p)
+// A NULL val is considered an empty sequence,
+int ValIsSeq(Val *p)
 {
-    if (ValIsSeq(p))
-    {
-        // Free the values in the sequence
-        Seq *s = p->sequence;
-        while (s)
-        {
-            ValFree((Val*)s->first);
-            s = s->rest;
-        }
-        // Free the sequence nodes
-        SeqFreeAll(s);
-    }
-    ValFree(p);
+    return !p || p->rest != p;
 }
 
-// A NULL Seq is considered an empty sequence,
-// BUT a NULL Val is not!
-int ValIsSeq(const Val *p)
+int ValIsInt(Val *p)
 {
-    return p && p->kind == CK_SEQ;
+    return p && p->rest == p;
 }
 
-int ValIsInt(const Val *p)
+int ValIsStr(Val *p)
 {
-    return p && p->kind == CK_INT;
+    return p && p->rest != p && ValIsSeq(p->first) && ValIsInt(p->first->first)
+        && p->first->first->integer == STR;
 }
 
-Val *ValMakeInt(int n)
+Val *ValMakeInt(long n)
 {
     Val *p = ValAlloc();
-    if (p)
+    p->integer = n;
+    p->rest = p;
+    return p;
+}
+
+Val *ValMakeSeq(Val *first, Val *rest)
+{
+    Val *p = ValAlloc();
+    p->first = first;
+    p->rest = rest;
+    return p;
+}
+
+Val *ValMakeStr(const char *s, int len)
+{
+    Val *p = ValMakeSeq(ValMakeSeq(ValMakeInt(STR), NULL), NULL);
+    Val *ps = p;
+    for (int i = 0; i < len; i++)
     {
-        p->kind = CK_INT;
-        p->integer = n;
+        ps->rest = ValMakeSeq(ValMakeInt(s[i]), NULL);
+        ps = ps->rest;
     }
     return p;
 }
 
-Val *ValMakeSeq(Seq *s)
+int ValSeqLength(Val *p)
 {
-    Val *p = ValAlloc();
-    if (p)
+    int i = 0;
+    while (p && ValIsSeq(p))
     {
-        p->kind = CK_SEQ;
-        p->sequence = s;
+        i++;
+        p = p->rest;
     }
-    return p;
+    return i;
 }
 
 // New copy, with no structure-sharing
-Val *ValCopy(const Val *p)
+Val *ValCopy(Val *p)
 {
-    switch (p->kind)
+    if (p)
     {
-        case CK_INT:
+        if (ValIsInt(p))
+        {
             return ValMakeInt(p->integer);
-        case CK_SEQ:
-            {
-                Seq *new = NULL;
-                while (p && p->sequence)
-                {
-                    assert(ValIsSeq(p));
-                    SeqAppend(&new, ValCopy((Val*)p->sequence->first));
-                    p = (const Val*)p->sequence->rest;
-                }
-                return ValMakeSeq(new);
-            }
-        default:
-            assert(0);
-            break;
+        }
+        // Seq
+        Val *copy = ValMakeSeq(ValCopy(p->first), NULL);
+        Val *pcopy = copy;
+        p = p->rest;
+        while (ValIsSeq(p) && p)
+        {
+            pcopy->rest = ValMakeSeq(ValCopy(p->first), NULL);
+            pcopy = pcopy->rest;
+            p = p->rest;
+        }
+        return copy;
     }
+    return NULL;
 }
 

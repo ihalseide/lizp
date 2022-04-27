@@ -1,10 +1,8 @@
 #include <stdlib.h>
 #include <stdio.h>
-#include <stdbool.h>
 #include <setjmp.h>
 
 #include "lizp.h"
-#include "sequence.h"
 #include "reader.h"
 #include "eval.h"
 #include "printer.h"
@@ -46,7 +44,7 @@ static void LizpPrintMessage(int val)
             msg = "first item in list is not a function number";
             break;
         case LE_NO_FUNCTION:
-            msg = "undefined function";
+            msg = "invalid arguments for function or macro";
             break;
         case LE_INVALID_VAL:
             msg = "invalid lizp value";
@@ -84,50 +82,32 @@ Val *READ (const char *start, int length)
     return x;
 }
 
-// Returns newly allocated value
-Val *EVAL (Val *ast, Seq **env)
+Val *EVAL (Val *ast, Val **env)
 {
     return EvalAst(ast, env);
 }
 
-void PRINT (Val *expr, bool readable)
+void PRINT (Val *expr, int readable)
 {
-    if (!expr)
-    {
-        return;
-    }
     static char buffer[2 * 1024];
     int p_len = PrintVal(expr, buffer, sizeof(buffer), readable);
     printf("%.*s\n", p_len, buffer);
 }
 
 // Do one read, eval, and print cycle on a string.
-void rep (const char *start, int length, Seq **env)
+Val *rep (const char *start, int length, Val **env)
 {
-    Val *a = NULL;
-    Val *b = NULL;
-
     int val = setjmp(jbLizp);
     if (!val)
     {
-        a = READ(start, length);
-        b = EVAL(a, env);
-        PRINT(b, 1);
+        Val *v = EVAL(READ(start, length), env);
+        PRINT(v, 1);
+        return v;
     }
     else
     {
-        // There was an error (jump)
         LizpPrintMessage(val);
-    }
-
-    // Free the new values
-    if (a)
-    {
-        ValFreeAll(a); 
-    }
-    if (b && a != b)
-    {
-        ValFreeAll(b); 
+        return NULL;
     }
 }
 

@@ -20,9 +20,9 @@ enum LizpErrorEnum
 
 _Noreturn void LizpError(int val);
 Val *READ(const char *start, int length);
-Val *EVAL(Val *ast, Seq **env);
-void PRINT(Val *expr, bool readable);
-void rep(const char *start, int length, Seq **env);
+Val *EVAL(Val *ast, Val **env);
+void PRINT(Val *expr, int readable);
+Val *rep(const char *start, int length, Val **env);
 
 #endif /* _LIZP_H */
 

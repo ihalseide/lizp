@@ -5,7 +5,6 @@
 #include <string.h>
 
 #include "reader.h"
-#include "sequence.h"
 #include "value.h"
 #include "lizp.h"
 
@@ -14,6 +13,11 @@ bool CharIsSpace(char c)
     if (!c)
     {
         // Don't consider NULL char a space!
+        return false;
+    }
+    else if (c == '"')
+    {
+        // Don't consider string literal quote as space
         return false;
     }
     else if (c == '[' || c == ']')
@@ -189,7 +193,42 @@ int ReadInt(const char *start, int length, int *valOut)
 }
 
 // Returns number of chars read
-int ReadSeq(const char *start, int length, Seq **toList)
+int ReadString(const char *start, int length, Val **toList)
+{
+    if (start && length > 0)
+    {
+        const char *view = start;
+
+        // Consume the opening quote
+        assert(*view == '"');
+        view++;
+
+        // make form: [[str] ...]
+        Val *s = ValMakeSeq(ValMakeSeq(ValMakeInt(STR), NULL), NULL);
+        // Read the rest of the characters
+        Val *ps = s;
+        while (*view && *view != '"' && view < start + length)
+        {
+            ps->rest = ValMakeSeq(ValMakeInt(*view), NULL);
+            ps = ps->rest;
+            view++;
+        }
+
+        // Consume closing quote
+        if (*view != '"')
+        {
+            LizpError(LE_LIST_UNFINISHED);
+        }
+        view++;
+
+        *toList = s;
+        return view - start;
+    }
+    return 0;
+}
+
+// Returns number of chars read
+int ReadSeq(const char *start, int length, Val **toList)
 {
     // Validate arguments
     if (!start || length <= 0)
@@ -203,24 +242,44 @@ int ReadSeq(const char *start, int length, Seq **toList)
     assert(*view == '[');
     view++;
 
+    Val *s = NULL;
+
     // Skip whitespace
     view += ReadSpace(view, (start+length)-view);
     if (*view != ']')
     {
         // Non-empty list
-        Val *e; // element of list
-        while (*view && *view != ']' && view < start+length)
+        if (*view && *view != ']' && view < start+length)
         {
+            Val *e;
             int len = ReadVal(view, (start+length)-view, &e);
             if (!len)
             {
                 // Error reading element
                 return 0;
             }
-            SeqAppend(toList, e);
+            // Create first item
+            s = ValMakeSeq(e, NULL);
+            view += len;
+        }
+        // Pointer for appending to s
+        Val *ps = s;
+        while (*view && *view != ']' && view < start+length)
+        {
+            Val *e;
+            int len = ReadVal(view, (start+length)-view, &e);
+            if (!len)
+            {
+                // Error reading element
+                return 0;
+            }
+            // Append
+            ps->rest = ValMakeSeq(e, NULL);
+            ps = ps->rest;
             view += len;
         }
     }
+    *toList = s;
 
     if (*view == ']')
     {
@@ -254,6 +313,22 @@ int ReadVal(const char *start, int length, Val **out)
                 // End of input
                 *out = NULL;
                 break;
+            case '"':
+                // String literal
+                {
+                    Val *s = NULL;
+                    int len = ReadString(view, start+length-view, &s);
+                    view += len;
+                    if (len)
+                    {
+                        *out = s;
+                    }
+                    else
+                    {
+                        *out = NULL;
+                    }
+                }
+                break;
             case ']':
                 // Unmatched list
                 LizpError(LE_BRACKET_MISMATCH);
@@ -262,12 +337,12 @@ int ReadVal(const char *start, int length, Val **out)
             case '[':
                 // Read sequence / list
                 {
-                    Seq *s = NULL;
+                    Val *s = NULL;
                     int len = ReadSeq(view, start+length-view, &s);
+                    view += len;
                     if (len)
                     {
-                        view += len;
-                        *out = ValMakeSeq(s);
+                        *out = s;
                     }
                     else
                     {
