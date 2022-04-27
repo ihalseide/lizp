@@ -207,25 +207,31 @@ static Val *Apply(Val *seq, Val **env)
             }
             break;
         case PRINT:
-            // [print expr] readable
-            if (numArgs == 1)
+            // [print expr...] readable
+            if (numArgs)
             {
+                // Save printer vars
                 int base = PrinterGetBase();
+                bool upper = PrinterGetUpper();
                 Val *setBase = EnvGet(env, ValMakeInt(BASE));
+                Val *setUpper = EnvGet(env, ValMakeInt(UPPER));
                 if (ValIsInt(setBase))
                 {
                     PrinterSetBase(setBase->integer);
                 }
-                print(args->first, 1);
+                if (ValIsInt(setUpper))
+                {
+                    PrinterSetUpper(setUpper->integer);
+                }
+                Val *p = args;
+                while (p && ValIsSeq(p))
+                {
+                    print(p->first, 0);
+                    p = p->rest;
+                }
+                // Restore printer vars
                 PrinterSetBase(base);
-                return NULL;
-            }
-            break;
-        case PPRINT:
-            // [pprint expr] pretty, not readable
-            if (numArgs == 1)
-            {
-                print(args->first, 0);
+                PrinterSetUpper(upper);
                 return NULL;
             }
             break;

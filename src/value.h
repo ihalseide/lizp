@@ -26,6 +26,7 @@
 #define NOT      30701
 #define LAMBDA   21
 #define BASE     527198
+#define UPPER    51587811
 
 typedef struct Val Val;
 struct Val
