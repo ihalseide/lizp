@@ -5,11 +5,6 @@
 #include "lizp.h"
 #include "printer.h"
 
-static bool IsTrue(Val *p)
-{
-    return p && ValIsInt(p) && p->integer;
-}
-
 static void EnvPush(Val **env)
 {
     *env = ValMakeSeq(NULL, *env);
@@ -64,6 +59,11 @@ static Val *EnvGet(Val **env, Val *key)
 static Val *Apply(Val *seq, Val **env)
 {
     Val *fn = seq->first;
+    if (ValIsLambda(seq))
+    {
+        printf("LAMBDA\n");
+        return NULL;
+    }
     // First must be a valid function id number (a base36 name)
     if (!ValIsInt(fn) && !(ValIsInt(fn->first) && fn->first->integer == STR))
     {
@@ -74,11 +74,32 @@ static Val *Apply(Val *seq, Val **env)
     Val *args = seq->rest;
     switch (nameBase36)
     {
+        case LAMBDA:
+            // [lambda [(arg)...] expr]
+            if (numArgs == 2 && ValIsSeq(args->first))
+            {
+                Val *lArgs = args->first;
+                Val *p = lArgs;
+                while (p && ValIsSeq(p))
+                {
+                    if (!ValIsInt(p->first))
+                    {
+                        LizpError(LE_NO_FUNCTION);
+                    }
+                    p = p->rest;
+                }
+                Val *lBody = args->rest;
+                // make form [[lambda args] expr]
+                Val *result = ValMakeSeq(ValMakeSeq(ValMakeInt(LAMBDA), lArgs), lBody);
+                assert(ValIsLambda(result));
+                return result;
+            }
+            break;
         case NOT:
             // [not boolean]
             if (numArgs == 1)
             {
-                if (IsTrue(args->first))
+                if (ValIsTrue(args->first))
                 {
                     return ValMakeInt(0);
                 }
@@ -89,7 +110,7 @@ static Val *Apply(Val *seq, Val **env)
             // [if condition consequent alternative]
             if (numArgs == 2 || numArgs == 3)
             {
-                if (IsTrue(EvalAst(args->first, env)))
+                if (ValIsTrue(EvalAst(args->first, env)))
                 {
                     return EvalAst(args->rest->first, env);
                 }
@@ -112,7 +133,7 @@ static Val *Apply(Val *seq, Val **env)
                     }
                     Val *cond = p->first;
                     Val *cons = p->rest->first;
-                    if (IsTrue(EvalAst(cond, env)))
+                    if (ValIsTrue(EvalAst(cond, env)))
                     {
                         return EvalAst(cons, env);
                     }
@@ -312,11 +333,12 @@ static bool IsMacro(Val *seq)
         switch (first->integer)
         {
             case DO:
+            case IF:
             case GET:
             case LET:
-            case IF:
             case COND:
             case QUOTE:
+            case LAMBDA:
                 return true;
         }
     }

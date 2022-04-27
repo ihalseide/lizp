@@ -24,6 +24,7 @@
 #define COND     591817
 #define IF       663
 #define NOT      30701
+#define LAMBDA   21
 
 typedef struct Val Val;
 struct Val
@@ -44,6 +45,8 @@ Val *ValCopy(Val *p);
 bool ValIsInt(Val *p);
 bool ValIsSeq(Val *p);
 bool ValIsStr(Val *p);
+bool ValIsLambda(Val *p);
+bool ValIsTrue(Val *p);
 bool ValEqual(Val *x, Val *y);
 int ValSeqLength(Val *p);
 

@@ -209,6 +209,18 @@ int PrintSeq(Val *seq, char *out, int length, bool readable)
     return 0;
 }
 
+int PrintLambda(Val *p, char *out, int length, bool readable)
+{
+    int base = PrinterGetBase();
+    PrinterSetBase(36);
+    char *view = out;
+    view += PrintCStr("[lambda ", view, length-(view-out));
+    view += PrintSeq(p->first->rest, view, length-(view-out), readable);
+    view += PrintCStr("]", view, length-(view-out));
+    PrinterSetBase(base);
+    return view - out;
+}
+
 // Prints p to the given output stream
 // Returns: number of chars written
 int PrintVal(Val *p, char *out, int length, bool readable)
@@ -222,6 +234,10 @@ int PrintVal(Val *p, char *out, int length, bool readable)
         if (ValIsStr(p))
         {
             return PrintStr(p, out, length, readable);
+        }
+        if (ValIsLambda(p))
+        {
+            return PrintLambda(p, out, length, readable);
         }
         return PrintSeq(p, out, length, readable);
     }

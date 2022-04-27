@@ -26,13 +26,6 @@ bool ValIsInt(Val *p)
     return p && p->rest == p;
 }
 
-// form [[str] ...]
-bool ValIsStr(Val *p)
-{
-    return p && p->rest != p && p->first && ValIsSeq(p->first) &&
-        ValIsInt(p->first->first) && p->first->first->integer == STR;
-}
-
 Val *ValMakeInt(long n)
 {
     Val *p = ValAlloc();
@@ -49,6 +42,7 @@ Val *ValMakeSeq(Val *first, Val *rest)
     return p;
 }
 
+// String is a special type of Seq
 Val *ValMakeStr(const char *s, int len)
 {
     Val *p = ValMakeSeq(ValMakeSeq(ValMakeInt(STR), NULL), NULL);
@@ -121,5 +115,26 @@ bool ValEqual(Val *x, Val *y)
         return px == NULL && py == NULL;
     }
     return false;
+}
+
+bool ValIsTrue(Val *p)
+{
+    return ValIsInt(p) && p->integer;
+}
+
+// String is a special type of Seq
+// form [[str] ...]
+bool ValIsStr(Val *p)
+{
+    return p && p->rest != p && p->first && ValIsSeq(p->first) &&
+        ValIsInt(p->first->first) && p->first->first->integer == STR;
+}
+
+// Lambda is a special type of Seq
+// form [[lambda args] expr]
+bool ValIsLambda(Val *p)
+{
+    return p && ValIsSeq(p) && ValIsSeq(p->first) && p->first &&
+        ValIsInt(p->first->first) && p->first->first->integer == LAMBDA;
 }
 
