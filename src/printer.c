@@ -166,7 +166,34 @@ int PrintStr(Val *seq, char *out, int length, bool readable)
         {
             Val *e = seq->first;
             assert(ValIsInt(e));
-            view += PrintChar((char)e->integer, view, length-(view-out));
+            char c = (char)e->integer;
+            if (readable)
+            {
+                switch (c)
+                {
+                    case '\0':
+                        view += PrintChar('\\', view, length-(view-out));
+                        c = '0';
+                        break;
+                    case '\n':
+                        view += PrintChar('\\', view, length-(view-out));
+                        c = 'n';
+                        break;
+                    case '\t':
+                        view += PrintChar('\\', view, length-(view-out));
+                        c = 't';
+                        break;
+                    case '"':
+                        view += PrintChar('\\', view, length-(view-out));
+                        c = '"';
+                        break;
+                    case '\\':
+                        view += PrintChar('\\', view, length-(view-out));
+                        c = '\\';
+                        break;
+                }
+            }
+            view += PrintChar(c, view, length-(view-out));
             seq = seq->rest;
         }
         if (readable)

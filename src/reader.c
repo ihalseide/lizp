@@ -10,30 +10,28 @@
 
 bool CharIsSpace(char c)
 {
-    if (!c)
+    switch (c)
     {
-        // NULL char is not space
-        return false;
-    }
-    else if (c == '"' || c == '@')
-    {
-        // Reader macros
-        return false;
-    }
-    else if (c == '[' || c == ']')
-    {
-        // list characters
-        return false;
-    }
-    else if (c == '#' || c == '$' || c == '%' || c == '-' || c == '_')
-    {
-        // integer sigils
-        return false;
-    }
-    else
-    {
-        // All other non-alphanumeric characters are space
-        return !isalnum(c);
+        case '\0':
+        case '"':
+        case '@':
+        case '[':
+        case ']':
+        case '#':
+        case '$':
+        case '%':
+        case '-':
+        case '_':
+            // Not space:
+            // * NULL char
+            // * Reader macro chars
+            // * list brackets
+            // * integer sigils
+            // * integer minus sign and underscore
+            return false;
+        default:
+            // All other non-alphanumeric characters are space
+            return !isalnum(c);
     }
 }
 
@@ -69,7 +67,6 @@ int DigitValue(char d)
     }
 }
 
-// TODO: check for overflow
 // Returns the number of characters read
 // number read -> out
 int ReadInt(const char *start, int length, int *valOut)
@@ -192,6 +189,7 @@ int ReadInt(const char *start, int length, int *valOut)
     return view - start;
 }
 
+// Read string, with escape codes enabled
 // Returns number of chars read
 int ReadString(const char *start, int length, Val **toList)
 {
@@ -205,11 +203,28 @@ int ReadString(const char *start, int length, Val **toList)
 
         // make form: [[str] ...]
         Val *s = ValMakeSeq(ValMakeSeq(ValMakeInt(STR), NULL), NULL);
-        // Read the rest of the characters
         Val *ps = s;
         while (*view && *view != '"' && view < start + length)
         {
-            ps->rest = ValMakeSeq(ValMakeInt(*view), NULL);
+            char c = *view;
+            if (c == '\\')
+            {
+                view++;
+                if (!*view || view >= start + length)
+                {
+                    LizpError(LE_LIST_UNFINISHED);
+                }
+                switch (*view)
+                {
+                    case '0': c = '\0'; break;
+                    case 'n': c = '\n'; break;
+                    case 't': c = '\t'; break;
+                    case '"': c = '"'; break;
+                    case '\\': c = '\\'; break;
+                    default: c = *view;
+                }
+            }
+            ps->rest = ValMakeSeq(ValMakeInt(c), NULL);
             ps = ps->rest;
             view++;
         }
