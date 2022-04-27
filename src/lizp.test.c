@@ -6,7 +6,7 @@
 // Read & eval
 static Val * re(const char *s, int len, Val **env)
 {
-    return EVAL(READ(s, len), env);
+    return eval(read(s, len), env);
 }
 
 static void ListTest(void)

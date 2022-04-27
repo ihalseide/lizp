@@ -21,9 +21,9 @@ enum LizpErrorEnum
 };
 
 _Noreturn void LizpError(int val);
-Val *READ(const char *start, int length);
-Val *EVAL(Val *ast, Val **env);
-void PRINT(Val *expr, int readable);
+Val *read(const char *start, int length);
+Val *eval(Val *ast, Val **env);
+void print(Val *expr, int readable);
 void rep(const char *start, int length, Val **env);
 
 extern jmp_buf jbLizp;

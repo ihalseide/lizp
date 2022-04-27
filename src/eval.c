@@ -69,11 +69,19 @@ static Val *Apply(Val *seq, Val **env)
     Val *args = seq->rest;
     switch (nameBase36)
     {
-        case PRINT_OP:
-            // [print expr]
+        case PRINT:
+            // [print expr] readable
             if (numArgs == 1)
             {
-                PRINT(args->first, 1);
+                print(args->first, 1);
+                return NULL;
+            }
+            break;
+        case PPRINT:
+            // [pprint expr] pretty, not readable
+            if (numArgs == 1)
+            {
+                print(args->first, 0);
                 return NULL;
             }
             break;

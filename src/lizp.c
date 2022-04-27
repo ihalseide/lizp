@@ -66,7 +66,7 @@ static void LizpPrintMessage(int val)
 
 // Does: Read a form from the stream
 // Returns: the form, which may be NULL
-Val *READ (const char *start, int length)
+Val *read (const char *start, int length)
 {
     // Validate inputs
     if (!start || (length < 0))
@@ -84,12 +84,12 @@ Val *READ (const char *start, int length)
     return x;
 }
 
-Val *EVAL (Val *ast, Val **env)
+Val *eval (Val *ast, Val **env)
 {
     return EvalAst(ast, env);
 }
 
-void PRINT (Val *expr, int readable)
+void print (Val *expr, int readable)
 {
     static char buffer[2 * 1024];
     int p_len = PrintVal(expr, buffer, sizeof(buffer), readable);
@@ -102,7 +102,7 @@ void rep (const char *start, int length, Val **env)
     int val = setjmp(jbLizp);
     if (!val)
     {
-        PRINT(EVAL(READ(start, length), env), 1);
+        print(eval(read(start, length), env), 1);
     }
     else
     {

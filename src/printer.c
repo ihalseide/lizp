@@ -151,18 +151,28 @@ int PrintInt(int n, char *out, int len, int readable, int base, bool upper)
     return i;
 }
 
-int PrintStr(Val *seq, char *out, int length)
+int PrintStr(Val *seq, char *out, int length, bool readable)
 {
     if (length > 0 && out && seq)
     {
         char *view = out;
         seq = seq->rest;
+        if (readable)
+        {
+            *view = '"';
+            view++;
+        }
         while (ValIsSeq(seq) && seq && view < (out + length))
         {
             Val *e = seq->first;
             assert(ValIsInt(e));
             view += PrintChar((char)e->integer, view, length-(view-out));
             seq = seq->rest;
+        }
+        if (readable)
+        {
+            *view = '"';
+            view++;
         }
         return view - out;
     }
@@ -209,9 +219,9 @@ int PrintVal(Val *p, char *out, int length, bool readable)
         {
             return PrintInt(p->integer, out, length, readable, printNumBase, printNumUpper);
         }
-        if (readable && ValIsStr(p))
+        if (ValIsStr(p))
         {
-            return PrintStr(p, out, length);
+            return PrintStr(p, out, length, readable);
         }
         return PrintSeq(p, out, length, readable);
     }

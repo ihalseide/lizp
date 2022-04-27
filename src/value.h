@@ -4,7 +4,8 @@
 #include <stdbool.h>
 
 // Base 36 numbers for names
-#define PRINT_OP 43274297
+#define PRINT    43274297
+#define PPRINT   1554928697
 #define ADD      13441
 #define SUB      37379
 #define MUL      29613
