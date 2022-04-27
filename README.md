@@ -29,8 +29,12 @@ number. The reader is not sensitive to letter case (it is case-insensitive).
 Unless the invalid character appears in a number, any invalid characters are
 ignored.
 
-* Lists: are delimited by square brackets: [...] (which are the superior
+* Lists: are delimited by square brackets: \[...] (which are the superior
   brackets because you don't need to press shift in order to type them)
+ 
+* Strings: strings are just lists with special elements. A string is just a list
+  of the form \[\[str] num...]. The reader handles double quotes specially so
+  that a string like "cat" is equivalent to \[\[str] 99 97 116]
 
 * Integers: can be written with a sign, and in different bases (default base is
   base 36)
@@ -54,26 +58,27 @@ are evaluated from left to right, while macros make no such guarantee (if the
 arguments are even evaluated at all).
 
 As expressions are first being read from a string, the "reader macros" execute.
-There are only 2 reader macros: string literals and the "at" sign for variable
+There are 2 reader macros: string literals and the "at" sign for variable
 getting.
-* "..." = [str numbers...]
-* @x = [get x]
+* "x..." = \[str x...]
+* @x = \[get x]
 
 Functions may be overloaded due to how they are programmed in the C code. This
 is a feature. 
 
 This is the alphabetical list of current functions and macros (defined in the
 file src/eval.c):
-* [add x y]
-* [mul x y] multiply integer x by integer y
-* [sub x y] subtract y from x
-* [div x y]
-* [neg x] negate integer x
-* [list ...] create a list from the arguments
-* [print expr] print expression out
-* macro [do ...] evaluate sub-expressions in order
-* macro [get key] lookup the value for a given "symbol"
-* macro [let [key1 value1...] expr] execute expr with the keys bound with the
-  values
-* macro [quote expr] return the expression without evaluating it
+* \[add x y]
+* \[mul x y] multiply integer x by integer y
+* \[sub x y] subtract y from x
+* \[div x y]
+* \[neg x] negate integer x
+* \[list val...] create a list from the values
+* \[print expr] print expression out
+* \[str num...] create a string from numbers
+* macro \[do expr...] evaluate sub-expressions in order
+* macro \[get key] lookup the value for a given "symbol"
+* macro \[let \[key1 value1 key2 value2 ...] expr] execute expr with keys bound to
+  the values
+* macro \[quote expr] return the expression without evaluating it
 
