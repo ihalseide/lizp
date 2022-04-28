@@ -156,16 +156,20 @@ int PrintStr(Val *seq, char *out, int length, bool readable)
     if (length > 0 && out && seq)
     {
         char *view = out;
-        seq = seq->rest;
+        Val *p = seq->rest;
         if (readable)
         {
             *view = '"';
             view++;
         }
-        while (ValIsSeq(seq) && seq && view < (out + length))
+        while (ValIsSeq(p) && p && view < (out + length))
         {
-            Val *e = seq->first;
-            assert(ValIsInt(e));
+            Val *e = p->first;
+            if (!ValIsInt(e))
+            {
+                // Value is not really a proper string
+                return PrintSeq(seq, out, length, readable);
+            }
             char c = (char)e->integer;
             if (readable)
             {
@@ -194,7 +198,7 @@ int PrintStr(Val *seq, char *out, int length, bool readable)
                 }
             }
             view += PrintChar(c, view, length-(view-out));
-            seq = seq->rest;
+            p = p->rest;
         }
         if (readable)
         {
