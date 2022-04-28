@@ -1,5 +1,6 @@
 CC = clang
-COpts = -std=c99 -g -Wall
+COpts = -std=c99 -O3 -Wall
+#COpts = -std=c99 -g -Wall
 SrcDir = src
 BuildDir = objects
 LizpMain = $(SrcDir)/main.c
