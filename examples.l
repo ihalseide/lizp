@@ -1,5 +1,3 @@
-; note: the values are only defined within the let expressions
-
 ; s = function to print sums
 [let [s [l [x y]
           [print "x: " @x ", y: " @y ", x + y = " [add @x @y] "\n"]]]
