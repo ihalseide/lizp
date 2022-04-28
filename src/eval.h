@@ -3,13 +3,8 @@
 
 #include "value.h"
 
-typedef struct Func
-{
-    int nameBase36;  // number that represents its name in base-36
-    int numParams;  // number of parameters
-} Func;
-
 Val *EvalAst(Val *ast, Val **env);
 void EnvSet(Val **env, Val *key, Val *val);
+Val *EnvGet(Val **env, Val *key);
 
 #endif /* _EVAL_H */
