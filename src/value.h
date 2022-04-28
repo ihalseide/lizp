@@ -27,6 +27,8 @@
 #define LAMBDA   21
 #define BASE     527198
 #define UPPER    51587811
+#define CAT      15941
+#define JOIN     918239
 
 typedef struct Val Val;
 struct Val
@@ -43,6 +45,7 @@ Val *ValAlloc(void);
 Val *ValMakeInt(long n);
 Val *ValMakeSeq(Val *first, Val *rest);
 Val *ValMakeStr(const char *s, int len);
+Val *ValMakeEmptyStr(void);
 Val *ValCopy(Val *p);
 bool ValIsInt(Val *p);
 bool ValIsSeq(Val *p);

@@ -4,6 +4,81 @@
 #include "lizp.h"
 #include "printer.h"
 
+Val *ConcatLists(Val *lists)
+{
+    Val *cat = NULL;
+    Val *p;
+    while (lists && ValIsSeq(lists))
+    {
+        Val *s = lists->first;
+        if (!ValIsSeq(s))
+        {
+            LizpError(LE_NO_FUNCTION);
+        }
+        while (s && ValIsSeq(s))
+        {
+            if (cat)
+            {
+                p->rest = ValMakeSeq(s->first, NULL);
+                p = p->rest;
+                s = s->rest;
+                continue;
+            }
+            cat = ValMakeSeq(s->first, NULL);
+            p = cat;
+            s = s->rest;
+        }
+        lists = lists->rest;
+    }
+    return cat;
+}
+
+// sep: separator string
+// strs: list of strings
+Val *JoinStrings(Val *sep, Val *strs)
+{
+    if (strs)
+    {
+        Val *result = ValMakeEmptyStr();
+        Val *p = result;
+        // First string
+        Val *s;
+        s = strs->first->rest;
+        while (s && ValIsSeq(s))
+        {
+            assert(ValIsInt(s->first));
+            p->rest = ValMakeSeq(s->first, NULL);
+            p = p->rest;
+            s = s->rest;
+        }
+        strs = strs->rest;
+        while (strs && ValIsSeq(strs))
+        {
+            // Sep
+            s = sep->rest;
+            while (s && ValIsSeq(s))
+            {
+                assert(ValIsInt(s->first));
+                p->rest = ValMakeSeq(s->first, NULL);
+                p = p->rest;
+                s = s->rest;
+            }
+            // String
+            s = strs->first->rest;
+            while (s && ValIsSeq(s))
+            {
+                assert(ValIsInt(s->first));
+                p->rest = ValMakeSeq(s->first, NULL);
+                p = p->rest;
+                s = s->rest;
+            }
+            strs = strs->rest;
+        }
+        return result;
+    }
+    return ValMakeEmptyStr();
+}
+
 static void DoPrint(Val *args, Val **env, bool readable)
 {
     // Save printer vars
@@ -161,6 +236,18 @@ Val *ApplyBI(Val *seq, Val **env)
     Val *args = seq->rest;
     switch (nameBase36)
     {
+        case CAT:
+            // [cat list...] concatenate lists
+            return ConcatLists(args);
+        case JOIN:
+            // [join sep str...] join strings
+            if (numArgs != 0)
+            {
+                Val *sep = args->first;
+                Val *strs = args->rest;
+                return JoinStrings(sep, strs);
+            }
+            break;
         case NOT:
             // [not boolean]
             if (numArgs == 1)

@@ -42,10 +42,15 @@ Val *ValMakeSeq(Val *first, Val *rest)
     return p;
 }
 
+Val *ValMakeEmptyStr(void)
+{
+    return ValMakeSeq(ValMakeSeq(ValMakeInt(STR), NULL), NULL);
+}
+
 // String is a special type of Seq
 Val *ValMakeStr(const char *s, int len)
 {
-    Val *p = ValMakeSeq(ValMakeSeq(ValMakeInt(STR), NULL), NULL);
+    Val *p = ValMakeEmptyStr();
     Val *ps = p;
     for (int i = 0; i < len; i++)
     {

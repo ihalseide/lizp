@@ -22,7 +22,9 @@ enum LizpErrorEnum
     LE_COND_FORM,
     LE_LAMBDA_TOO_MANY_ARGS,
     LE_LAMBDA_TOO_FEW_ARGS,
+    // put values above here only
     LE_ENUM_END,
+    // do not put values below here
 };
 #define LE_COUNT (LE_ENUM_END - LE_INVALID_INT)
 
