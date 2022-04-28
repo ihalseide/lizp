@@ -76,7 +76,8 @@ file src/eval.c):
 * \[div x y] divide x by y
 * \[neg x] negate integer x
 * \[list (val)...] create a list from the values
-* \[print expr] print expression out
+* \[print expr...] print expressions out in such a way the the value could be read back in by lizp
+* \[write expr...] write expressions
 * \[str (num)...] create a string from numbers
 * \[len list] get the length of a list
 * \[first list] get the first item of a list
@@ -86,9 +87,9 @@ file src/eval.c):
 * macro \[l [(arg)...] expr] create lambda expression (function)
 * macro \[if a b (c)] a=condition, b=consequent, c=alternative, c is optional
 * macro \[cond (a b)...] a=condition b=consequent, returns [] when no condition is true
-* macro \[do expr...] evaluate sub-expressions in order
+* macro \[do (expr)...] evaluate sub-expressions in order
 * macro \[get key] lookup the value for a given "symbol"
-* macro \[let \[key1 value1 key2 value2 ...] expr] execute expr with keys bound to
+* macro \[let \[(key value)...] expr] execute expr with keys bound to
   the values
 * macro \[quote expr] return the expression without evaluating it
 

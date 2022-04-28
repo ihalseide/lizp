@@ -4,6 +4,32 @@
 #include "lizp.h"
 #include "printer.h"
 
+static void DoPrint(Val *args, Val **env, bool readable)
+{
+    // Save printer vars
+    int base = PrinterGetBase();
+    bool upper = PrinterGetUpper();
+    Val *setBase = EnvGet(env, ValMakeInt(BASE));
+    Val *setUpper = EnvGet(env, ValMakeInt(UPPER));
+    if (ValIsInt(setBase))
+    {
+        PrinterSetBase(setBase->integer);
+    }
+    if (ValIsInt(setUpper))
+    {
+        PrinterSetUpper(setUpper->integer);
+    }
+    Val *p = args;
+    while (p && ValIsSeq(p))
+    {
+        print(p->first, readable);
+        p = p->rest;
+    }
+    // Restore printer vars
+    PrinterSetBase(base);
+    PrinterSetUpper(upper);
+}
+
 static bool IsMacro(Val *seq)
 {
     if (seq)
@@ -182,28 +208,17 @@ Val *ApplyBI(Val *seq, Val **env)
             // [print expr...] readable
             if (numArgs)
             {
-                // Save printer vars
-                int base = PrinterGetBase();
-                bool upper = PrinterGetUpper();
-                Val *setBase = EnvGet(env, ValMakeInt(BASE));
-                Val *setUpper = EnvGet(env, ValMakeInt(UPPER));
-                if (ValIsInt(setBase))
-                {
-                    PrinterSetBase(setBase->integer);
-                }
-                if (ValIsInt(setUpper))
-                {
-                    PrinterSetUpper(setUpper->integer);
-                }
-                Val *p = args;
-                while (p && ValIsSeq(p))
-                {
-                    print(p->first, 0);
-                    p = p->rest;
-                }
-                // Restore printer vars
-                PrinterSetBase(base);
-                PrinterSetUpper(upper);
+                bool readable = true;
+                DoPrint(args, env, readable);
+                return NULL;
+            }
+            break;
+        case WRITE:
+            // [write expr...] not readable
+            if (numArgs)
+            {
+                bool readable = false;
+                DoPrint(args, env, readable);
                 return NULL;
             }
             break;
