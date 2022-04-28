@@ -76,9 +76,11 @@ file src/eval.c):
 * \[div x y] divide x by y
 * \[neg x] negate integer x
 * \[list (val)...] create a list from the values
+* \[cat (list)...] concatenate lists into a larger list
 * \[print expr...] print expressions out in such a way the the value could be read back in by lizp
 * \[write expr...] write expressions
 * \[str (num)...] create a string from numbers
+* \[join sep (string)...] join strings into a larger string with a separator string
 * \[len list] get the length of a list
 * \[first list] get the first item of a list
 * \[rest list] get the rest of the items in a list from removing the first
