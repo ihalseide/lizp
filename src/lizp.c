@@ -6,7 +6,30 @@
 #include <string.h>
 #include "lizp.h"
 
-jmp_buf jbLizp = {0};
+jmp_buf jbLizp;
+Val *pool = NULL;
+Val *freelist = NULL;
+Val *env = NULL;
+
+Val *ValGet(Val *save1, Val *save2)
+{
+    if (!freelist)
+    {
+        CollectGarbage(save1, save2);
+        if (!freelist)
+        {
+            assert(0 && "not implemented yet");
+        }
+    }
+    Val *p = freelist;
+    freelist = freelist->rest;
+    return p;
+}
+
+void CollectGarbage(Val *save1, Val *save2)
+{
+    assert(0 && "not implemented yet");
+}
 
 // A NULL val is considered an empty sequence,
 bool ValIsSeq(Val *p)
@@ -1016,6 +1039,25 @@ static Val *ApplyLambda(Val *seq, Val **env)
     LizpError(LE_NO_FUNCTION);
 }
 
+// Sum up a list of integers
+// Returns NULL if error
+Val *Sum(Val *ints)
+{
+    Val *p = ints;
+    long sum = 0;
+    while (p && ValIsSeq(p))
+    {
+        Val *e = p->first;
+        if (!ValIsInt(e))
+        {
+            return NULL;
+        }
+        sum += e->integer;
+        p = p->rest;
+    }
+    return ValMakeInt(sum);
+}
+
 // Apply built-in function
 // Must not modify/touch/share structure with the original seq
 // Returns true if new values were allocated
@@ -1106,12 +1148,13 @@ Val *ApplyBI(Val *seq, Val **env)
             }
             break;
         case ADD:
-            // [add x y]
-            if (numArgs == 2)
+            // [add (i)...]
             {
-                int x = args->first->integer;
-                int y = args->rest->first->integer;
-                return ValMakeInt(x + y);
+                Val *v = Sum(args);
+                if (v)
+                {
+                    return v;
+                }
             }
             break;
         case SUB:
@@ -1377,6 +1420,7 @@ Val *EvalAst(Val *ast, Val **env)
             // Evaluate sub-expressions
             Val *evAst = EvalEach(ast, env);
             assert(evAst);
+            // TODO: handle APPLY/EVAL special cases
             // Lambda function call?
             if (ValIsLambda(evAst->first))
             {
@@ -1498,5 +1542,18 @@ void rep (const char *start, int length, Val **env)
     {
         LizpPrintMessage(val);
     }
+}
+
+void InitLizp(void)
+{
+    const int n = 50;
+    pool = malloc(sizeof(*pool) * n);
+    for (int i = 0; i < n; i++)
+    {
+        pool[i].first = NULL;
+        pool[i].rest = &pool[i + 1];
+    }
+    pool[n - 1].rest = NULL;
+    freelist = pool;
 }
 

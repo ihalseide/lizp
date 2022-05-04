@@ -157,6 +157,10 @@ Val *ConcatLists(Val *lists);
 
 Val *JoinStrings(Val *sep, Val *strs);
 
+void CollectGarbage(Val *save1, Val *save2);
+
+Val *Sum(Val *ints);
+
 // State
 extern jmp_buf jbLizp;
 extern Val *env;
