@@ -8,6 +8,7 @@
 
 jmp_buf jbLizp;
 Val *pool = NULL;
+long pool_size = 0;
 Val *freelist = NULL;
 Val *env = NULL;
 
@@ -26,9 +27,55 @@ Val *ValGet(Val *save1, Val *save2)
     return p;
 }
 
+void ValFree(Val *p)
+{
+    if (p)
+    {
+        p->rest = freelist;
+        freelist = p;
+    }
+}
+
+void ValFreeRec(Val *v)
+{
+    Val *p = v;
+    while (p && ValIsSeq(p))
+    {
+        ValFreeRec(p->first);
+        p = p->rest;
+    }
+    ValFree(v);
+}
+
+void Mark(Val *v)
+{
+    if (v && !v->flag)
+    {
+        v->flag = true;
+        // Mark sub-sequences
+        Val *p = v;
+        while (p && ValIsSeq(p))
+        {
+            Mark(p->first);
+            p = p->rest;
+        }
+    }
+}
+
 void CollectGarbage(Val *save1, Val *save2)
 {
-    assert(0 && "not implemented yet");
+    Mark(save1);
+    Mark(save2);
+    Mark(env);
+    for (int i = 0; i < pool_size; i++)
+    {
+        Val *p = &pool[i];
+        if (!p->flag)
+        {
+            ValFree(p);
+        }
+        p->flag = false;
+    }
 }
 
 // A NULL val is considered an empty sequence,
@@ -933,6 +980,8 @@ static bool IsMacro(Val *seq)
             {
                 case DO:
                 case IF:
+                case OR:
+                case AND:
                 case LET:
                 case GET:
                 case COND:
@@ -1058,6 +1107,25 @@ Val *Sum(Val *ints)
     return ValMakeInt(sum);
 }
 
+// Product of a list of integers
+// Returns NULL if error
+Val *Product(Val *ints)
+{
+    Val *p = ints;
+    long product = 1;
+    while (p && ValIsSeq(p))
+    {
+        Val *e = p->first;
+        if (!ValIsInt(e))
+        {
+            return NULL;
+        }
+        product *= e->integer;
+        p = p->rest;
+    }
+    return ValMakeInt(product);
+}
+
 // Apply built-in function
 // Must not modify/touch/share structure with the original seq
 // Returns true if new values were allocated
@@ -1133,8 +1201,7 @@ Val *ApplyBI(Val *seq, Val **env)
             // [print expr...] readable
             if (numArgs)
             {
-                bool readable = true;
-                DoPrint(args, env, readable);
+                DoPrint(args, env, true);
                 return NULL;
             }
             break;
@@ -1142,8 +1209,7 @@ Val *ApplyBI(Val *seq, Val **env)
             // [write expr...] not readable
             if (numArgs)
             {
-                bool readable = false;
-                DoPrint(args, env, readable);
+                DoPrint(args, env, false);
                 return NULL;
             }
             break;
@@ -1168,11 +1234,12 @@ Val *ApplyBI(Val *seq, Val **env)
             break;
         case MUL:
             // [mul x y]
-            if (numArgs == 2)
             {
-                int x = args->first->integer;
-                int y = args->rest->first->integer;
-                return ValMakeInt(x * y);
+                Val *v = Product(args);
+                if (v)
+                {
+                    return v;
+                }
             }
             break;
         case DIV:
@@ -1230,6 +1297,59 @@ Val *ApplyBI(Val *seq, Val **env)
     LizpError(LE_NO_FUNCTION);
 }
 
+// Make sequence with empty values
+Val *MakeEmptySeq(int len)
+{
+    if (len <= 0)
+    {
+        return NULL;
+    }
+    Val *v = ValMakeSeq(NULL, NULL);
+    Val *p = v;
+    len--;
+    while (len > 0)
+    {
+        p->rest = ValMakeSeq(NULL, NULL);
+        p = p->rest;
+        len--;
+    }
+    return v;
+}
+
+// [and (expr)...]
+Val *DoAnd(Val *ast, Val **env)
+{
+    Val *p = ast;
+    Val *e;
+    while (p && ValIsSeq(p))
+    {
+        e = EvalAst(p->first, env);
+        if (!ValIsTrue(e))
+        {
+            break;
+        }
+        p = p->rest;
+    }
+    return e;
+}
+
+// [or (expr)...]
+Val *DoOr(Val *ast, Val **env)
+{
+    Val *p = ast;
+    Val *e;
+    while (p && ValIsSeq(p))
+    {
+        e = EvalAst(p->first, env);
+        if (ValIsTrue(e))
+        {
+            return e;
+        }
+        p = p->rest;
+    }
+    return NULL;
+}
+
 void DoMacro(Val *ast, Val **env, Val **out, bool *tail, bool *pop)
 {
     *out = NULL;
@@ -1240,6 +1360,14 @@ void DoMacro(Val *ast, Val **env, Val **out, bool *tail, bool *pop)
     int numArgs = ValSeqLength(args);
     switch (ast->first->integer)
     {
+        case AND:
+            // [and (expr)...]
+            *out = DoAnd(args, env);
+            return;
+        case OR:
+            // [or (expr)...]
+            *out = DoOr(args, env);
+            return;
         case GET:
             // [get var]
             if (numArgs == 1 && ValIsInt(args->first))
@@ -1524,13 +1652,14 @@ Val *eval (Val *ast, Val **env)
 
 void print (Val *expr, int readable)
 {
-    static char buffer[2 * 1024];
+    const int n = 2 * 1024;
+    static char buffer[n];
     int p_len = PrintVal(expr, buffer, sizeof(buffer), readable);
     printf("%.*s", p_len, buffer);
 }
 
 // Do one read, eval, and print cycle on a string.
-void rep (const char *start, int length, Val **env)
+void rep(const char *start, int length, Val **env)
 {
     int val = setjmp(jbLizp);
     if (!val)
@@ -1544,16 +1673,34 @@ void rep (const char *start, int length, Val **env)
     }
 }
 
-void InitLizp(void)
+void InitPool(void)
 {
-    const int n = 50;
-    pool = malloc(sizeof(*pool) * n);
-    for (int i = 0; i < n; i++)
+    pool_size = 20;
+    pool = malloc(sizeof(*pool) * pool_size);
+    assert(pool != NULL);
+    for (int i = 0; i < pool_size; i++)
     {
         pool[i].first = NULL;
         pool[i].rest = &pool[i + 1];
     }
-    pool[n - 1].rest = NULL;
+    pool[pool_size - 1].rest = NULL;
     freelist = pool;
+    assert(pool != NULL);
+    assert(freelist != NULL);
+    assert(pool_size > 0);
+}
+
+void InitEnv(void)
+{
+    env = NULL;
+    EnvSet(&env, ValMakeInt(BASE), ValMakeInt(10));
+    EnvSet(&env, ValMakeInt(UPPER), ValMakeInt(1));
+    assert(env != NULL);
+}
+
+void InitLizp(void)
+{
+    InitPool();
+    InitEnv();
 }
 

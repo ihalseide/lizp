@@ -1,24 +1,17 @@
 CC = clang
-COpts = -std=c99 -O3 -Wall
-#COpts = -std=c99 -g -Wall
+#COpts = -std=c99 -O3 -Wall
+COpts = -std=c99 -g -Wall
 SrcDir = src
 BuildDir = objects
 LizpMain = $(SrcDir)/main.c
 TestMain = $(SrcDir)/test.c
-LizpSrc = lizp.c printer.c reader.c value.c eval.c
-TestSrc = lizp.test.c reader.test.c printer.test.c value.test.c eval.test.c
-LizpObjs = $(addprefix $(BuildDir)/,$(LizpSrc:.c=.o))
-TestObjs = $(addprefix $(BuildDir)/,$(TestSrc:.c=.o))
 	
-default: test lizp
+default: lizp
 
-run: test lizp
-	./test && ./lizp
-
-lizp: $(LizpMain) $(LizpObjs)
+lizp: $(LizpMain) $(BuildDir)/lizp.o
 	$(CC) $(COpts) -o $@ $^
 
-test: $(TestMain) $(LizpObjs) $(TestObjs)
+test: $(TestMain) $(BuildDir)/lizp.o
 	$(CC) $(COpts) -o $@ $^
 
 $(BuildDir)/%.o: $(SrcDir)/%.c $(SrcDir)/%.h | $(BuildDir)
@@ -27,9 +20,10 @@ $(BuildDir)/%.o: $(SrcDir)/%.c $(SrcDir)/%.h | $(BuildDir)
 $(BuildDir):
 	mkdir -p $@
 
+run: test lizp
+	./test && ./lizp
+
 clean:
-	rm $(LizpObjs)
-	rm $(TestObjs)
 	rm lizp
 	rm test
 

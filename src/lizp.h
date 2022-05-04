@@ -30,6 +30,8 @@
 #define UPPER    51587811
 #define CAT      15941
 #define JOIN     918239
+#define AND      13801
+#define OR       891
 
 typedef struct Val Val;
 struct Val
@@ -157,9 +159,21 @@ Val *ConcatLists(Val *lists);
 
 Val *JoinStrings(Val *sep, Val *strs);
 
+void Mark(Val *p);
+
 void CollectGarbage(Val *save1, Val *save2);
 
 Val *Sum(Val *ints);
+
+Val *Product(Val *ints);
+
+Val *DoAnd(Val *ast, Val **env);
+
+Val *DoOr(Val *ast, Val **env);
+
+void InitEnv(void);
+
+void InitPool(void);
 
 // State
 extern jmp_buf jbLizp;
