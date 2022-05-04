@@ -6,13 +6,205 @@
 #include <string.h>
 #include "lizp.h"
 
-jmp_buf jbLizp;
-Val *pool = NULL;
-long pool_size = 0;
-Val *freelist = NULL;
-Val *env = NULL;
+// Callback
+extern Val *LizpInitEnv(void);
 
-Val *ValGet(Val *save1, Val *save2)
+static long pool_size = 0;
+static Val *pool = NULL;
+static Val *freelist = NULL;
+
+static long opcode;
+static Val *global_env;
+static Val *env;
+static Val *code;
+static Val *next;
+static Val *args;
+
+Val *Length(Val *args)
+{
+    if (args)
+    {
+        Val *p = args->first;
+        long i = 0;
+        while (p && IsSeq(p))
+        {
+            i++;
+            p = p->rest;
+        }
+        return MakeInt(i);
+    }
+    return NULL;
+}
+
+// Concatenate lists into a single list
+Val *ConcatLists(Val *lists)
+{
+    Val *cat = NULL;
+    Val *p;
+    while (lists && IsSeq(lists))
+    {
+        Val *s = lists->first;
+        if (!IsSeq(s))
+        {
+            return NULL;
+        }
+        while (s && IsSeq(s))
+        {
+            if (cat)
+            {
+                p->rest = MakeSeq(s->first, NULL);
+                p = p->rest;
+                s = s->rest;
+                continue;
+            }
+            cat = MakeSeq(s->first, NULL);
+            p = cat;
+            s = s->rest;
+        }
+        lists = lists->rest;
+    }
+    return cat;
+}
+
+// Join a list of strings with a separator string
+// sep: separator string
+// strs: list of strings
+Val *JoinStrings(Val *sep, Val *strs)
+{
+    if (strs)
+    {
+        Val *result = MakeEmptyStr();
+        Val *p = result;
+        // First string
+        Val *s;
+        s = strs->first->rest;
+        while (s && IsSeq(s))
+        {
+            assert(IsInt(s->first));
+            p->rest = MakeSeq(s->first, NULL);
+            p = p->rest;
+            s = s->rest;
+        }
+        strs = strs->rest;
+        // Rest of the strings
+        while (strs && IsSeq(strs))
+        {
+            // Sep
+            s = sep->rest;
+            while (s && IsSeq(s))
+            {
+                assert(IsInt(s->first));
+                p->rest = MakeSeq(s->first, NULL);
+                p = p->rest;
+                s = s->rest;
+            }
+            // String
+            s = strs->first->rest;
+            while (s && IsSeq(s))
+            {
+                assert(IsInt(s->first));
+                p->rest = MakeSeq(s->first, NULL);
+                p = p->rest;
+                s = s->rest;
+            }
+            strs = strs->rest;
+        }
+        return result;
+    }
+    return MakeEmptyStr();
+}
+
+// Base function for lizp code calls
+void DoPrint(Val *args, bool readable)
+{
+    Val *p = args;
+    while (p && IsSeq(p))
+    {
+        print(p->first, readable);
+        p = p->rest;
+    }
+}
+
+// Sum up a list of integers
+// Returns NULL if error
+Val *Sum(Val *ints)
+{
+    Val *p = ints;
+    long sum = 0;
+    while (p && IsSeq(p))
+    {
+        Val *e = p->first;
+        if (!IsInt(e))
+        {
+            return NULL;
+        }
+        sum += e->integer;
+        p = p->rest;
+    }
+    return MakeInt(sum);
+}
+
+// Product of a list of integers
+// Returns NULL if error
+Val *Product(Val *ints)
+{
+    Val *p = ints;
+    long product = 1;
+    while (p && IsSeq(p))
+    {
+        Val *e = p->first;
+        if (!IsInt(e))
+        {
+            return NULL;
+        }
+        product *= e->integer;
+        p = p->rest;
+    }
+    return MakeInt(product);
+}
+
+
+void dprint_pool(void)
+{
+    for (int i = 0; i < pool_size; i++)
+    {
+        Val *p = &pool[i];
+        printf("%c%d%c: ",
+                (freelist==p)? '^' : ' ',
+                i,
+                p->is_mark? '*' : ' ');
+        if (IsInt(p))
+        {
+            print(p, 1);
+        }
+        else
+        {
+            putchar('(');
+            if (p->first)
+            {
+                printf("%ld", p->first - pool);
+            }
+            else
+            {
+                putchar('X');
+            }
+            printf(" . ");
+            if (p->rest)
+            {
+                printf("%ld", p->rest - pool);
+            }
+            else
+            {
+                putchar('X');
+            }
+            putchar(')');
+        }
+        putchar('\n');
+    }
+    putchar('\n');
+}
+
+Val *GetVal(Val *save1, Val *save2)
 {
     if (!freelist)
     {
@@ -39,7 +231,7 @@ void ValFree(Val *p)
 void ValFreeRec(Val *v)
 {
     Val *p = v;
-    while (p && ValIsSeq(p))
+    while (p && IsSeq(p))
     {
         ValFreeRec(p->first);
         p = p->rest;
@@ -49,12 +241,12 @@ void ValFreeRec(Val *v)
 
 void Mark(Val *v)
 {
-    if (v && !v->flag)
+    if (v && !v->is_mark)
     {
-        v->flag = true;
+        v->is_mark = 1;
         // Mark sub-sequences
         Val *p = v;
-        while (p && ValIsSeq(p))
+        while (p && IsSeq(p))
         {
             Mark(p->first);
             p = p->rest;
@@ -66,74 +258,93 @@ void CollectGarbage(Val *save1, Val *save2)
 {
     Mark(save1);
     Mark(save2);
+    Mark(global_env);
     Mark(env);
+    Mark(code);
+    Mark(next);
+    Mark(args);
     for (int i = 0; i < pool_size; i++)
     {
+        dprint_pool();
         Val *p = &pool[i];
-        if (!p->flag)
+        if (!p->is_mark)
         {
             ValFree(p);
+
+            // TODO: for debugging only, remove!
+            p->first = NULL;
         }
-        p->flag = false;
+        // Un-mark
+        p->is_mark = 0;
     }
 }
 
 // A NULL val is considered an empty sequence,
-bool ValIsSeq(Val *p)
+bool IsSeq(Val *p)
 {
-    return !p || p->rest != p;
+    return !p || p->is_seq;
 }
 
-bool ValIsInt(Val *p)
+bool IsInt(Val *p)
 {
-    return p && p->rest == p;
+    return p && p->is_int;
 }
 
-Val *ValMakeInt(long n)
+bool IsFunc(Val *p)
 {
-    Val *p = ValGet(NULL, NULL);
+    return p && p->is_func;
+}
+
+Val *MakeInt(long n)
+{
+    Val *p = GetVal(NULL, NULL);
     p->integer = n;
-    p->rest = p;
-    assert(ValIsInt(p));
+    p->is_int = 1;
+    p->is_seq = 0;
+    p->is_func = 0;
+    assert(IsInt(p));
     return p;
 }
 
-Val *ValMakeSeq(Val *first, Val *rest)
+Val *MakeSeq(Val *first, Val *rest)
 {
-    Val *p = ValGet(first, rest);
+    Val *p = GetVal(first, rest);
     p->first = first;
     p->rest = rest;
-    assert(ValIsSeq(p));
+    p->is_int = 0;
+    p->is_seq = 1;
+    p->is_func = 0;
+    assert(IsSeq(p));
     return p;
 }
 
-Val *ValMakeEmptyStr(void)
+Val *MakeFunc(Val *func(Val *))
 {
-    return ValMakeSeq(ValMakeSeq(ValMakeInt(STR), NULL), NULL);
+    Val *p = GetVal(NULL, NULL);
+    p->func = func;
+    p->is_int = 0;
+    p->is_seq = 0;
+    p->is_func = 1;
+    assert(IsFunc(p));
+    return p;
+}
+
+Val *MakeEmptyStr(void)
+{
+    return MakeSeq(MakeSeq(MakeInt(STR), NULL), NULL);
 }
 
 // String is a special type of Seq
-Val *ValMakeStr(const char *s, int len)
+Val *MakeStr(const char *s, int len)
 {
-    Val *p = ValMakeEmptyStr();
+    Val *p = MakeEmptyStr();
     Val *ps = p;
     for (int i = 0; i < len; i++)
     {
-        ps->rest = ValMakeSeq(ValMakeInt(s[i]), NULL);
+        ps->rest = MakeSeq(MakeInt(s[i]), NULL);
         ps = ps->rest;
     }
     return p;
-}
-
-int ValSeqLength(Val *p)
-{
-    int i = 0;
-    while (p && ValIsSeq(p))
-    {
-        i++;
-        p = p->rest;
-    }
-    return i;
 }
 
 // New copy, with no structure-sharing
@@ -141,17 +352,17 @@ Val *ValCopy(Val *p)
 {
     if (p)
     {
-        if (ValIsInt(p))
+        if (IsInt(p))
         {
-            return ValMakeInt(p->integer);
+            return MakeInt(p->integer);
         }
         // Seq
-        Val *copy = ValMakeSeq(ValCopy(p->first), NULL);
+        Val *copy = MakeSeq(ValCopy(p->first), NULL);
         Val *pcopy = copy;
         p = p->rest;
-        while (ValIsSeq(p) && p)
+        while (IsSeq(p) && p)
         {
-            pcopy->rest = ValMakeSeq(ValCopy(p->first), NULL);
+            pcopy->rest = MakeSeq(ValCopy(p->first), NULL);
             pcopy = pcopy->rest;
             p = p->rest;
         }
@@ -160,22 +371,22 @@ Val *ValCopy(Val *p)
     return NULL;
 }
 
-bool ValEqual(Val *x, Val *y)
+bool IsEqual(Val *x, Val *y)
 {
     if (x == NULL || y == NULL)
     {
         return x == y;
     }
-    if (ValIsInt(x))
+    if (IsInt(x))
     {
-        return ValIsInt(y) && x->integer == y->integer;
+        return IsInt(y) && x->integer == y->integer;
     }
-    if (ValIsSeq(x))
+    if (IsSeq(x))
     {
         Val *px = x, *py = y;
-        while (px && ValIsSeq(px) && py && ValIsSeq(py))
+        while (px && IsSeq(px) && py && IsSeq(py))
         {
-            if (!ValEqual(px->first, py->first))
+            if (!IsEqual(px->first, py->first))
             {
                 break;
             }
@@ -189,23 +400,24 @@ bool ValEqual(Val *x, Val *y)
 
 bool ValIsTrue(Val *p)
 {
-    return ValIsInt(p) && p->integer;
+    return IsInt(p) && p->integer;
 }
 
 // String is a special type of Seq
 // form [[str] ...]
-bool ValIsStr(Val *p)
+bool IsStr(Val *p)
 {
-    return p && p->rest != p && p->first && ValIsSeq(p->first) &&
-        ValIsInt(p->first->first) && p->first->first->integer == STR;
+    return p && p->rest != p && p->first && IsSeq(p->first) &&
+        p->first->first && IsInt(p->first->first) &&
+        p->first->first->integer == STR;
 }
 
 // Lambda is a special type of Seq
 // form [[lambda args] expr]
 bool ValIsLambda(Val *p)
 {
-    return p && ValIsSeq(p) && ValIsSeq(p->first) && p->first &&
-        ValIsInt(p->first->first) && p->first->first->integer == LAMBDA;
+    return p && IsSeq(p) && IsSeq(p->first) && p->first &&
+        IsInt(p->first->first) && p->first->first->integer == LAMBDA;
 }
 
 bool CharIsSpace(char c)
@@ -267,7 +479,7 @@ int DigitValue(char d)
 
 // Returns the number of characters read
 // number read -> out
-int ReadInt(const char *start, int length, int *valOut)
+int ReadInt(const char *start, int length, long *valOut)
 {
     // Validate inputs
     if (!start || length <= 0)
@@ -289,32 +501,22 @@ int ReadInt(const char *start, int length, int *valOut)
         neg = true;
         view++;
     }
-    switch (*view)
+
+    base = 36;
+    if (*view == '#')
     {
-        case '#':
-            // Decimal
-            base = 10;
-            view++;
-            break;
-        default:
-            // Default is base 36.
-            // There is no sigil, so view does not need to be incremented
-            if (isalnum(*view))
-            {
-                base = 36;
-            }
-            else
-            {
-                // Invalid beginning of integer
-                LizpError(LE_INVALID_INT);
-            }
-            break;
+        base = 10;
+        view++;
+    }
+    if (!isalnum(*view))
+    {
+        return 0;
     }
 
     // Keep a pointer to where the digits start
     const char *viewDigits = view;
 
-    int n = 0;
+    long n = 0;
     int d;
     while (*view && (view - start < length))
     {
@@ -327,17 +529,12 @@ int ReadInt(const char *start, int length, int *valOut)
                 if (n < 0)
                 {
                     // There was an overflow
-                    LizpError(LE_INVALID_INT_OVERFLOW);
+                    return 0;
                 }
             }
             else
             {
                 // Invalid digit for base
-                LizpError(LE_INVALID_INT_DIGIT);
-                if (valOut)
-                {
-                    *valOut = 0;
-                }
                 return 0;
             }
         }
@@ -355,7 +552,6 @@ int ReadInt(const char *start, int length, int *valOut)
     if (view == viewDigits)
     {
         // No valid digits were read after the sigils
-        LizpError(LE_INVALID_INT);
         if (valOut)
         {
             *valOut = 0;
@@ -390,7 +586,7 @@ int ReadString(const char *start, int length, Val **toList)
         view++;
 
         // make form: [[str] ...]
-        Val *s = ValMakeSeq(ValMakeSeq(ValMakeInt(STR), NULL), NULL);
+        Val *s = MakeSeq(MakeSeq(MakeInt(STR), NULL), NULL);
         Val *ps = s;
         while (*view && *view != '"' && view < start + length)
         {
@@ -400,7 +596,8 @@ int ReadString(const char *start, int length, Val **toList)
                 view++;
                 if (!*view || view >= start + length)
                 {
-                    LizpError(LE_LIST_UNFINISHED);
+                    // Unexpected end of input
+                    break;
                 }
                 switch (*view)
                 {
@@ -412,7 +609,7 @@ int ReadString(const char *start, int length, Val **toList)
                     default: c = *view;
                 }
             }
-            ps->rest = ValMakeSeq(ValMakeInt(c), NULL);
+            ps->rest = MakeSeq(MakeInt(c), NULL);
             ps = ps->rest;
             view++;
         }
@@ -420,7 +617,7 @@ int ReadString(const char *start, int length, Val **toList)
         // Consume closing quote
         if (*view != '"')
         {
-            LizpError(LE_LIST_UNFINISHED);
+            // Unexpected end of input
         }
         view++;
 
@@ -452,6 +649,7 @@ int ReadSeq(const char *start, int length, Val **toList)
     if (*view != ']')
     {
         // Non-empty list
+        bool valid = true;
         if (*view && *view != ']' && view < start+length)
         {
             Val *e;
@@ -459,27 +657,30 @@ int ReadSeq(const char *start, int length, Val **toList)
             if (!len)
             {
                 // Error reading element
-                return 0;
+                valid = false;
             }
             // Create first item
-            s = ValMakeSeq(e, NULL);
+            s = MakeSeq(e, NULL);
             view += len;
         }
-        // Pointer for appending to s
-        Val *ps = s;
-        while (*view && *view != ']' && view < start+length)
+        if (valid)
         {
-            Val *e;
-            int len = ReadVal(view, (start+length)-view, &e);
-            if (!len)
+            // Pointer for appending to s
+            Val *ps = s;
+            while (*view && *view != ']' && view < start+length)
             {
-                // Error reading element
-                return 0;
+                Val *e;
+                int len = ReadVal(view, (start+length)-view, &e);
+                if (!len)
+                {
+                    // Error reading element
+                    break;
+                }
+                // Append
+                ps->rest = MakeSeq(e, NULL);
+                ps = ps->rest;
+                view += len;
             }
-            // Append
-            ps->rest = ValMakeSeq(e, NULL);
-            ps = ps->rest;
-            view += len;
         }
     }
     *toList = s;
@@ -488,14 +689,12 @@ int ReadSeq(const char *start, int length, Val **toList)
     {
         // Consume the closing paren
         view++;
-        return view - start;
     }
     else
     {
-        // Reading error
-        LizpError(LE_LIST_UNFINISHED);
-        return 0;
+        // Unexpected end of input
     }
+    return view - start;
 }
 
 int ReadVal(const char *start, int length, Val **out)
@@ -524,7 +723,7 @@ int ReadVal(const char *start, int length, Val **out)
                     if (len)
                     {
                         view += len;
-                        *out = ValMakeSeq(ValMakeInt(GET), ValMakeSeq(v, NULL));
+                        *out = MakeSeq(MakeInt(GET), MakeSeq(v, NULL));
                     }
                     else
                     {
@@ -550,7 +749,6 @@ int ReadVal(const char *start, int length, Val **out)
                 break;
             case ']':
                 // Unmatched list
-                LizpError(LE_BRACKET_MISMATCH);
                 *out = NULL;
                 break;
             case '[':
@@ -572,12 +770,12 @@ int ReadVal(const char *start, int length, Val **out)
             default:
                 // Read integer
                 {
-                    int n;
+                    long n;
                     int len = ReadInt(view, start+length-view, &n);
                     if (len)
                     {
                         view += len;
-                        *out = ValMakeInt(n);
+                        *out = MakeInt(n);
                     }
                     else
                     {
@@ -591,40 +789,6 @@ int ReadVal(const char *start, int length, Val **out)
     view += ReadSpace(view, start+length-view);
 
     return view - start;
-}
-
-static int printNumBase = 10;
-static bool printNumUpper = false;
-
-int PrinterGetBase(void)
-{
-    return printNumBase;
-}
-
-// Allow setting the base to only 2, 10, 16, or 36.
-void PrinterSetBase(int b)
-{
-    switch (b)
-    {
-        case 2:
-        case 10:
-        case 16:
-        case 36:
-            printNumBase = b;
-            break;
-        default:
-            break;
-    }
-}
-
-bool PrinterGetUpper(void)
-{
-    return printNumUpper;
-}
-
-void PrinterSetUpper(bool b)
-{
-    printNumUpper = b? true : false;
 }
 
 // Returns: number of chars written
@@ -675,15 +839,13 @@ char ValueToDigit(int d, bool upper)
 }
 
 // Returns: number of chars written
-int PrintInt(int n, char *out, int len, int readable, int base, bool upper)
+int PrintInt(int n, char *out, int len, int readable, bool base10, bool upper)
 {
-    assert(base > 1);
     assert(out);
-
+    int base = base10? 10 : 36;
     char buf[32];
     const int sz = sizeof(buf);
-
-    // U = magnitude of N
+    // u = magnitude of N
     int u = (n >= 0)? n : -n;
 
     int i;
@@ -705,31 +867,14 @@ int PrintInt(int n, char *out, int len, int readable, int base, bool upper)
     assert(i >= 1);
 
     // Sigil for base
-    if (readable)
+    if (readable && base10)
     {
-        switch (base)
-        {
-            case 2:
-                buf[sz - i - 1] = '%';
-                i++;
-                break;
-            case 10:
-                buf[sz - i - 1] = '#';
-                i++;
-                break;
-            case 16:
-                buf[sz - i - 1] = '$';
-                i++;
-                break;
-            case 36:
-                break;
-            default:
-                LizpError(LE_INVALID_INT_BASE);
-        }
+        buf[sz - i - 1] = '#';
+        i++;
     }
 
     // Minus sign for negative numbers
-    if (base != 2 && n < 0)
+    if (n < 0)
     {
         assert(i < sz);
         buf[sz - i - 1] = '-';
@@ -751,10 +896,10 @@ int PrintStr(Val *seq, char *out, int length, bool readable)
             *view = '"';
             view++;
         }
-        while (ValIsSeq(p) && p && view < (out + length))
+        while (IsSeq(p) && p && view < (out + length))
         {
             Val *e = p->first;
-            if (!ValIsInt(e))
+            if (!IsInt(e))
             {
                 // Value is not really a proper string
                 return PrintSeq(seq, out, length, readable);
@@ -799,6 +944,7 @@ int PrintStr(Val *seq, char *out, int length, bool readable)
     return 0;
 }
 
+// Print sequence to string buffer
 int PrintSeq(Val *seq, char *out, int length, bool readable)
 {
     if (length > 0 && out)
@@ -815,7 +961,7 @@ int PrintSeq(Val *seq, char *out, int length, bool readable)
                 seq = seq->rest;
             }
             // Print list contents
-            while (ValIsSeq(seq) && seq && view < (out + length))
+            while (IsSeq(seq) && seq && view < (out + length))
             {
                 view += PrintChar(' ', view, length-(view-out));
                 view += PrintVal(seq->first, view, length-(view-out), readable);
@@ -831,13 +977,10 @@ int PrintSeq(Val *seq, char *out, int length, bool readable)
 
 int PrintLambda(Val *p, char *out, int length, bool readable)
 {
-    int base = PrinterGetBase();
-    PrinterSetBase(36);
     char *view = out;
     view += PrintCStr("[lambda ", view, length-(view-out));
     view += PrintSeq(p->first->rest, view, length-(view-out), readable);
     view += PrintCStr("]", view, length-(view-out));
-    PrinterSetBase(base);
     return view - out;
 }
 
@@ -847,11 +990,11 @@ int PrintVal(Val *p, char *out, int length, bool readable)
 {
     if (length > 0)
     {
-        if (ValIsInt(p))
+        if (IsInt(p))
         {
-            return PrintInt(p->integer, out, length, readable, printNumBase, printNumUpper);
+            return PrintInt(p->integer, out, length, readable, true, false);
         }
-        if (ValIsStr(p))
+        if (IsStr(p))
         {
             return PrintStr(p, out, length, readable);
         }
@@ -864,824 +1007,111 @@ int PrintVal(Val *p, char *out, int length, bool readable)
     return 0;
 }
 
-// Concatenate lists into a single list
-Val *ConcatLists(Val *lists)
-{
-    Val *cat = NULL;
-    Val *p;
-    while (lists && ValIsSeq(lists))
-    {
-        Val *s = lists->first;
-        if (!ValIsSeq(s))
-        {
-            LizpError(LE_NO_FUNCTION);
-        }
-        while (s && ValIsSeq(s))
-        {
-            if (cat)
-            {
-                p->rest = ValMakeSeq(s->first, NULL);
-                p = p->rest;
-                s = s->rest;
-                continue;
-            }
-            cat = ValMakeSeq(s->first, NULL);
-            p = cat;
-            s = s->rest;
-        }
-        lists = lists->rest;
-    }
-    return cat;
-}
-
-// Join a list of strings with a separator string
-// sep: separator string
-// strs: list of strings
-Val *JoinStrings(Val *sep, Val *strs)
-{
-    if (strs)
-    {
-        Val *result = ValMakeEmptyStr();
-        Val *p = result;
-        // First string
-        Val *s;
-        s = strs->first->rest;
-        while (s && ValIsSeq(s))
-        {
-            assert(ValIsInt(s->first));
-            p->rest = ValMakeSeq(s->first, NULL);
-            p = p->rest;
-            s = s->rest;
-        }
-        strs = strs->rest;
-        // Rest of the strings
-        while (strs && ValIsSeq(strs))
-        {
-            // Sep
-            s = sep->rest;
-            while (s && ValIsSeq(s))
-            {
-                assert(ValIsInt(s->first));
-                p->rest = ValMakeSeq(s->first, NULL);
-                p = p->rest;
-                s = s->rest;
-            }
-            // String
-            s = strs->first->rest;
-            while (s && ValIsSeq(s))
-            {
-                assert(ValIsInt(s->first));
-                p->rest = ValMakeSeq(s->first, NULL);
-                p = p->rest;
-                s = s->rest;
-            }
-            strs = strs->rest;
-        }
-        return result;
-    }
-    return ValMakeEmptyStr();
-}
-
-// Base function for lizp code calls
-static void DoPrint(Val *args, Val **env, bool readable)
-{
-    // Save printer vars
-    int base = PrinterGetBase();
-    bool upper = PrinterGetUpper();
-    Val *setBase = EnvGet(env, ValMakeInt(BASE));
-    Val *setUpper = EnvGet(env, ValMakeInt(UPPER));
-    if (ValIsInt(setBase))
-    {
-        PrinterSetBase(setBase->integer);
-    }
-    if (ValIsInt(setUpper))
-    {
-        PrinterSetUpper(setUpper->integer);
-    }
-    Val *p = args;
-    while (p && ValIsSeq(p))
-    {
-        print(p->first, readable);
-        p = p->rest;
-    }
-    // Restore printer vars
-    PrinterSetBase(base);
-    PrinterSetUpper(upper);
-}
-
-static bool IsMacro(Val *seq)
-{
-    if (seq)
-    {
-        Val *first = seq->first;
-        if (ValIsInt(first))
-        {
-            switch (first->integer)
-            {
-                case DO:
-                case IF:
-                case OR:
-                case AND:
-                case LET:
-                case GET:
-                case COND:
-                case QUOTE:
-                case LAMBDA:
-                    return true;
-            }
-        }
-    }
-    return false;
-}
-
-void EnvSet(Val **env, Val *key, Val *val)
-{
-    if (ValIsInt(key))
-    {
-        Val *pair = ValMakeSeq(key, ValMakeSeq(val, NULL));
-        if (*env)
-        {
-            (*env)->first = ValMakeSeq(pair, (*env)->first);
-            return;
-        }
-        *env = ValMakeSeq(ValMakeSeq(pair, NULL), NULL);
-    }
-}
-
-Val *EnvGet(Val **env, Val *key)
-{
-    if (*env && ValIsInt(key))
-    {
-        // Iterate environment scopes
-        Val *scope = *env;
-        while (scope && ValIsSeq(scope))
-        {
-            // Search definition list in current scope
-            Val *p = scope->first;
-            while (p && ValIsSeq(p))
-            {
-                Val *pair = p->first;
-                if (pair->first->integer == key->integer)
-                {
-                    // Found
-                    return pair->rest->first;
-                }
-                p = p->rest;
-            }
-            scope = scope->rest;
-        }
-    }
-    // Not found anywhere
-    LizpError(LE_UNKNOWN_SYM);
-}
-
-static void EnvPush(Val **env)
-{
-    *env = ValMakeSeq(NULL, *env);
-}
-
-static void EnvPop(Val **env)
-{
-    if (*env)
-    {
-        Val *outer_env = (*env)->rest;
-        *env = outer_env;
-    }
-}
-
-// Apply lambda function
-// Pre-conditions:
-// - called EnvPush()
-// Post-requirements:
-// - should do a tail call to evaluate the value
-// - call EnvPop()
-static Val *ApplyLambda(Val *seq, Val **env)
-{
-    Val *fn = seq->first;
-    Val *args = seq->rest;
-    Val *lArgs = fn->first->rest;
-    Val *p = lArgs;
-    Val *q = args;
-    while (p && ValIsSeq(p) && q && ValIsSeq(q))
-    {
-        Val *key = p->first;
-        Val *val = q->first;
-        EnvSet(env, key, val);
-        p = p->rest;
-        q = q->rest;
-    }
-    if (p == NULL && q == NULL)
-    {
-        Val *lBody = fn->rest->first;
-        return lBody;
-    }
-    // If this point is reached, there was an error
-    EnvPop(env);
-    if (p == NULL)
-    {
-        LizpError(LE_LAMBDA_TOO_MANY_ARGS);
-    }
-    if (q == NULL)
-    {
-        LizpError(LE_LAMBDA_TOO_FEW_ARGS);
-    }
-    LizpError(LE_NO_FUNCTION);
-}
-
-// Sum up a list of integers
-// Returns NULL if error
-Val *Sum(Val *ints)
-{
-    Val *p = ints;
-    long sum = 0;
-    while (p && ValIsSeq(p))
-    {
-        Val *e = p->first;
-        if (!ValIsInt(e))
-        {
-            return NULL;
-        }
-        sum += e->integer;
-        p = p->rest;
-    }
-    return ValMakeInt(sum);
-}
-
-// Product of a list of integers
-// Returns NULL if error
-Val *Product(Val *ints)
-{
-    Val *p = ints;
-    long product = 1;
-    while (p && ValIsSeq(p))
-    {
-        Val *e = p->first;
-        if (!ValIsInt(e))
-        {
-            return NULL;
-        }
-        product *= e->integer;
-        p = p->rest;
-    }
-    return ValMakeInt(product);
-}
-
-// Apply built-in function
-// Must not modify/touch/share structure with the original seq
-// Returns true if new values were allocated
-Val *ApplyBI(Val *seq, Val **env)
-{
-    Val *fn = seq->first;
-    // First must be a valid function id number (a base36 name)
-    if (!fn || !ValIsInt(fn))
-    {
-        LizpError(LE_APPLY_NOT_FUNCTION);
-    }
-    long nameBase36 = fn->integer;
-    int numArgs = ValSeqLength(seq) - 1;
-    Val *args = seq->rest;
-    switch (nameBase36)
-    {
-        case CAT:
-            // [cat list...] concatenate lists
-            return ConcatLists(args);
-        case JOIN:
-            // [join sep str...] join strings
-            if (numArgs != 0)
-            {
-                Val *sep = args->first;
-                Val *strs = args->rest;
-                return JoinStrings(sep, strs);
-            }
-            break;
-        case NOT:
-            // [not boolean]
-            if (numArgs == 1)
-            {
-                if (ValIsTrue(args->first))
-                {
-                    return ValMakeInt(0);
-                }
-                return ValMakeInt(1);
-            }
-            break;
-        case LEN:
-            if (numArgs == 1 && ValIsSeq(args->first))
-            {
-                return ValMakeInt(ValSeqLength(args->first));
-            }
-            break;
-        case FIRST:
-            if (numArgs == 1 && ValIsSeq(args->first))
-            {
-                if (args->first)
-                {
-                    return args->first->first;
-                }
-                return NULL;
-            }
-            break;
-        case REST:
-            if (numArgs == 1 && ValIsSeq(args->first))
-            {
-                if (args->first)
-                {
-                    return args->first->rest;
-                }
-                return NULL;
-            }
-            break;
-        case EQUAL:
-            if (numArgs == 2)
-            {
-                return ValMakeInt(ValEqual(args->first, args->rest->first));
-            }
-            break;
-        case PRINT:
-            // [print expr...] readable
-            if (numArgs)
-            {
-                DoPrint(args, env, true);
-                return NULL;
-            }
-            break;
-        case WRITE:
-            // [write expr...] not readable
-            if (numArgs)
-            {
-                DoPrint(args, env, false);
-                return NULL;
-            }
-            break;
-        case ADD:
-            // [add (i)...]
-            {
-                Val *v = Sum(args);
-                if (v)
-                {
-                    return v;
-                }
-            }
-            break;
-        case SUB:
-            // [sub x y]
-            if (numArgs == 2)
-            {
-                int x = args->first->integer;
-                int y = args->rest->first->integer;
-                return ValMakeInt(x - y);
-            }
-            break;
-        case MUL:
-            // [mul x y]
-            {
-                Val *v = Product(args);
-                if (v)
-                {
-                    return v;
-                }
-            }
-            break;
-        case DIV:
-            // [div x y]
-            if (numArgs == 2)
-            {
-                int x = args->first->integer;
-                int y = args->rest->first->integer;
-                if (y == 0)
-                {
-                    LizpError(LE_DIV_ZERO);
-                }
-                return ValMakeInt(x / y);
-            }
-            break;
-        case NEG:
-            // [neg x]
-            // Negate number
-            if (numArgs == 1)
-            {
-                return ValMakeInt(-(args->first->integer));
-            }
-            break;
-        case LIST:
-            // [list ...]
-            return args;
-        case STR:
-            // [str #...]
-            if (numArgs)
-            {
-                // Make sure the arguments are all numbers
-                bool valid = true;
-                Val *p = args;
-                while (p && ValIsSeq(p))
-                {
-                    if (!ValIsInt(p->first))
-                    {
-                        valid = false;
-                        break;
-                    }
-                    p = p->rest;
-                }
-                if (valid)
-                {
-                    return ValMakeSeq(ValMakeSeq(ValMakeInt(STR), NULL), args);
-                }
-            }
-            break;
-        default:
-            // Unknown
-            LizpError(LE_UNKNOWN_FUNCTION);
-            break;
-    }
-    // Given a function with invalid arguments
-    LizpError(LE_NO_FUNCTION);
-}
-
-// Make sequence with empty values
-Val *MakeEmptySeq(int len)
-{
-    if (len <= 0)
-    {
-        return NULL;
-    }
-    Val *v = ValMakeSeq(NULL, NULL);
-    Val *p = v;
-    len--;
-    while (len > 0)
-    {
-        p->rest = ValMakeSeq(NULL, NULL);
-        p = p->rest;
-        len--;
-    }
-    return v;
-}
-
-// [and (expr)...]
-Val *DoAnd(Val *ast, Val **env)
-{
-    Val *p = ast;
-    Val *e;
-    while (p && ValIsSeq(p))
-    {
-        e = EvalAst(p->first, env);
-        if (!ValIsTrue(e))
-        {
-            break;
-        }
-        p = p->rest;
-    }
-    return e;
-}
-
-// [or (expr)...]
-Val *DoOr(Val *ast, Val **env)
-{
-    Val *p = ast;
-    Val *e;
-    while (p && ValIsSeq(p))
-    {
-        e = EvalAst(p->first, env);
-        if (ValIsTrue(e))
-        {
-            return e;
-        }
-        p = p->rest;
-    }
-    return NULL;
-}
-
-void DoMacro(Val *ast, Val **env, Val **out, bool *tail, bool *pop)
-{
-    *out = NULL;
-    *tail = false;
-    *pop = false;
-
-    Val *args = ast->rest;
-    int numArgs = ValSeqLength(args);
-    switch (ast->first->integer)
-    {
-        case AND:
-            // [and (expr)...]
-            *out = DoAnd(args, env);
-            return;
-        case OR:
-            // [or (expr)...]
-            *out = DoOr(args, env);
-            return;
-        case GET:
-            // [get var]
-            if (numArgs == 1 && ValIsInt(args->first))
-            {
-                *out = EnvGet(env, args->first);
-                return;
-            }
-            break;
-        case IF:
-            // [if condition consequent alternative]
-            if (numArgs == 2 || numArgs == 3)
-            {
-                if (ValIsTrue(EvalAst(args->first, env)))
-                {
-                    *out = args->rest->first;
-                    *tail = true;
-                    return;
-                }
-                if (numArgs == 3)
-                {
-                    *out = args->rest->rest->first;
-                    *tail = true;
-                    return;
-                }
-                *out = NULL;
-                return;
-            }
-            break;
-        case COND:
-            // [cond (condition consequent)...]
-            {
-                Val *p = args;
-                while (p && ValIsSeq(p))
-                {
-                    if (!(p->rest && ValIsSeq(p->rest)))
-                    {
-                        LizpError(LE_COND_FORM);
-                    }
-                    Val *cond = p->first;
-                    Val *cons = p->rest->first;
-                    if (ValIsTrue(EvalAst(cond, env)))
-                    {
-                        *out = cons;
-                        *tail = true;
-                        return;
-                    }
-                    p = p->rest->rest;
-                }
-                LizpError(LE_COND_FORM);
-            }
-            break;
-        case QUOTE:
-            // [quote expr]
-            if (numArgs == 1)
-            {
-                *out = args->first;
-                return;
-            }
-            break;
-        case LET:
-            // [let [pairs...] code]
-            if (numArgs == 2)
-            {
-                if (ValIsSeq(args->first) && args->rest != NULL)
-                {
-                    EnvPush(env);
-                    Val *p = args->first;
-                    while (p && ValIsSeq(p))
-                    {
-                        if (!(p->rest && ValIsSeq(p->rest)))
-                        {
-                            EnvPop(env);
-                            LizpError(LE_LET_FORM);
-                        }
-                        Val *key = p->first;
-                        Val *val = EvalAst(p->rest->first, env);
-                        EnvSet(env, key, val);
-                        p = p->rest->rest;
-                    }
-                    *out = args->rest->first;
-                    *tail = true;
-                    *pop = true;
-                    return;
-                }
-            }
-            break;
-        case DO:
-            // [do ...]
-            {
-                Val *p = args;
-                while (p && ValIsSeq(p) && p->rest)
-                {
-                    EvalAst(p->first, env);
-                    p = p->rest;
-                }
-                if (p)
-                {
-                    *out = p->first;
-                    *tail = true;
-                    return;
-                }
-                *out = NULL;
-                return;
-            }
-        case LAMBDA:
-            // creating a lambda function
-            // [lambda [(arg)...] expr]
-            if (numArgs == 2 && ValIsSeq(args->first))
-            {
-                Val *lArgs = args->first;
-                Val *p = lArgs;
-                while (p && ValIsSeq(p))
-                {
-                    if (!ValIsInt(p->first))
-                    {
-                        LizpError(LE_NO_FUNCTION);
-                    }
-                    p = p->rest;
-                }
-                // make form [[lambda args] expr]
-                Val *lBody = args->rest;
-                *out = ValMakeSeq(ValMakeSeq(ValMakeInt(LAMBDA), lArgs), lBody);
-                return;
-            }
-            break;
-    }
-    // Catch-all for a macro with invalid arguments
-    LizpError(LE_NO_FUNCTION);
-}
-
-static Val *EvalEach(Val *ast, Val **env)
-{
-    assert(ast);
-    Val *evAst = ValMakeSeq(EvalAst(ast->first, env), NULL);
-    ast = ast->rest;
-    Val *p = evAst;
-    while (ast)
-    {
-        p->rest = ValMakeSeq(EvalAst(ast->first, env), NULL);
-        p = p->rest;
-        ast = ast->rest;
-    }
-    return evAst;
-}
-
 static bool IsSelfEvaluating(Val *ast)
 {
-    return !ast || ValIsInt(ast) || ValIsStr(ast);
+    return ast == NULL || IsInt(ast) || IsStr(ast);
 }
 
-// Always create new Val objects
-Val *EvalAst(Val *ast, Val **env)
+// Does: Read a form from the stream
+// Returns: the form, which may be NULL
+Val *read(const char *start, int length)
 {
-    int envCount = 0;
-    // Loop is for tail-call optimization
-    while (1)
+    Val *x = NULL;
+    if (start && length > 0)
+    {
+        int len = ReadVal(start, length, &x);
+        if (len <= 0)
+        {
+            x = NULL;
+        }
+    }
+    return x;
+}
+
+Val *eval(Val *ast)
+{
+    while (true)
     {
         if (IsSelfEvaluating(ast))
         {
             break;
         }
-        if (ValIsSeq(ast))
-        {
-            if (IsMacro(ast))
-            {
-                bool tail, pop;
-                DoMacro(ast, env, &ast, &tail, &pop);
-                if (pop)
-                {
-                    envCount++;
-                }
-                if (tail)
-                {
-                    continue;
-                }
-                break;
-            }
-            // Evaluate sub-expressions
-            Val *evAst = EvalEach(ast, env);
-            assert(evAst);
-            // TODO: handle APPLY/EVAL special cases
-            // Lambda function call?
-            if (ValIsLambda(evAst->first))
-            {
-                EnvPush(env);
-                envCount++;
-                ast = ApplyLambda(evAst, env);
-                continue;
-            }
-            // Built-in function call
-            ast = ApplyBI(evAst, env);
-            break;
-        }
-        LizpError(LE_INVALID_VAL);
-    }
-    // Unwrap environment and return final value
-    while (envCount > 0)
-    {
-        EnvPop(env);
-        envCount--;
+        ast = NULL;
     }
     return ast;
 }
 
-_Noreturn void LizpError(int val)
-{
-    longjmp(jbLizp, val);
-}
-
-const char *LizpGetMessage(int val)
-{
-    _Static_assert(LE_COUNT == 16, "Handle every lizp error in the switch block");
-    switch (val)
-    {
-        case LE_INVALID_INT:
-            return "invalid integer value";
-        case LE_INVALID_INT_OVERFLOW:
-            return "integer overflow";
-        case LE_INVALID_INT_DIGIT:
-            return "invalid digit for base";
-        case LE_INVALID_INT_BASE:
-            return "invalid base when printing integer";
-        case LE_LIST_UNFINISHED:
-            return "unexpected end of string while reading list";
-        case LE_BRACKET_MISMATCH:
-            return "mismatched ']' closing bracket";
-        case LE_UNKNOWN_FUNCTION:
-            return "unknown function number";
-        case LE_APPLY_NOT_FUNCTION:
-            return "first item in list is not a function number";
-        case LE_NO_FUNCTION:
-            return "invalid arguments for function or macro";
-        case LE_INVALID_VAL:
-            return "invalid lizp value";
-        case LE_UNKNOWN_SYM:
-            return "undefined symbol";
-        case LE_DIV_ZERO:
-            return "division by zero";
-        case LE_LET_FORM:
-            return "invalid binding list for \"let\"";
-        case LE_COND_FORM:
-            return "invalid condition and consequence list for \"cond\"";
-        case LE_LAMBDA_TOO_MANY_ARGS:
-            return "too many arguments passed to lambda function";
-        case LE_LAMBDA_TOO_FEW_ARGS:
-            return "too few arguments passed to lambda function";
-        default:
-            return "(unknown error type)";
-    }
-}
-
-static void LizpPrintMessage(int val)
-{
-    const char *msg = LizpGetMessage(val);
-    fprintf(stderr, "lizp error: %s\n", msg);
-}
-
-// Does: Read a form from the stream
-// Returns: the form, which may be NULL
-Val *read (const char *start, int length)
-{
-    // Validate inputs
-    if (!start || (length < 0))
-    {
-        return NULL;
-    }
-
-    Val *x;
-    int len = ReadVal(start, length, &x);
-
-    if (len <= 0)
-    {
-        return NULL;
-    }
-    return x;
-}
-
-Val *eval (Val *ast, Val **env)
-{
-    return EvalAst(ast, env);
-}
-
-void print (Val *expr, int readable)
+void print(Val *expr, int readable)
 {
     const int n = 2 * 1024;
-    static char buffer[n];
-    int p_len = PrintVal(expr, buffer, sizeof(buffer), readable);
-    printf("%.*s", p_len, buffer);
+    char buffer[n];
+    int len = PrintVal(expr, buffer, sizeof(buffer), readable);
+    printf("%.*s", len, buffer);
 }
 
-// Do one read, eval, and print cycle on a string.
-void rep(const char *start, int length, Val **env)
+// Set a key-value pair in the current environment.
+void EnvSet(Val **env, long key, Val *val)
 {
-    int val = setjmp(jbLizp);
-    if (!val)
+    // [key val]
+    Val *pair = MakeSeq(MakeInt(key), MakeSeq(val, NULL));
+    if (*env)
     {
-        print(eval(read(start, length), env), 1);
-        putchar('\n');
+        Val *pairs = MakeSeq(pair, (*env)->first);
+        *env = MakeSeq(pairs, (*env)->rest);
+        return;
     }
-    else
+    *env = MakeSeq(MakeSeq(pair, NULL), NULL);
+}
+
+// Search current environment and then check outer scope if not found.
+// Environment is of the form:
+// [[[key value]...] outer...]
+int EnvGet(Val *env, long key, Val **out)
+{
+    Val *scope = env;
+    while (scope && IsSeq(scope))
     {
-        LizpPrintMessage(val);
+        Val *p = scope->first;
+        while (p && IsSeq(p))
+        {
+            Val *e = p->first;
+            Val *k = e->first;
+            Val *v = e->rest->first;
+            if (k->integer == key)
+            {
+                *out = v;
+                return 1;
+            }
+            p = p->rest;
+        }
+        scope = scope->rest;
+    }
+    *out = NULL;
+    return 0;
+}
+
+void EnvSetName(Val **env, const char *base36_name, Val *val)
+{
+    long symbol = 0;
+    ReadInt(base36_name, strlen(base36_name), &symbol);
+    if (symbol)
+    {
+        EnvSet(env, symbol, val);
     }
 }
 
 void InitPool(void)
 {
-    pool_size = 20;
+    pool_size = 30;
     pool = malloc(sizeof(*pool) * pool_size);
     assert(pool != NULL);
     for (int i = 0; i < pool_size; i++)
     {
         pool[i].first = NULL;
         pool[i].rest = &pool[i + 1];
+        pool[i].is_int = 0;
+        pool[i].is_func = 0;
+        pool[i].is_seq = 1;
     }
     pool[pool_size - 1].rest = NULL;
     freelist = pool;
@@ -1690,17 +1120,9 @@ void InitPool(void)
     assert(pool_size > 0);
 }
 
-void InitEnv(void)
-{
-    env = NULL;
-    EnvSet(&env, ValMakeInt(BASE), ValMakeInt(10));
-    EnvSet(&env, ValMakeInt(UPPER), ValMakeInt(1));
-    assert(env != NULL);
-}
-
 void InitLizp(void)
 {
     InitPool();
-    InitEnv();
+    global_env = LizpInitEnv();
 }
 
