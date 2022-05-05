@@ -17,6 +17,12 @@ static Val *global_env;
 // Used like a stack to save vals and protect vals from the garbage collecter.
 static Val *reg;
 
+// [str (int)...]
+Val *String(Val *args)
+{
+    assert(0 && "not implemented");
+}
+
 // [print (value)...]
 Val *DoPrint(Val *args)
 {
@@ -29,7 +35,7 @@ Val *DoWrite(Val *args)
     assert(0 && "not implemented");
 }
 
-// [nth list]
+// [nth n list]
 Val *Nth(Val *args)
 {
     assert(0 && "not implemented");
@@ -61,6 +67,12 @@ Val *Not(Val *args)
 
 // [get key]
 Val *Get(Val *args)
+{
+    assert(0 && "not implemented");
+}
+
+// macro [l [(key)...] expr] -> lambda function
+Val *Lambda(Val *args)
 {
     assert(0 && "not implemented");
 }
@@ -1211,7 +1223,7 @@ int PrintVal(Val *p, char *out, int length, bool readable)
 
 bool IsSelfEvaluating(Val *ast)
 {
-    return ast == NULL || IsInt(ast) || IsStr(ast);
+    return ast == NULL || IsInt(ast) || IsStr(ast) || IsLambda(ast);
 }
 
 // Does: Read a form from the stream
@@ -1397,29 +1409,31 @@ void InitLizp(void)
     InitPool();
 
     global_env = LizpInitEnv();
-    EnvSet(&global_env, ADD,   MakeFunc(Sum));
-    EnvSet(&global_env, MUL,   MakeFunc(Product));
-    EnvSet(&global_env, SUB,   MakeFunc(Subtract));
-    EnvSet(&global_env, DIV,   MakeFunc(Divide));
-    EnvSet(&global_env, LEN,   MakeFunc(Length));
-    EnvSet(&global_env, FIRST, MakeFunc(First));
-    EnvSet(&global_env, REST,  MakeFunc(Rest));
-    EnvSet(&global_env, LIST,  MakeFunc(List));
-    EnvSet(&global_env, NTH,   MakeFunc(Nth));
-    EnvSet(&global_env, CAT,   MakeFunc(Concat));
-    EnvSet(&global_env, JOIN,  MakeFunc(Join));
-    EnvSet(&global_env, EQUAL, MakeFunc(Equal));
-    EnvSet(&global_env, NOT,   MakeFunc(Not));
-    EnvSet(&global_env, GET,   MakeFunc(Get));
-    EnvSet(&global_env, PRINT, MakeFunc(DoPrint));
-    EnvSet(&global_env, WRITE, MakeFunc(DoWrite));
-    EnvSet(&global_env, AND,   MakeMacro(And));
-    EnvSet(&global_env, OR,    MakeMacro(Or));
-    EnvSet(&global_env, COND,  MakeMacro(Cond));
-    EnvSet(&global_env, DO,    MakeMacro(Do));
-    EnvSet(&global_env, IF,    MakeMacro(If));
-    EnvSet(&global_env, LET,   MakeMacro(Let));
-    EnvSet(&global_env, QUOTE, MakeMacro(Quote));
+    EnvSet(&global_env, ADD,    MakeFunc(Sum));
+    EnvSet(&global_env, MUL,    MakeFunc(Product));
+    EnvSet(&global_env, SUB,    MakeFunc(Subtract));
+    EnvSet(&global_env, DIV,    MakeFunc(Divide));
+    EnvSet(&global_env, LEN,    MakeFunc(Length));
+    EnvSet(&global_env, FIRST,  MakeFunc(First));
+    EnvSet(&global_env, REST,   MakeFunc(Rest));
+    EnvSet(&global_env, LIST,   MakeFunc(List));
+    EnvSet(&global_env, NTH,    MakeFunc(Nth));
+    EnvSet(&global_env, CAT,    MakeFunc(Concat));
+    EnvSet(&global_env, JOIN,   MakeFunc(Join));
+    EnvSet(&global_env, EQUAL,  MakeFunc(Equal));
+    EnvSet(&global_env, NOT,    MakeFunc(Not));
+    EnvSet(&global_env, GET,    MakeFunc(Get));
+    EnvSet(&global_env, PRINT,  MakeFunc(DoPrint));
+    EnvSet(&global_env, WRITE,  MakeFunc(DoWrite));
+    EnvSet(&global_env, STR,    MakeFunc(String));
+    EnvSet(&global_env, AND,    MakeMacro(And));
+    EnvSet(&global_env, OR,     MakeMacro(Or));
+    EnvSet(&global_env, COND,   MakeMacro(Cond));
+    EnvSet(&global_env, DO,     MakeMacro(Do));
+    EnvSet(&global_env, IF,     MakeMacro(If));
+    EnvSet(&global_env, LET,    MakeMacro(Let));
+    EnvSet(&global_env, QUOTE,  MakeMacro(Quote));
+    EnvSet(&global_env, LAMBDA, MakeMacro(Lambda));
 #if DEBUG
     printf("Global environment:\n");
     print(global_env, 1);
