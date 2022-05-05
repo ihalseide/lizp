@@ -622,8 +622,9 @@ bool IsStr(Val *p)
 // form [[lambda args] expr]
 bool IsLambda(Val *p)
 {
-    return p && IsSeq(p) && IsSeq(p->first) && p->first &&
-        IsInt(p->first->first) && p->first->first->integer == LAMBDA;
+    return p && IsSeq(p) && p->first && IsSeq(p->first) &&
+        IsInt(p->first->first) && p->first->first->integer == LAMBDA &&
+        (!p->rest || !p->rest->rest);
 }
 
 bool CharIsSpace(char c)
