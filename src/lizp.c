@@ -8,17 +8,70 @@
 
 // Callback
 extern Val *LizpInitEnv(void);
-
+// Memory management.
 static long pool_size = 0;
 static Val *pool = NULL;
 static Val *freelist = NULL;
-
-static long opcode;
+// Global environment.
 static Val *global_env;
-static Val *env;
-static Val *code;
-static Val *next;
-static Val *args;
+// Used like a stack to save vals and protect vals from the garbage collecter.
+static Val *reg;
+
+// [if condition consequent (alternative)]
+Val *List(Val *ast)
+{
+    return ast;
+}
+
+// [if condition consequent (alternative)]
+Val *If(Val *ast)
+{
+    Val *result = NULL;
+    if (ast)
+    {
+        if (IsTrue(eval(ast->first)))
+        {
+            if (ast->rest)
+            {
+                result = eval(ast->rest->first);
+            }
+        }
+        else
+        {
+            if (ast->rest && ast->rest->rest)
+            {
+                result = eval(ast->rest->rest->first);
+            }
+        }
+    }
+    return result;
+}
+
+Val *First(Val *args)
+{
+    if (args)
+    {
+        Val *p = args->first;
+        if (p && IsSeq(p))
+        {
+            return p->first;
+        }
+    }
+    return NULL;
+}
+
+Val *Rest(Val *args)
+{
+    if (args)
+    {
+        Val *p = args->first;
+        if (p && IsSeq(p))
+        {
+            return p->rest;
+        }
+    }
+    return NULL;
+}
 
 Val *Length(Val *args)
 {
@@ -166,6 +219,7 @@ Val *Product(Val *ints)
 
 void dprint_pool(void)
 {
+    return;
     for (int i = 0; i < pool_size; i++)
     {
         Val *p = &pool[i];
@@ -259,10 +313,7 @@ void CollectGarbage(Val *save1, Val *save2)
     Mark(save1);
     Mark(save2);
     Mark(global_env);
-    Mark(env);
-    Mark(code);
-    Mark(next);
-    Mark(args);
+    Mark(reg);
     for (int i = 0; i < pool_size; i++)
     {
         dprint_pool();
@@ -295,6 +346,12 @@ bool IsFunc(Val *p)
     return p && p->is_func;
 }
 
+// Macro: special function
+bool IsMacro(Val *p)
+{
+    return p && p->is_func && p->is_macro;
+}
+
 Val *MakeInt(long n)
 {
     Val *p = GetVal(NULL, NULL);
@@ -325,6 +382,19 @@ Val *MakeFunc(Val *func(Val *))
     p->is_int = 0;
     p->is_seq = 0;
     p->is_func = 1;
+    p->is_macro = 0;
+    assert(IsFunc(p));
+    return p;
+}
+
+Val *MakeMacro(Val *func(Val *))
+{
+    Val *p = GetVal(NULL, NULL);
+    p->func = func;
+    p->is_int = 0;
+    p->is_seq = 0;
+    p->is_func = 1;
+    p->is_macro = 1;
     assert(IsFunc(p));
     return p;
 }
@@ -398,7 +468,7 @@ bool IsEqual(Val *x, Val *y)
     return false;
 }
 
-bool ValIsTrue(Val *p)
+bool IsTrue(Val *p)
 {
     return IsInt(p) && p->integer;
 }
@@ -407,14 +477,13 @@ bool ValIsTrue(Val *p)
 // form [[str] ...]
 bool IsStr(Val *p)
 {
-    return p && p->rest != p && p->first && IsSeq(p->first) &&
-        p->first->first && IsInt(p->first->first) &&
-        p->first->first->integer == STR;
+    return p && IsSeq(p) && p->first && IsSeq(p->first) && p->first->first &&
+        IsInt(p->first->first) && p->first->first->integer == STR;
 }
 
 // Lambda is a special type of Seq
 // form [[lambda args] expr]
-bool ValIsLambda(Val *p)
+bool IsLambda(Val *p)
 {
     return p && IsSeq(p) && IsSeq(p->first) && p->first &&
         IsInt(p->first->first) && p->first->first->integer == LAMBDA;
@@ -998,16 +1067,20 @@ int PrintVal(Val *p, char *out, int length, bool readable)
         {
             return PrintStr(p, out, length, readable);
         }
-        if (ValIsLambda(p))
+        if (IsLambda(p))
         {
             return PrintLambda(p, out, length, readable);
+        }
+        if (IsFunc(p))
+        {
+            return PrintCStr("<code>", out, length);
         }
         return PrintSeq(p, out, length, readable);
     }
     return 0;
 }
 
-static bool IsSelfEvaluating(Val *ast)
+bool IsSelfEvaluating(Val *ast)
 {
     return ast == NULL || IsInt(ast) || IsStr(ast);
 }
@@ -1030,14 +1103,67 @@ Val *read(const char *start, int length)
 
 Val *eval(Val *ast)
 {
+    reg = MakeSeq(ast, reg); // save <initial ast>
     while (true)
     {
         if (IsSelfEvaluating(ast))
         {
             break;
         }
-        ast = NULL;
+        assert(ast);
+
+        // Eval first
+        Val *p = ast;
+        Val *first = eval(p->first);
+        reg = MakeSeq(first, reg); // save <first>
+        p = p->rest;
+        if (IsInt(first))
+        {
+            Val *f;
+            if (!EnvGet(global_env, first->integer, &f))
+            {
+                printf("undefined\n");
+                return NULL;
+            }
+            first = f;
+        }
+        assert(IsFunc(first) || IsLambda(first));
+
+        // Eval rest of the ast
+        if (!IsMacro(first))
+        {
+            Val *ev = MakeSeq(first, NULL);
+            reg = MakeSeq(ev, reg); // save <ev>
+            Val *pev = ev;
+            while (p && IsSeq(p))
+            {
+                pev->rest = MakeSeq(eval(p->first), NULL);
+                pev = pev->rest;
+                p = p->rest;
+            }
+            ast = ev;
+            reg = reg->rest; // restore <ev>
+        }
+
+        // Apply
+        bool tail = false;
+        if (IsFunc(first))
+        {
+            reg = MakeSeq(ast, reg); // save <ast>
+            ast = first->func(ast->rest);
+            reg = reg->rest; // restore <ast>
+        }
+        else if (IsLambda(first))
+        {
+            assert(0 && "lambda not implemented");
+        }
+        reg = reg->rest; // restore <first>
+        if (!tail)
+        {
+            break;
+        }
     }
+    reg = reg->rest; // restore <initial ast>
     return ast;
 }
 
@@ -1066,7 +1192,7 @@ void EnvSet(Val **env, long key, Val *val)
 // Search current environment and then check outer scope if not found.
 // Environment is of the form:
 // [[[key value]...] outer...]
-int EnvGet(Val *env, long key, Val **out)
+bool EnvGet(Val *env, long key, Val **out)
 {
     Val *scope = env;
     while (scope && IsSeq(scope))
@@ -1080,20 +1206,20 @@ int EnvGet(Val *env, long key, Val **out)
             if (k->integer == key)
             {
                 *out = v;
-                return 1;
+                return true;
             }
             p = p->rest;
         }
         scope = scope->rest;
     }
     *out = NULL;
-    return 0;
+    return false;
 }
 
-void EnvSetName(Val **env, const char *base36_name, Val *val)
+void EnvSetName(Val **env, const char *base36_name, int len, Val *val)
 {
     long symbol = 0;
-    ReadInt(base36_name, strlen(base36_name), &symbol);
+    ReadInt(base36_name, len, &symbol);
     if (symbol)
     {
         EnvSet(env, symbol, val);
@@ -1102,7 +1228,7 @@ void EnvSetName(Val **env, const char *base36_name, Val *val)
 
 void InitPool(void)
 {
-    pool_size = 30;
+    pool_size = 100;
     pool = malloc(sizeof(*pool) * pool_size);
     assert(pool != NULL);
     for (int i = 0; i < pool_size; i++)
@@ -1123,6 +1249,17 @@ void InitPool(void)
 void InitLizp(void)
 {
     InitPool();
+
     global_env = LizpInitEnv();
+    EnvSet(&global_env, ADD,   MakeFunc(Sum));
+    EnvSet(&global_env, MUL,   MakeFunc(Product));
+    EnvSet(&global_env, LEN,   MakeFunc(Length));
+    EnvSet(&global_env, FIRST, MakeFunc(First));
+    EnvSet(&global_env, REST,  MakeFunc(Rest));
+    EnvSet(&global_env, LIST,  MakeFunc(List));
+    EnvSet(&global_env, IF,    MakeMacro(If));
+
+    print(global_env, 1);
+    putchar('\n');
 }
 

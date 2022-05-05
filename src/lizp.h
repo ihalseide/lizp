@@ -34,10 +34,6 @@
 // value to indicate a list is a lambda function
 #define LAMBDA   21
 
-#define F_SEQ  1
-#define F_INT  2
-#define F_FUNC 4
-#define F_MARK 8
 typedef struct Val Val;
 struct Val
 {
@@ -45,6 +41,7 @@ struct Val
     unsigned int is_int : 1;
     unsigned int is_func : 1;
     unsigned int is_mark : 1;
+    unsigned int is_macro : 1;
     union
     {
         long integer;
@@ -58,9 +55,9 @@ void InitLizp(void);
 void InitEnv(void);
 void InitPool(void);
 
-void EnvSetName(Val **env, const char *base36_name, Val *val);
+void EnvSetName(Val **env, const char *base36_name, int len, Val *val);
 void EnvSet(Val **env, long symbol, Val *val);
-int EnvGet(Val *env, long symbol, Val **val);
+bool EnvGet(Val *env, long symbol, Val **val);
 
 char ValueToDigit(int d, bool upper);
 int DigitValue(char d);
@@ -99,6 +96,7 @@ void Mark(Val *p);
 
 Val *MakeEmptyStr(void);
 Val *MakeFunc(Val *func(Val *));
+Val *MakeMacro(Val *func(Val *));
 Val *MakeInt(long n);
 Val *MakeSeq(Val *first, Val *rest);
 Val *MakeStr(const char *s, int len);

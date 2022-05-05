@@ -1,29 +1,21 @@
 CC = clang
 #COpts = -std=c99 -O3 -Wall
-COpts = -std=c99 -g -Wall
-SrcDir = src
-BuildDir = objects
-LizpMain = $(SrcDir)/main.c
-TestMain = $(SrcDir)/test.c
+#COpts = -std=c99 -g -Wall
+COpts = -std=c99 -g
 	
 default: lizp
 
-lizp: $(LizpMain) $(BuildDir)/lizp.o
-	$(CC) $(COpts) -o $@ $^
+lizp: src/main.c lizp.o
+	$(CC) $(COpts) -o lizp src/main.c lizp.o
 
-test: $(TestMain) $(BuildDir)/lizp.o
-	$(CC) $(COpts) -o $@ $^
+test: src/test.c lizp.o
+	$(CC) $(COpts) -o test src/test.c lizp.o
 
-$(BuildDir)/%.o: $(SrcDir)/%.c $(SrcDir)/%.h | $(BuildDir)
-	$(CC) $(COpts) -c -o $@ $<
-
-$(BuildDir):
-	mkdir -p $@
-
-run: test lizp
-	./test && ./lizp
+lizp.o: src/lizp.c src/lizp.h
+	$(CC) $(COpts) -o lizp.o -c src/lizp.c
 
 clean:
+	rm lizp.o
 	rm lizp
 	rm test
 
