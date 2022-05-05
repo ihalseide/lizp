@@ -17,7 +17,17 @@ static Val *global_env;
 // Used like a stack to save vals and protect vals from the garbage collecter.
 static Val *reg;
 
-// [if condition consequent (alternative)]
+// [quote expr]
+Val *Quote(Val *ast)
+{
+    if (ast && ast->first)
+    {
+        return Copy(ast->first);
+    }
+    return NULL;
+}
+
+// [list (v)...]
 Val *List(Val *ast)
 {
     return Copy(ast);
@@ -1289,13 +1299,14 @@ void InitLizp(void)
     InitPool();
 
     global_env = LizpInitEnv();
-    EnvSet(&global_env, ADD,   MakeFunc(Sum));
-    EnvSet(&global_env, MUL,   MakeFunc(Product));
-    EnvSet(&global_env, LEN,   MakeFunc(Length));
-    EnvSet(&global_env, FIRST, MakeFunc(First));
-    EnvSet(&global_env, REST,  MakeFunc(Rest));
-    EnvSet(&global_env, LIST,  MakeFunc(List));
-    EnvSet(&global_env, IF,    MakeMacro(If));
+    EnvSet(&global_env, ADD,    MakeFunc(Sum));
+    EnvSet(&global_env, MUL,    MakeFunc(Product));
+    EnvSet(&global_env, LEN,    MakeFunc(Length));
+    EnvSet(&global_env, FIRST,  MakeFunc(First));
+    EnvSet(&global_env, REST,   MakeFunc(Rest));
+    EnvSet(&global_env, LIST,   MakeFunc(List));
+    EnvSet(&global_env, IF,     MakeMacro(If));
+    EnvSet(&global_env, QUOTE,  MakeMacro(Quote));
 #if DEBUG
     print(global_env, 1);
     putchar('\n');
