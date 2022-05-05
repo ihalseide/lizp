@@ -17,6 +17,18 @@ static Val *global_env;
 // Used like a stack to save vals and protect vals from the garbage collecter.
 static Val *reg;
 
+// [print (value)...]
+Val *DoPrint(Val *args)
+{
+    assert(0 && "not implemented");
+}
+
+// [write (value)...]
+Val *DoWrite(Val *args)
+{
+    assert(0 && "not implemented");
+}
+
 // [nth list]
 Val *Nth(Val *args)
 {
@@ -272,17 +284,6 @@ Val *JoinStrings(Val *sep, Val *strs)
     return MakeEmptyStr();
 }
 
-// Base function for lizp code calls
-void DoPrint(Val *args, bool readable)
-{
-    Val *p = args;
-    while (p && IsSeq(p))
-    {
-        print(p->first, readable);
-        p = p->rest;
-    }
-}
-
 // Sum up a list of integers
 // Returns NULL if error
 Val *Sum(Val *ints)
@@ -321,6 +322,7 @@ Val *Product(Val *ints)
     return MakeInt(product);
 }
 
+#if DEBUG
 // debug print
 void dprint_pool(void)
 {
@@ -369,6 +371,7 @@ void dprint_pool(void)
     }
     putchar('\n');
 }
+#endif
 
 Val *GetVal(Val *save1, Val *save2)
 {
@@ -1408,6 +1411,8 @@ void InitLizp(void)
     EnvSet(&global_env, EQUAL, MakeFunc(Equal));
     EnvSet(&global_env, NOT,   MakeFunc(Not));
     EnvSet(&global_env, GET,   MakeFunc(Get));
+    EnvSet(&global_env, PRINT, MakeFunc(DoPrint));
+    EnvSet(&global_env, WRITE, MakeFunc(DoWrite));
     EnvSet(&global_env, AND,   MakeMacro(And));
     EnvSet(&global_env, OR,    MakeMacro(Or));
     EnvSet(&global_env, COND,  MakeMacro(Cond));
@@ -1416,6 +1421,7 @@ void InitLizp(void)
     EnvSet(&global_env, LET,   MakeMacro(Let));
     EnvSet(&global_env, QUOTE, MakeMacro(Quote));
 #if DEBUG
+    printf("Global environment:\n");
     print(global_env, 1);
     putchar('\n');
 #endif
