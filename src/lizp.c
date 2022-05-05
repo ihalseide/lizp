@@ -17,6 +17,35 @@ static Val *global_env;
 // Used like a stack to save vals and protect vals from the garbage collecter.
 static Val *reg;
 
+// [sub x y]
+Val *Subtract(Val *ast)
+{
+    if (ast && ast->first && IsInt(ast->first) && ast->rest && ast->rest->first
+            && IsInt(ast->rest->first))
+    {
+        long x = ast->first->integer;
+        long y = ast->rest->first->integer;
+        return MakeInt(x - y);
+    }
+    return NULL;
+}
+
+// [div x y]
+Val *Divide(Val *ast)
+{
+    if (ast && ast->first && IsInt(ast->first) && ast->rest && ast->rest->first
+            && IsInt(ast->rest->first))
+    {
+        long x = ast->first->integer;
+        long y = ast->rest->first->integer;
+        if (y != 0)
+        {
+            return MakeInt(x / y);
+        }
+    }
+    return NULL;
+}
+
 // [quote expr]
 Val *Quote(Val *ast)
 {
@@ -1301,6 +1330,8 @@ void InitLizp(void)
     global_env = LizpInitEnv();
     EnvSet(&global_env, ADD,    MakeFunc(Sum));
     EnvSet(&global_env, MUL,    MakeFunc(Product));
+    EnvSet(&global_env, SUB,    MakeFunc(Subtract));
+    EnvSet(&global_env, DIV,    MakeFunc(Divide));
     EnvSet(&global_env, LEN,    MakeFunc(Length));
     EnvSet(&global_env, FIRST,  MakeFunc(First));
     EnvSet(&global_env, REST,   MakeFunc(Rest));
