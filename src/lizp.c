@@ -20,7 +20,7 @@ static Val *reg;
 // [if condition consequent (alternative)]
 Val *List(Val *ast)
 {
-    return ast;
+    return Copy(ast);
 }
 
 // [if condition consequent (alternative)]
@@ -216,14 +216,13 @@ Val *Product(Val *ints)
     return MakeInt(product);
 }
 
-
+// debug print
 void dprint_pool(void)
 {
-    return;
     for (int i = 0; i < pool_size; i++)
     {
         Val *p = &pool[i];
-        printf("%c%d%c: ",
+        printf("%c%3d%c: ",
                 (freelist==p)? '^' : ' ',
                 i,
                 p->is_mark? '*' : ' ');
@@ -231,25 +230,33 @@ void dprint_pool(void)
         {
             print(p, 1);
         }
-        else
+        else if (IsMacro(p))
+        {
+            printf("<mcode %p>", p->func);
+        }
+        else if (IsFunc(p))
+        {
+            printf("<code %p>", p->func);
+        }
+        else if (IsSeq(p))
         {
             putchar('(');
             if (p->first)
             {
-                printf("%ld", p->first - pool);
+                printf("%3ld", p->first - pool);
             }
             else
             {
-                putchar('X');
+                printf("  X");
             }
             printf(" . ");
             if (p->rest)
             {
-                printf("%ld", p->rest - pool);
+                printf("%3ld", p->rest - pool);
             }
             else
             {
-                putchar('X');
+                printf("  X");
             }
             putchar(')');
         }
@@ -265,7 +272,8 @@ Val *GetVal(Val *save1, Val *save2)
         CollectGarbage(save1, save2);
         if (!freelist)
         {
-            assert(0 && "not implemented yet");
+            fprintf(stderr, "out of memory");
+            exit(1);
         }
     }
     Val *p = freelist;
@@ -273,24 +281,18 @@ Val *GetVal(Val *save1, Val *save2)
     return p;
 }
 
-void ValFree(Val *p)
+void FreeVal(Val *p)
 {
     if (p)
     {
+        p->is_seq = 1;
+        p->is_int = 0;
+        p->is_func = 0;
+        p->is_macro = 0;
+        p->first = NULL;
         p->rest = freelist;
         freelist = p;
     }
-}
-
-void ValFreeRec(Val *v)
-{
-    Val *p = v;
-    while (p && IsSeq(p))
-    {
-        ValFreeRec(p->first);
-        p = p->rest;
-    }
-    ValFree(v);
 }
 
 void Mark(Val *v)
@@ -303,6 +305,7 @@ void Mark(Val *v)
         while (p && IsSeq(p))
         {
             Mark(p->first);
+            Mark(p->rest);
             p = p->rest;
         }
     }
@@ -312,22 +315,22 @@ void CollectGarbage(Val *save1, Val *save2)
 {
     Mark(save1);
     Mark(save2);
-    Mark(global_env);
     Mark(reg);
+    Mark(global_env);
+    dprint_pool();
+    int num_freed = 0;
     for (int i = 0; i < pool_size; i++)
     {
-        dprint_pool();
         Val *p = &pool[i];
         if (!p->is_mark)
         {
-            ValFree(p);
-
-            // TODO: for debugging only, remove!
-            p->first = NULL;
+            FreeVal(p);
+            num_freed++;
         }
-        // Un-mark
         p->is_mark = 0;
     }
+    dprint_pool();
+    printf("values freed: %3d\n", num_freed);
 }
 
 // A NULL val is considered an empty sequence,
@@ -359,6 +362,7 @@ Val *MakeInt(long n)
     p->is_int = 1;
     p->is_seq = 0;
     p->is_func = 0;
+    p->is_macro = 0;
     assert(IsInt(p));
     return p;
 }
@@ -371,6 +375,7 @@ Val *MakeSeq(Val *first, Val *rest)
     p->is_int = 0;
     p->is_seq = 1;
     p->is_func = 0;
+    p->is_macro = 0;
     assert(IsSeq(p));
     return p;
 }
@@ -418,26 +423,32 @@ Val *MakeStr(const char *s, int len)
 }
 
 // New copy, with no structure-sharing
-Val *ValCopy(Val *p)
+Val *Copy(Val *p)
 {
+    reg = MakeSeq(p, reg); // save <p>
     if (p)
     {
         if (IsInt(p))
         {
+            reg = reg->rest; // restore <p>
             return MakeInt(p->integer);
         }
         // Seq
-        Val *copy = MakeSeq(ValCopy(p->first), NULL);
+        Val *copy = MakeSeq(Copy(p->first), NULL);
+        reg = MakeSeq(copy, reg); // save <copy>
         Val *pcopy = copy;
         p = p->rest;
         while (IsSeq(p) && p)
         {
-            pcopy->rest = MakeSeq(ValCopy(p->first), NULL);
+            pcopy->rest = MakeSeq(Copy(p->first), NULL);
             pcopy = pcopy->rest;
             p = p->rest;
         }
+        reg = reg->rest; // restore <copy>
+        reg = reg->rest; // restore <p>
         return copy;
     }
+    reg = reg->rest; // restore <p>
     return NULL;
 }
 
@@ -1157,6 +1168,7 @@ Val *eval(Val *ast)
         {
             assert(0 && "lambda not implemented");
         }
+
         reg = reg->rest; // restore <first>
         if (!tail)
         {
@@ -1180,13 +1192,19 @@ void EnvSet(Val **env, long key, Val *val)
 {
     // [key val]
     Val *pair = MakeSeq(MakeInt(key), MakeSeq(val, NULL));
+    reg = MakeSeq(pair, reg); // save <pair>
     if (*env)
     {
         Val *pairs = MakeSeq(pair, (*env)->first);
+        reg = MakeSeq(pairs, reg); // save <pairs>
         *env = MakeSeq(pairs, (*env)->rest);
-        return;
+        reg = reg->rest; // restore <pairs>
     }
-    *env = MakeSeq(MakeSeq(pair, NULL), NULL);
+    else
+    {
+        *env = MakeSeq(MakeSeq(pair, NULL), NULL);
+    }
+    reg = reg->rest; // restore <pair>
 }
 
 // Search current environment and then check outer scope if not found.
@@ -1228,7 +1246,7 @@ void EnvSetName(Val **env, const char *base36_name, int len, Val *val)
 
 void InitPool(void)
 {
-    pool_size = 100;
+    pool_size = 30;
     pool = malloc(sizeof(*pool) * pool_size);
     assert(pool != NULL);
     for (int i = 0; i < pool_size; i++)
@@ -1252,12 +1270,12 @@ void InitLizp(void)
 
     global_env = LizpInitEnv();
     EnvSet(&global_env, ADD,   MakeFunc(Sum));
-    EnvSet(&global_env, MUL,   MakeFunc(Product));
-    EnvSet(&global_env, LEN,   MakeFunc(Length));
-    EnvSet(&global_env, FIRST, MakeFunc(First));
-    EnvSet(&global_env, REST,  MakeFunc(Rest));
+    //EnvSet(&global_env, MUL,   MakeFunc(Product));
+    //EnvSet(&global_env, LEN,   MakeFunc(Length));
+    //EnvSet(&global_env, FIRST, MakeFunc(First));
+    //EnvSet(&global_env, REST,  MakeFunc(Rest));
     EnvSet(&global_env, LIST,  MakeFunc(List));
-    EnvSet(&global_env, IF,    MakeMacro(If));
+    //EnvSet(&global_env, IF,    MakeMacro(If));
 
     print(global_env, 1);
     putchar('\n');

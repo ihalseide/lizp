@@ -91,7 +91,6 @@ Val *Length(Val *p);
 void CollectGarbage(Val *save1, Val *save2);
 Val *GetVal(Val *save1, Val *save2);
 void FreeVal(Val *p);
-void FreeValRec(Val *v);
 void Mark(Val *p);
 
 Val *MakeEmptyStr(void);
@@ -103,6 +102,7 @@ Val *MakeStr(const char *s, int len);
 
 bool IsEqual(Val *x, Val *y);
 bool IsFunc(Val *p);
+bool IsMacro(Val *p);
 bool IsInt(Val *p);
 bool IsLambda(Val *p);
 bool IsSeq(Val *p);
