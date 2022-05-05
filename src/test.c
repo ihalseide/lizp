@@ -1,7 +1,6 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <stdio.h>
-#include <setjmp.h>
 #include "lizp.h"
 
 void EvalAstTest(void)
@@ -64,11 +63,6 @@ void EvalTest(void)
     EvalAstTest();
 }
 
-#include <assert.h>
-#include <string.h>
-#include "lizp.h"
-#include "lizp.test.h"
-
 // Read & eval
 static Val * re(const char *s, int len, Val **env)
 {
@@ -114,11 +108,6 @@ void LizpTest(void)
 {
     ListTest();
 }
-
-#include <assert.h>
-#include <string.h>
-#include "printer.h"
-#include "printer.test.h"
 
 static void ValueToDigitTest(void)
 {
@@ -245,12 +234,6 @@ void PrinterTest(void)
     PrintIntTest();
     PrintValTest();
 }
-
-#include <assert.h>
-#include <stdlib.h>
-#include <string.h>
-#include "reader.h"
-#include "reader.test.h"
 
 static void DigitValueTest(void)
 {
@@ -502,11 +485,6 @@ void ReaderTest(void)
     ReadStringTest();
     ReadValTest();
 }
-
-#include <assert.h>
-#include <stdlib.h>
-#include "value.h"
-#include "value.test.h"
 
 void ValCopyTest(void)
 {

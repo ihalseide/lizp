@@ -9,7 +9,7 @@
 Val *LizpInitEnv(void)
 {
     Val *env = NULL;
-    EnvSet(&env, 35, MakeInt(12));
+    EnvSetName(&env, "I", 1, MakeInt(99));
     return env;
 }
 

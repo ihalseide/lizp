@@ -317,7 +317,9 @@ void CollectGarbage(Val *save1, Val *save2)
     Mark(save2);
     Mark(reg);
     Mark(global_env);
+#if DEBUG
     dprint_pool();
+#endif
     int num_freed = 0;
     for (int i = 0; i < pool_size; i++)
     {
@@ -325,12 +327,16 @@ void CollectGarbage(Val *save1, Val *save2)
         if (!p->is_mark)
         {
             FreeVal(p);
+#if DEBUG
             num_freed++;
+#endif
         }
         p->is_mark = 0;
     }
+#if DEBUG
     dprint_pool();
     printf("values freed: %3d\n", num_freed);
+#endif
 }
 
 // A NULL val is considered an empty sequence,
@@ -667,6 +673,7 @@ int ReadString(const char *start, int length, Val **toList)
 
         // make form: [[str] ...]
         Val *s = MakeSeq(MakeSeq(MakeInt(STR), NULL), NULL);
+        reg = MakeSeq(s, reg); // save <s>
         Val *ps = s;
         while (*view && *view != '"' && view < start + length)
         {
@@ -693,6 +700,7 @@ int ReadString(const char *start, int length, Val **toList)
             ps = ps->rest;
             view++;
         }
+        reg = reg->rest; // restore <s>
 
         // Consume closing quote
         if (*view != '"')
@@ -743,6 +751,7 @@ int ReadSeq(const char *start, int length, Val **toList)
             s = MakeSeq(e, NULL);
             view += len;
         }
+        reg = MakeSeq(s, reg); // save <s>
         if (valid)
         {
             // Pointer for appending to s
@@ -762,6 +771,7 @@ int ReadSeq(const char *start, int length, Val **toList)
                 view += len;
             }
         }
+        reg = reg->rest; // restore <s>
     }
     *toList = s;
 
@@ -1133,12 +1143,22 @@ Val *eval(Val *ast)
             Val *f;
             if (!EnvGet(global_env, first->integer, &f))
             {
-                printf("undefined\n");
-                return NULL;
+                // Undefined function
+                printf("undefined function or macro\n");
+                reg = reg->rest; // restore <first>
+                ast = NULL;
+                break;
             }
             first = f;
         }
-        assert(IsFunc(first) || IsLambda(first));
+        if (!IsFunc(first) && !IsLambda(first))
+        {
+            // Not a function
+            printf("first item is not a function or macro\n");
+            reg = reg->rest; // restore <first>
+            ast = NULL;
+            break;
+        }
 
         // Eval rest of the ast
         if (!IsMacro(first))
@@ -1246,7 +1266,7 @@ void EnvSetName(Val **env, const char *base36_name, int len, Val *val)
 
 void InitPool(void)
 {
-    pool_size = 30;
+    pool_size = 5000;
     pool = malloc(sizeof(*pool) * pool_size);
     assert(pool != NULL);
     for (int i = 0; i < pool_size; i++)
@@ -1270,14 +1290,15 @@ void InitLizp(void)
 
     global_env = LizpInitEnv();
     EnvSet(&global_env, ADD,   MakeFunc(Sum));
-    //EnvSet(&global_env, MUL,   MakeFunc(Product));
-    //EnvSet(&global_env, LEN,   MakeFunc(Length));
-    //EnvSet(&global_env, FIRST, MakeFunc(First));
-    //EnvSet(&global_env, REST,  MakeFunc(Rest));
+    EnvSet(&global_env, MUL,   MakeFunc(Product));
+    EnvSet(&global_env, LEN,   MakeFunc(Length));
+    EnvSet(&global_env, FIRST, MakeFunc(First));
+    EnvSet(&global_env, REST,  MakeFunc(Rest));
     EnvSet(&global_env, LIST,  MakeFunc(List));
-    //EnvSet(&global_env, IF,    MakeMacro(If));
-
+    EnvSet(&global_env, IF,    MakeMacro(If));
+#if DEBUG
     print(global_env, 1);
     putchar('\n');
+#endif
 }
 
