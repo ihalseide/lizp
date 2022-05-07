@@ -186,9 +186,29 @@ Val *Get(Val *args)
 }
 
 // macro [l [(key)...] expr] -> lambda function
-Val *Lambda(Val *args)
+Val *Lambda(Val *ast)
 {
-    LizpException("not implemented", NULL);
+    if (!ast || !ast->rest)
+    {
+        LizpException("`lambda`: arguments must be in the form [[(key)...] expr], but got: ", ast);
+    }
+    Val *binds = ast->first;
+    if (!IsSeq(binds))
+    {
+        LizpException("`let`: 1st argument must be a list of the form [(key)...], but got: ", binds);
+    }
+    // Arguments list
+    Val *p = binds;
+    while (p && IsSeq(p))
+    {
+        Val *k = p->first;
+        if (!IsInt(k))
+        {
+            LizpException("`let`: key in binding list must be an int, but is: ", k);
+        }
+        p = p->rest;
+    }
+    return MakeSeq(MakeSeq(MakeInt(LAMBDA), Copy(binds)), ast->rest->rest);;
 }
 
 // macro [and (expr)...]
