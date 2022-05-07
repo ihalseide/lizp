@@ -27,39 +27,48 @@ _Noreturn void LizpException(const char *msg, Val *e)
 {
     ex_val = e;
     message = msg;
-    // Un-save all
     reg = NULL;
     longjmp(exception, 1);
+}
+
+// [is_null v] -> int
+Val *IsNull(Val *args)
+{
+    if (!args)
+    {
+        LizpException("`is_null`: requires arguments [value], but got: ", args);
+    }
+    return MakeInt(args->first == NULL);
 }
 
 // [is_str v] -> int
 Val *LIsStr(Val *args)
 {
-    if (args)
+    if (!args)
     {
-        return MakeInt(IsStr(args->first));
+        LizpException("`is_str`: requires arguments [value], but got: ", args);
     }
-    return NULL;
+    return MakeInt(IsStr(args->first));
 }
 
 // [is_int v] -> int
 Val *LIsInt(Val *args)
 {
-    if (args)
+    if (!args)
     {
-        return MakeInt(IsInt(args->first));
+        LizpException("`is_int`: requires arguments [value], but got: ", args);
     }
-    return NULL;
+    return MakeInt(IsInt(args->first));
 }
 
 // [is_list v] -> int
 Val *LIsList(Val *args)
 {
-    if (args)
+    if (!args)
     {
-        return MakeInt(IsSeq(args->first));
+        LizpException("`is_list`: requires arguments [value], but got: ", args);
     }
-    return NULL;
+    return MakeInt(IsSeq(args->first));
 }
 
 // [str (int)...]
@@ -70,6 +79,10 @@ Val *String(Val *args)
     Val *p = str;
     while (args && IsSeq(args) && IsInt(args->first))
     {
+        if (!IsInt(args->first))
+        {
+            LizpException("`str`: requires arguments [(int)...] but got: ", args);
+        }
         // Make copies
         p->rest = MakeSeq(MakeInt(args->first->integer), NULL);
         p = p->rest;
@@ -82,13 +95,13 @@ Val *String(Val *args)
 // [print (value)...]
 Val *LPrint(Val *args)
 {
-    assert(0 && "not implemented");
+    LizpException("not implemented", NULL);
 }
 
 // [write (value)...]
 Val *LWrite(Val *args)
 {
-    assert(0 && "not implemented");
+    LizpException("not implemented", NULL);
 }
 
 // [nth n list]
@@ -127,29 +140,29 @@ Val *Nth(Val *args)
 // [concat (list)...]
 Val *Concat(Val *args)
 {
-    assert(0 && "not implemented");
+    LizpException("not implemented", NULL);
 }
 
 // [join (string)...]
 Val *Join(Val *args)
 {
-    assert(0 && "not implemented");
+    LizpException("not implemented", NULL);
 }
 
 // [equal (value)...]
 Val *Equal(Val *args)
 {
-    assert(0 && "not implemented");
+    LizpException("not implemented", NULL);
 }
 
 // [not value]
 Val *Not(Val *args)
 {
-    if (args && args->first)
+    if (!args)
     {
-        return MakeInt(!IsTrue(args->first));
+        LizpException("`not`: requires argument [value], but got: ", args);
     }
-    return NULL;
+    return MakeInt(!IsTrue(args->first));
 }
 
 // [get key]
@@ -175,37 +188,105 @@ Val *Get(Val *args)
 // macro [l [(key)...] expr] -> lambda function
 Val *Lambda(Val *args)
 {
-    assert(0 && "not implemented");
+    LizpException("not implemented", NULL);
 }
 
 // macro [and (expr)...]
 Val *And(Val *args)
 {
-    assert(0 && "not implemented");
+    Val *e = NULL;
+    Val *p = args;
+    while (p && IsSeq(p))
+    {
+        e = eval_sub(p->first);
+        if (!IsTrue(e))
+        {
+            break;
+        }
+        p = p->rest;
+    }
+    return e;
 }
 
 // macro [or (expr)...]
 Val *Or(Val *args)
 {
-    assert(0 && "not implemented");
+    Val *e = NULL;
+    Val *p = args;
+    while (p && IsSeq(p))
+    {
+        e = eval_sub(p->first);
+        if (IsTrue(e))
+        {
+            break;
+        }
+        p = p->rest;
+    }
+    return e;
 }
 
 // macro [cond (condition consequent)...]
 Val *Cond(Val *args)
 {
-    assert(0 && "not implemented");
+    LizpException("not implemented", NULL);
 }
 
 // macro [do (expr)...]
 Val *Do(Val *args)
 {
-    assert(0 && "not implemented");
+    Val *e = NULL;
+    Val *p = args;
+    while (p && IsSeq(p))
+    {
+        e = eval_sub(p->first);
+        p = p->rest;
+    }
+    return e;
 }
 
 // macro [let [(key value)...] expr]
-Val *Let(Val *args)
+Val *Let(Val *ast)
 {
-    assert(0 && "not implemented");
+    if (!ast || !ast->rest)
+    {
+        LizpException("`let`: arguments must be in the form [[(key value)...] expr], but got: ", ast);
+    }
+    Val *binds = ast->first;
+    if (!IsSeq(binds))
+    {
+        LizpException("`let`: 1st argument must be a list of the form [(key value)...], but got: ", binds);
+    }
+    // Bindings
+    Val *env = MakeSeq(NULL, global_env); // push in front of global_env
+    reg = MakeSeq(env, reg); // save <env>
+    Val *p = binds;
+    while (p && IsSeq(p))
+    {
+        Val *k = p->first;
+        p = p->rest;
+        if (!IsInt(k))
+        {
+            LizpException("`let`: key in binding list must be an int, but is: ", k);
+        }
+        if (!p)
+        {
+            LizpException("`let`: unpaired key in binding list: ", k);
+        }
+        Val *v = eval_sub(p->first);
+        EnvSet(&env, k->integer, v);
+        p = p->rest;
+    }
+    global_env = env; // set global env
+    reg = reg->rest; // unsave <env>
+    // Expr
+    Val *val = NULL;
+    if (ast->rest)
+    {
+        Val *expr = ast->rest->first;
+        val = eval_sub(expr);
+    }
+    global_env = global_env->rest; // unset global_env
+    return val;
 }
 
 // [sub x y] --> x-y
@@ -282,18 +363,18 @@ Val *If(Val *ast)
     Val *result = NULL;
     if (ast)
     {
-        if (IsTrue(eval(ast->first)))
+        if (IsTrue(eval_sub(ast->first)))
         {
             if (ast->rest)
             {
-                result = eval(ast->rest->first);
+                result = eval_sub(ast->rest->first);
             }
         }
         else
         {
             if (ast->rest && ast->rest->rest)
             {
-                result = eval(ast->rest->rest->first);
+                result = eval_sub(ast->rest->rest->first);
             }
         }
     }
@@ -815,10 +896,6 @@ int ReadInt(const char *start, int length, long *valOut)
     // Validate inputs
     if (!start || length <= 0)
     {
-        if (valOut)
-        {
-            *valOut = 0;
-        }
         return 0;
     }
 
@@ -857,9 +934,9 @@ int ReadInt(const char *start, int length, long *valOut)
             if (0 <= d && d < base)
             {
                 n = (n * base) + d;
-                if (n < 0)
+                // Check overflow
+                if (n < (long)0)
                 {
-                    // There was an overflow
                     return 0;
                 }
             }
@@ -879,14 +956,9 @@ int ReadInt(const char *start, int length, long *valOut)
         view++;
     }
 
-    // Check if there were any valid digits
+    // Check if there were any valid digits (after the sigil)
     if (view == viewDigits)
     {
-        // No valid digits were read after the sigils
-        if (valOut)
-        {
-            *valOut = 0;
-        }
         return 0;
     }
 
@@ -908,6 +980,7 @@ int ReadInt(const char *start, int length, long *valOut)
 // Returns number of chars read
 int ReadString(const char *start, int length, Val **toList)
 {
+    *toList = NULL;
     if (start && length > 0)
     {
         const char *view = start;
@@ -1358,11 +1431,7 @@ Val *read(const char *start, int length)
     Val *x = NULL;
     if (start && length > 0)
     {
-        int len = ReadVal(start, length, &x);
-        if (len <= 0)
-        {
-            x = NULL;
-        }
+        ReadVal(start, length, &x);
     }
     return x;
 }
@@ -1431,7 +1500,7 @@ Val *eval_sub(Val *ast)
         }
         else if (IsLambda(first))
         {
-            assert(0 && "lambda not implemented");
+            LizpException("lambda application not implemented", NULL);
         }
 
         reg = reg->rest; // restore <first>
@@ -1447,8 +1516,6 @@ Val *eval_sub(Val *ast)
 // Top-level eval
 Val *eval(Val *ast)
 {
-    // Nothing is saved
-    reg = NULL;
     if(!setjmp(exception))
     {
         return eval_sub(ast);
@@ -1473,19 +1540,15 @@ void EnvSet(Val **env, long key, Val *val)
 {
     // [key val]
     Val *pair = MakeSeq(MakeInt(key), MakeSeq(val, NULL));
-    reg = MakeSeq(pair, reg); // save <pair>
     if (*env)
     {
         Val *pairs = MakeSeq(pair, (*env)->first);
-        reg = MakeSeq(pairs, reg); // save <pairs>
         *env = MakeSeq(pairs, (*env)->rest);
-        reg = reg->rest; // restore <pairs>
     }
     else
     {
         *env = MakeSeq(MakeSeq(pair, NULL), NULL);
     }
-    reg = reg->rest; // restore <pair>
 }
 
 // Search current environment and then check outer scope if not found.
@@ -1551,6 +1614,7 @@ void InitEnv(void)
         EnvSet(&global_env, ISINT,  MakeFunc(LIsInt));
         EnvSet(&global_env, ISLIST, MakeFunc(LIsList));
         EnvSet(&global_env, ISSTR,  MakeFunc(LIsStr));
+        EnvSet(&global_env, ISNULL, MakeFunc(IsNull));
         EnvSet(&global_env, ADD,    MakeFunc(Sum));
         EnvSet(&global_env, MUL,    MakeFunc(Product));
         EnvSet(&global_env, SUB,    MakeFunc(Subtract));

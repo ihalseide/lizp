@@ -30,6 +30,7 @@
 #define ISINT    31563641
 #define ISLIST   1136424557
 #define ISSTR    31576815
+#define ISNULL   1136533161
 #define EXCEPTION 902532737
 
 // value to indicate a list is a string
@@ -84,6 +85,8 @@ int ReadVal(const char *start, int length, Val **out);
 Val *read(const char *start, int length);
 Val *eval(Val *ast);
 void print(Val *expr, int readable);
+
+Val *eval_sub(Val *ast);
 
 Val *ConcatLists(Val *lists);
 Val *Copy(Val *p);
