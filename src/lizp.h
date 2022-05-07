@@ -27,6 +27,10 @@
 #define JOIN     918239
 #define AND      13801
 #define OR       891
+#define ISINT    31563641
+#define ISLIST   1136424557
+#define ISSTR    31576815
+#define EXCEPTION 902532737
 
 // value to indicate a list is a string
 #define STR      37359
@@ -52,12 +56,14 @@ struct Val
 };
 
 void InitLizp(void);
-void InitEnv(void);
-void InitPool(void);
+Val *InitLizpEnv(void);
 
 void EnvSetName(Val **env, const char *base36_name, int len, Val *val);
 void EnvSet(Val **env, long symbol, Val *val);
 bool EnvGet(Val *env, long symbol, Val **val);
+
+void InitEnv(void);
+void InitPool(void);
 
 char ValueToDigit(int d, bool upper);
 int DigitValue(char d);

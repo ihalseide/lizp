@@ -6,7 +6,7 @@
 
 #define BUF_SZ (2*1024)
 
-Val *LizpInitEnv(void)
+Val *InitLizpEnv(void)
 {
     Val *env = NULL;
     EnvSetName(&env, "I", 1, MakeInt(99));

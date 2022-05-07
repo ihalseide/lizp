@@ -1,13 +1,15 @@
 #include <assert.h>
 #include <ctype.h>
+#include <setjmp.h>
 #include <stdbool.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 #include "lizp.h"
 
-// Callback
-extern Val *LizpInitEnv(void);
+// Callback, may return NULL for no setup
+extern Val *InitLizpEnv(void);
+
 // Memory management.
 static long pool_size = 0;
 static Val *pool = NULL;
@@ -16,21 +18,75 @@ static Val *freelist = NULL;
 static Val *global_env;
 // Used like a stack to save vals and protect vals from the garbage collecter.
 static Val *reg;
+// Exceptions
+static const char *message;
+static Val * ex_val;
+static jmp_buf exception;
+
+_Noreturn void LizpException(const char *msg, Val *e)
+{
+    ex_val = e;
+    message = msg;
+    // Un-save all
+    reg = NULL;
+    longjmp(exception, 1);
+}
+
+// [is_str v] -> int
+Val *LIsStr(Val *args)
+{
+    if (args)
+    {
+        return MakeInt(IsStr(args->first));
+    }
+    return NULL;
+}
+
+// [is_int v] -> int
+Val *LIsInt(Val *args)
+{
+    if (args)
+    {
+        return MakeInt(IsInt(args->first));
+    }
+    return NULL;
+}
+
+// [is_list v] -> int
+Val *LIsList(Val *args)
+{
+    if (args)
+    {
+        return MakeInt(IsSeq(args->first));
+    }
+    return NULL;
+}
 
 // [str (int)...]
 Val *String(Val *args)
 {
-    assert(0 && "not implemented");
+    Val *str = MakeEmptyStr();
+    reg = MakeSeq(str, reg); // save <str>
+    Val *p = str;
+    while (args && IsSeq(args) && IsInt(args->first))
+    {
+        // Make copies
+        p->rest = MakeSeq(MakeInt(args->first->integer), NULL);
+        p = p->rest;
+        args = args->rest;
+    }
+    reg = reg->rest; // restore <str>
+    return str;
 }
 
 // [print (value)...]
-Val *DoPrint(Val *args)
+Val *LPrint(Val *args)
 {
     assert(0 && "not implemented");
 }
 
 // [write (value)...]
-Val *DoWrite(Val *args)
+Val *LWrite(Val *args)
 {
     assert(0 && "not implemented");
 }
@@ -38,7 +94,34 @@ Val *DoWrite(Val *args)
 // [nth n list]
 Val *Nth(Val *args)
 {
-    assert(0 && "not implemented");
+    if (!args || !args->first || !args->rest)
+    {
+        LizpException("`nth`: requires 2 arguments: [int list], but got: ", args);
+    }
+    Val *n = args->first;
+    if (!IsInt(n))
+    {
+        LizpException("`nth`: 1st argument must be an int, but is ", n);
+    }
+    Val *l = args->rest->first;
+    if (!IsSeq(l))
+    {
+        LizpException("`nth`: 2nd argument must be a list, but is ", l);
+    }
+    int i;
+    for (i = n->integer; i > 0 && l && IsSeq(l); i--)
+    {
+        l = l->rest;
+    }
+    // Correct bounds?
+    if (i == 0 && l)
+    {
+        return l->first;
+    }
+    else
+    {
+        LizpException("`nth`: index out of range for list: ", n);
+    }
 }
 
 // [concat (list)...]
@@ -62,13 +145,31 @@ Val *Equal(Val *args)
 // [not value]
 Val *Not(Val *args)
 {
-    assert(0 && "not implemented");
+    if (args && args->first)
+    {
+        return MakeInt(!IsTrue(args->first));
+    }
+    return NULL;
 }
 
 // [get key]
 Val *Get(Val *args)
 {
-    assert(0 && "not implemented");
+    if (!args)
+    {
+        LizpException("`get`: requires arguments: [int], but got: ", args);
+    }
+    Val *k = args->first;
+    if (!IsInt(k))
+    {
+        LizpException("`get`: 1st argument not an int: ", k);
+    }
+    Val *val;
+    if (!EnvGet(global_env, k->integer, &val))
+    {
+        LizpException("`get`: undefined: ", k);
+    }
+    return val;
 }
 
 // macro [l [(key)...] expr] -> lambda function
@@ -107,43 +208,66 @@ Val *Let(Val *args)
     assert(0 && "not implemented");
 }
 
-// [sub x y]
+// [sub x y] --> x-y
 Val *Subtract(Val *ast)
 {
-    if (ast && ast->first && IsInt(ast->first) && ast->rest && ast->rest->first
-            && IsInt(ast->rest->first))
+    if (!ast)
     {
-        long x = ast->first->integer;
-        long y = ast->rest->first->integer;
-        return MakeInt(x - y);
+        LizpException("`sub`: requires 2 arguments: [int int], but got: ", ast);
     }
-    return NULL;
+    Val *x = ast->first;
+    if (!IsInt(x))
+    {
+        LizpException("`sub`: 1st argument must be an int, but is: ", x);
+    }
+    if (!ast->rest)
+    {
+        LizpException("`sub`: requires 2 arguments: [int int], but got: ", ast);
+    }
+    Val *y = ast->rest->first;
+    if (!IsInt(y))
+    {
+        LizpException("`sub`: 2nd argument must be an int, but is: ", y);
+    }
+    return MakeInt(x->integer - y->integer);
 }
 
-// [div x y]
+// [div x y] --> x/y
 Val *Divide(Val *ast)
 {
-    if (ast && ast->first && IsInt(ast->first) && ast->rest && ast->rest->first
-            && IsInt(ast->rest->first))
+    if (!ast)
     {
-        long x = ast->first->integer;
-        long y = ast->rest->first->integer;
-        if (y != 0)
-        {
-            return MakeInt(x / y);
-        }
+        LizpException("`div`: requires 2 arguments: [int int], but got: ", ast);
     }
-    return NULL;
+    Val *x = ast->first;
+    if (!IsInt(x))
+    {
+        LizpException("`div`: 1st argument must be an int, but is: ", x);
+    }
+    if (!ast->rest)
+    {
+        LizpException("`div`: requires 2 arguments: [int int], but got: ", ast);
+    }
+    Val *y = ast->rest->first;
+    if (!IsInt(y))
+    {
+        LizpException("`div`: 2nd argument must be an int, but is: ", y);
+    }
+    if (y->integer == 0)
+    {
+        LizpException("`div`: division by zero. arguments: ", ast);
+    }
+    return MakeInt(x->integer / y->integer);
 }
 
 // [quote expr]
 Val *Quote(Val *ast)
 {
-    if (ast && ast->first)
+    if (!ast)
     {
-        return Copy(ast->first);
+        LizpException("`quote`: requires arguments: expression.", NULL);
     }
-    return NULL;
+    return Copy(ast->first);
 }
 
 // [list (v)...]
@@ -204,7 +328,7 @@ Val *Rest(Val *args)
 
 Val *Length(Val *args)
 {
-    if (args)
+    if (args && IsSeq(args->first))
     {
         Val *p = args->first;
         long i = 0;
@@ -215,7 +339,7 @@ Val *Length(Val *args)
         }
         return MakeInt(i);
     }
-    return NULL;
+    LizpException("arguments to len must be [list]", NULL);
 }
 
 // Concatenate lists into a single list
@@ -307,7 +431,7 @@ Val *Sum(Val *ints)
         Val *e = p->first;
         if (!IsInt(e))
         {
-            return NULL;
+            LizpException("`sum`: argument not an int: ", e);
         }
         sum += e->integer;
         p = p->rest;
@@ -326,7 +450,7 @@ Val *Product(Val *ints)
         Val *e = p->first;
         if (!IsInt(e))
         {
-            return NULL;
+            LizpException("`sum`: argument not an int: ", e);
         }
         product *= e->integer;
         p = p->rest;
@@ -437,6 +561,7 @@ void CollectGarbage(Val *save1, Val *save2)
     Mark(save2);
     Mark(reg);
     Mark(global_env);
+    Mark(ex_val);
 #if DEBUG
     dprint_pool();
 #endif
@@ -551,9 +676,9 @@ Val *MakeStr(const char *s, int len)
 // New copy, with no structure-sharing
 Val *Copy(Val *p)
 {
-    reg = MakeSeq(p, reg); // save <p>
     if (p)
     {
+        reg = MakeSeq(p, reg); // save <p>
         if (IsInt(p))
         {
             reg = reg->rest; // restore <p>
@@ -574,7 +699,6 @@ Val *Copy(Val *p)
         reg = reg->rest; // restore <p>
         return copy;
     }
-    reg = reg->rest; // restore <p>
     return NULL;
 }
 
@@ -1243,7 +1367,7 @@ Val *read(const char *start, int length)
     return x;
 }
 
-Val *eval(Val *ast)
+Val *eval_sub(Val *ast)
 {
     reg = MakeSeq(ast, reg); // save <initial ast>
     while (true)
@@ -1256,7 +1380,7 @@ Val *eval(Val *ast)
 
         // Eval first
         Val *p = ast;
-        Val *first = eval(p->first);
+        Val *first = eval_sub(p->first);
         reg = MakeSeq(first, reg); // save <first>
         p = p->rest;
         if (IsInt(first))
@@ -1265,20 +1389,20 @@ Val *eval(Val *ast)
             if (!EnvGet(global_env, first->integer, &f))
             {
                 // Undefined function
-                printf("undefined function or macro\n");
-                reg = reg->rest; // restore <first>
-                ast = NULL;
-                break;
+                LizpException("undefined function or macro: ", first);
+                //reg = reg->rest; // restore <first>
+                //ast = NULL;
+                //break;
             }
             first = f;
         }
         if (!IsFunc(first) && !IsLambda(first))
         {
             // Not a function
-            printf("first item is not a function or macro\n");
-            reg = reg->rest; // restore <first>
-            ast = NULL;
-            break;
+            LizpException("first item is not a function or macro: ", first);
+            //reg = reg->rest; // restore <first>
+            //ast = NULL;
+            //break;
         }
 
         // Eval rest of the ast
@@ -1289,7 +1413,7 @@ Val *eval(Val *ast)
             Val *pev = ev;
             while (p && IsSeq(p))
             {
-                pev->rest = MakeSeq(eval(p->first), NULL);
+                pev->rest = MakeSeq(eval_sub(p->first), NULL);
                 pev = pev->rest;
                 p = p->rest;
             }
@@ -1318,6 +1442,22 @@ Val *eval(Val *ast)
     }
     reg = reg->rest; // restore <initial ast>
     return ast;
+}
+
+// Top-level eval
+Val *eval(Val *ast)
+{
+    // Nothing is saved
+    reg = NULL;
+    if(!setjmp(exception))
+    {
+        return eval_sub(ast);
+    }
+    // Print exception
+    printf("%s", message);
+    print(ex_val, 1);
+    putchar('\n');
+    return ex_val;
 }
 
 void print(Val *expr, int readable)
@@ -1405,40 +1545,55 @@ void InitPool(void)
     assert(pool_size > 0);
 }
 
+void InitEnv(void)
+{
+        global_env = InitLizpEnv();
+        EnvSet(&global_env, ISINT,  MakeFunc(LIsInt));
+        EnvSet(&global_env, ISLIST, MakeFunc(LIsList));
+        EnvSet(&global_env, ISSTR,  MakeFunc(LIsStr));
+        EnvSet(&global_env, ADD,    MakeFunc(Sum));
+        EnvSet(&global_env, MUL,    MakeFunc(Product));
+        EnvSet(&global_env, SUB,    MakeFunc(Subtract));
+        EnvSet(&global_env, DIV,    MakeFunc(Divide));
+        EnvSet(&global_env, LEN,    MakeFunc(Length));
+        EnvSet(&global_env, FIRST,  MakeFunc(First));
+        EnvSet(&global_env, REST,   MakeFunc(Rest));
+        EnvSet(&global_env, LIST,   MakeFunc(List));
+        EnvSet(&global_env, NTH,    MakeFunc(Nth));
+        EnvSet(&global_env, CAT,    MakeFunc(Concat));
+        EnvSet(&global_env, JOIN,   MakeFunc(Join));
+        EnvSet(&global_env, EQUAL,  MakeFunc(Equal));
+        EnvSet(&global_env, NOT,    MakeFunc(Not));
+        EnvSet(&global_env, GET,    MakeFunc(Get));
+        EnvSet(&global_env, PRINT,  MakeFunc(LPrint));
+        EnvSet(&global_env, WRITE,  MakeFunc(LWrite));
+        EnvSet(&global_env, STR,    MakeFunc(String));
+        EnvSet(&global_env, AND,    MakeMacro(And));
+        EnvSet(&global_env, OR,     MakeMacro(Or));
+        EnvSet(&global_env, COND,   MakeMacro(Cond));
+        EnvSet(&global_env, DO,     MakeMacro(Do));
+        EnvSet(&global_env, IF,     MakeMacro(If));
+        EnvSet(&global_env, LET,    MakeMacro(Let));
+        EnvSet(&global_env, QUOTE,  MakeMacro(Quote));
+        EnvSet(&global_env, LAMBDA, MakeMacro(Lambda));
+#if DEBUG
+        printf("Global environment:\n");
+        print(global_env, 1);
+        putchar('\n');
+#endif
+}
+
 void InitLizp(void)
 {
-    InitPool();
-
-    global_env = LizpInitEnv();
-    EnvSet(&global_env, ADD,    MakeFunc(Sum));
-    EnvSet(&global_env, MUL,    MakeFunc(Product));
-    EnvSet(&global_env, SUB,    MakeFunc(Subtract));
-    EnvSet(&global_env, DIV,    MakeFunc(Divide));
-    EnvSet(&global_env, LEN,    MakeFunc(Length));
-    EnvSet(&global_env, FIRST,  MakeFunc(First));
-    EnvSet(&global_env, REST,   MakeFunc(Rest));
-    EnvSet(&global_env, LIST,   MakeFunc(List));
-    EnvSet(&global_env, NTH,    MakeFunc(Nth));
-    EnvSet(&global_env, CAT,    MakeFunc(Concat));
-    EnvSet(&global_env, JOIN,   MakeFunc(Join));
-    EnvSet(&global_env, EQUAL,  MakeFunc(Equal));
-    EnvSet(&global_env, NOT,    MakeFunc(Not));
-    EnvSet(&global_env, GET,    MakeFunc(Get));
-    EnvSet(&global_env, PRINT,  MakeFunc(DoPrint));
-    EnvSet(&global_env, WRITE,  MakeFunc(DoWrite));
-    EnvSet(&global_env, STR,    MakeFunc(String));
-    EnvSet(&global_env, AND,    MakeMacro(And));
-    EnvSet(&global_env, OR,     MakeMacro(Or));
-    EnvSet(&global_env, COND,   MakeMacro(Cond));
-    EnvSet(&global_env, DO,     MakeMacro(Do));
-    EnvSet(&global_env, IF,     MakeMacro(If));
-    EnvSet(&global_env, LET,    MakeMacro(Let));
-    EnvSet(&global_env, QUOTE,  MakeMacro(Quote));
-    EnvSet(&global_env, LAMBDA, MakeMacro(Lambda));
-#if DEBUG
-    printf("Global environment:\n");
-    print(global_env, 1);
-    putchar('\n');
-#endif
+    message = NULL;
+    if (!setjmp(exception))
+    {
+        InitPool();
+        InitEnv();
+    }
+    else
+    {
+        fprintf(stderr, "could not initialize lizp\n");
+    }
 }
 
