@@ -8,31 +8,48 @@
 
 int main (int argc, char **argv)
 {
+    Val *env = MakeSeq(NULL, NULL);
+
     printf("\nLIZP read-print loop:\n");
     while (1)
     {
         printf(">>> ");
-        Val *v;
         char buffer[BUF_SZ];
         if (!fgets(buffer, sizeof(buffer), stdin))
         {
+            printf("end of input\n");
             break;
         }
-        int len1 = strlen(buffer);
-        if (len1 <= 1)
+        int len = strlen(buffer);
+        if (len <= 1)
         {
+            printf("end of input\n");
             break;
         }
-        int len2 = ReadVal(buffer, sizeof(buffer), &v);
-        int len3 = PrintValBuf(v, buffer, sizeof(buffer), 1);
-        buffer[len3] = '\0';
-        printf("%s\n", buffer);
-        Val *e = Eval(v, NULL);
-        FreeValRec(v);
-        int len4 = PrintValBuf(e, buffer, sizeof(buffer), 1);
-        FreeValRec(e);
-        buffer[len4] = '\0';
-        printf("%s\n", buffer);
+        Val *expr = NULL;
+        int readlen = ReadVal(buffer, len, &expr);
+        if (!expr)
+        {
+            printf("[]\n");
+            continue;
+        }
+        if (readlen != len)
+        {
+            printf("read error\n");
+            continue;
+        }
+
+        printf("expr: ");
+        PrintValFile(stdout, expr);
+        putchar('\n');
+
+        Val *val = Eval(expr, env);
+        printf("eval: ");
+        PrintValFile(stdout, val);
+        putchar('\n');
+
+        FreeValRec(expr);
+        FreeValRec(val);
     }
     return 0;
 }
