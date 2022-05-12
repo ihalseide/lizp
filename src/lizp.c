@@ -146,8 +146,10 @@ Val *MakeSeq(Val *first, Val *rest)
 // New copy, with no structure-sharing
 Val *CopyVal(Val *p)
 {
-    if (p)
+    if (!p)
     {
+        return p;
+    }
         if (IsSym(p))
         {
             return MakeSymCopy(p->symbol, strlen(p->symbol));
@@ -164,8 +166,6 @@ Val *CopyVal(Val *p)
         }
         return copy;
     }
-    return NULL;
-}
 
 // String needs quotes?
 // Check if a string for a symbol name needs to be quoted
