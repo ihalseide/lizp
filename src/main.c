@@ -6,32 +6,34 @@
 
 #define BUF_SZ (2*1024)
 
-Val *InitLizpEnv(void)
-{
-    Val *env = NULL;
-    EnvSetName(&env, "I", 1, MakeInt(99));
-    return env;
-}
-
-void rep(const char *s, int len)
-{
-    print(eval(read(s, len)), true);
-    putchar('\n');
-}
-
 int main (int argc, char **argv)
 {
-    InitLizp();
     while (1)
     {
-        printf("LIZP> ");
+        printf("\n>>> ");
+        Val *v;
         char buffer[BUF_SZ];
-        if(!fgets(buffer, sizeof(buffer), stdin))
+        if (!fgets(buffer, sizeof(buffer), stdin))
         {
-            putchar('\n');
             break;
         }
-        rep(buffer, strlen(buffer));
+        int len1 = strlen(buffer);
+        if (len1 <= 1)
+        {
+            break;
+        }
+        int len2 = ReadVal(buffer, sizeof(buffer), &v);
+        if (!len2)
+        {
+            printf("read error\n");
+            continue;
+        }
+        printf("read length: %d\n", len2);
+        int len3 = PrintValBuf(v, buffer, sizeof(buffer), 1);
+        FreeValRec(v);
+        buffer[len3] = '\0';
+        printf("%s\n", buffer);
+        printf("print length: %d\n", len3);
     }
     return 0;
 }
