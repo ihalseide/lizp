@@ -599,9 +599,10 @@ void PrintValFile(FILE *f, Val *v)
     free(s);
 }
 
-// Check whether a value is considered true or "truthy"
+// Check whether a value is considered as true
 int IsTrue(Val *v)
 {
+    // "false" and [] are set to be the only false values
     if (!v)
     {
         return 0;
@@ -668,12 +669,12 @@ int EnvSet(Val *env, Val *key, Val *val)
     return 1;
 }
 
-// Get value in environment
-Val *EnvGet(Val *env, Val *key)
+// Get value in environment, does not return a copy
+int EnvGet(Val *env, Val *key, Val **out)
 {
     if (!env)
     {
-        return NULL;
+        return 0;
     }
     Val *scope = env;
     while (scope && IsSeq(scope))
@@ -684,19 +685,24 @@ Val *EnvGet(Val *env, Val *key)
             Val *pair = p->first;
             if (pair && IsSeq(pair) && IsEqual(pair->first, key))
             {
+                // found
                 if (!pair->rest)
                 {
                     // env is improperly set up
-                    return NULL;
+                    return 0;
                 }
-                return pair->rest->first;
+                if (out)
+                {
+                    *out = pair->rest->first;
+                }
+                return 1;
             }
             p = p->rest;
         }
         // outer scope
         scope = scope->rest;
     }
-    return NULL;
+    return 0;
 }
 
 static void EnvPush(Val *env)
@@ -719,6 +725,28 @@ static void EnvPop(Val *env)
 static int Macro(Val *first, Val *args, Val *env, Val **out)
 {
     char *s = first->symbol;
+    if (!strcmp("defined?", s))
+    {
+        // [defined? v]
+        if (!args)
+        {
+            *out = NULL;
+            return 1;
+        }
+        Val *sym = args->first;
+        if (!IsSym(sym))
+        {
+            *out = NULL;
+            return 1;
+        }
+        if (EnvGet(env, sym, NULL))
+        {
+            *out = MakeSymCopy("true", 4);
+            return 1;
+        }
+        *out = NULL;
+        return 1;
+    }
     if (!strcmp("get", s))
     {
         // [get key] for getting value with a default of null
@@ -728,7 +756,13 @@ static int Macro(Val *first, Val *args, Val *env, Val **out)
             return 1;
         }
         Val *key = args->first;
-        *out = CopyVal(EnvGet(env, key));
+        Val *val;
+        if (EnvGet(env, key, &val))
+        {
+            *out = CopyVal(val);
+            return 1;
+        }
+        *out = NULL;
         return 1;
     }
     if (!strcmp("let", s))
@@ -1289,7 +1323,6 @@ Val *Apply(Val *first, Val *args, Val *env)
         return CopyVal(v);
     }
     // TODO:
-    // [defined? v]
     // [nil? v]
     // [< v1 v2 (v)...]
     // [<= v1 v2 (v)...]
@@ -1329,8 +1362,8 @@ Val *Eval(Val *ast, Val *env)
     if (IsSym(ast))
     {
         // lookup symbol value
-        Val *val = EnvGet(env, ast);
-        if (val)
+        Val *val;
+        if (EnvGet(env, ast, &val))
         {
             return CopyVal(val);
         }
