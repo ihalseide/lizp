@@ -82,12 +82,14 @@ int IsEqual(Val *x, Val *y)
     return 0;
 }
 
-// NULL is considered an empty sequence
+// Check if a value is a sequence
+// NULL is also considered an empty sequence
 int IsSeq(Val *p)
 {
     return !p || (p && !(p->flag & F_SYM));
 }
 
+// Check if a value is a symbol
 int IsSym(Val *p)
 {
     return p && (p->flag & F_SYM);
@@ -97,7 +99,7 @@ int IsSym(Val *p)
 // - empty string -> null []
 Val *MakeSym(char *s)
 {
-    if (!s)
+    if (!s || *s == 0)
     {
         return NULL;
     }
@@ -193,7 +195,7 @@ int StrNeedsQuotes(const char *s)
 }
 
 // Escape a string.
-// In-place string escaping
+// Modifies the string in-place
 int EscapeStr(char *str, int len)
 {
     if (!str || len <= 0)
@@ -287,7 +289,7 @@ static int ReadSym(const char *str, int len, Val **out)
                 }
                 else
                 {
-                    assert(0 && "error");
+                    assert(0 && "unexpected end of string error not handled");
                 }
                 break;
             }
@@ -325,6 +327,7 @@ static int ReadSym(const char *str, int len, Val **out)
     }
 }
 
+// Read value from input stream
 // str = string characters
 // len = string length
 // out = value to return
@@ -398,13 +401,17 @@ int ReadVal(const char *str, int len, Val **out)
                 {
                     i++;
                 }
+                else
+                {
+                    assert(0 && "unexpected end of list error not handled");
+                }
                 *out = list;
                 return i;
             }
         case ']':
             // end list
-            *out = NULL;
-            return i;
+            assert(0 && "unmatched bracket error not handled");
+            break;
         default:
             // Symbol
             {
@@ -539,11 +546,12 @@ int PrintValBuf(Val *v, char *out, int length, int readable)
     }
     else
     {
-        assert(0 && "invalid type");
+        assert(0 && "invalid Val type");
     }
     return i;
 }
 
+// Print value to a new string
 char *PrintValStr(Val *v, int readable)
 {
     int len1 = PrintValBuf(v, NULL, 0, readable);
@@ -561,7 +569,8 @@ char *PrintValStr(Val *v, int readable)
     return new;
 }
 
-void PrintToFile(FILE *f, Val *v)
+// Print value to a file
+void PrintValFile(FILE *f, Val *v)
 {
     char *s = PrintValStr(v, 1);
     fprintf(f, "%s", s);
