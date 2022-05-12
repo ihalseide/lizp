@@ -29,6 +29,7 @@ void FreeValRec(Val *p);
 
 int IsSeq(Val *p);
 int IsSym(Val *p);
+int IsTrue(Val *v);
 int IsEqual(Val *x, Val *y);
 
 int ReadVal(const char *start, int length, Val **out);
@@ -39,5 +40,7 @@ void PrintValFile(FILE *f, Val *v);
 
 int EscapeStr(char *str, int len);
 int StrNeedsQuotes(const char *s);
+
+Val *Eval(Val *ast, Val *env);
 
 #endif /* _lizp_h_ */

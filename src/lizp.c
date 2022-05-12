@@ -150,22 +150,22 @@ Val *CopyVal(Val *p)
     {
         return p;
     }
-        if (IsSym(p))
-        {
-            return MakeSymCopy(p->symbol, strlen(p->symbol));
-        }
-        // Seq
-        Val *copy = MakeSeq(CopyVal(p->first), NULL);
-        Val *pcopy = copy;
-        p = p->rest;
-        while (IsSeq(p) && p)
-        {
-            pcopy->rest = MakeSeq(CopyVal(p->first), NULL);
-            pcopy = pcopy->rest;
-            p = p->rest;
-        }
-        return copy;
+    if (IsSym(p))
+    {
+        return MakeSymCopy(p->symbol, strlen(p->symbol));
     }
+    // Seq
+    Val *copy = MakeSeq(CopyVal(p->first), NULL);
+    Val *pcopy = copy;
+    p = p->rest;
+    while (IsSeq(p) && p)
+    {
+        pcopy->rest = MakeSeq(CopyVal(p->first), NULL);
+        pcopy = pcopy->rest;
+        p = p->rest;
+    }
+    return copy;
+}
 
 // String needs quotes?
 // Check if a string for a symbol name needs to be quoted
@@ -589,3 +589,78 @@ void PrintValFile(FILE *f, Val *v)
     free(s);
 }
 
+// Check whether a value is considered true or "truthy"
+int IsTrue(Val *v)
+{
+    if (!v)
+    {
+        return 0;
+    }
+    if (IsSym(v) && !strcmp(v->symbol, "false"))
+    {
+        return 0;
+    }
+    return 1;
+}
+
+// Evaluate a Val
+// - ast = Abstract Syntax Tree to evaluate
+// - env = environment of symbol-value pairs
+// Returns evaluated value
+// - must only return new values that do not share structure with ast or env
+Val *Eval(Val *ast, Val *env)
+{
+    if (!ast)
+    {
+        return ast;
+    }
+    if (IsSym(ast))
+    {
+        return CopyVal(ast);
+    }
+    assert(IsSeq(ast));
+    // eval first element
+    Val *first = Eval(ast->first, env);
+    // macro?
+    if (IsSym(first))
+    {
+        Val *args = ast->rest;
+        char *s = first->symbol;
+        if (!strcmp("if", s))
+        {
+            Val *f = Eval(args->first, env);
+            int t = IsTrue(f);
+            FreeValRec(f);
+            if (t && args->rest)
+            {
+                return Eval(args->rest->first, env);
+            }
+            if (args->rest->rest)
+            {
+                return Eval(args->rest->rest->first, env);
+            }
+            return NULL;
+        }
+    }
+    // not macro, eval rest of elements
+    Val *list = MakeSeq(first, NULL);
+    Val *p_list = list;
+    Val *p_ast = ast->rest;
+    while (p_ast && IsSeq(p_ast))
+    {
+        p_list->rest = MakeSeq(Eval(p_ast->first, env), NULL);
+        p_list = p_list->rest;
+        p_ast = p_ast->rest;
+    }
+    // apply
+    if (!first || !IsSym(first))
+    {
+        return list;
+    }
+    char *s = first->symbol;
+    if (!strcmp("+", s))
+    {
+        return MakeSymCopy("sum", 3);
+    }
+    return list;
+}
