@@ -16,6 +16,22 @@
 //   Val *result;
 //   Val *pstack;
 
+// Duplicate string (standard)
+char *strndup(const char *str, int len)
+{
+    if (!str || len < 0)
+    {
+        return NULL;
+    }
+    char *new = malloc(len + 1);
+    if (new)
+    {
+        memcpy(new, str, len);
+        new[len] = 0;
+    }
+    return new;
+}
+
 void FreeValRec(Val *v)
 {
     if (IsSeq(v))
@@ -26,6 +42,7 @@ void FreeValRec(Val *v)
         while (p && IsSeq(p))
         {
             FreeValRec(p->first);
+            p->first = NULL;
             n = p->rest;
             free(p);
             p = n;
@@ -37,6 +54,7 @@ void FreeValRec(Val *v)
         if (v->symbol)
         {
             free(v->symbol);
+            v->symbol = NULL;
         }
         free(v);
     }
@@ -95,10 +113,11 @@ Val *MakeSym(const char *buf, int len)
         return NULL;
     }
     Val *p = malloc(sizeof(*p));
-    p->flag = F_SYM;
-    p->symbol = malloc((len + 1) * sizeof(*buf));
-    memcpy(p->symbol, buf, len);
-    p->symbol[len] = 0;
+    if (p)
+    {
+        p->flag = F_SYM;
+        p->symbol = strndup(buf, len);
+    }
     return p;
 }
 
@@ -110,9 +129,12 @@ Val *MakeSeq(Val *first, Val *rest)
         return NULL;
     }
     Val *p = malloc(sizeof(*p));
-    p->flag = 0;
-    p->first = first;
-    p->rest = rest;
+    if (p)
+    {
+        p->flag = 0;
+        p->first = first;
+        p->rest = rest;
+    }
     return p;
 }
 
@@ -242,7 +264,10 @@ static int ReadSym(const char *str, int len, Val **out)
                 {
                     if (out)
                     {
-                        *out = MakeSym(str + j, i - j - 1);
+                        int len = i - j - 1;
+                        Val *sym = MakeSym(str + j, len);
+                        EscapeStr(sym->symbol, len);
+                        *out = sym;
                     }
                     return i;
                 }
@@ -320,25 +345,44 @@ int ReadVal(const char *str, int len, Val **out)
                 }
                 // elements
                 Val *list = NULL;
-                Val *p;
-                while (i < len && str[i] != ']')
+                if (str[i] != ']')
                 {
+                    // first item
                     Val *e;
                     int l = ReadVal(str + i, len - i, &e);
-                    if (!l)
-                    {
-                        break;
-                    }
-                    if (p)
-                    {
-                        p->rest = MakeSeq(e, NULL);
-                        p = p->rest;
-                    }
-                    else
-                    {
-                        p = list = MakeSeq(e, NULL);
-                    }
                     i += l;
+                    if (l)
+                    {
+                        // Space
+                        while (i < len && isspace(str[i]))
+                        {
+                            i++;
+                        }
+                        list = MakeSeq(e, NULL);
+                        Val *p = list;
+                        // rest of items
+                        while (i < len && str[i] != ']')
+                        {
+                            Val *e;
+                            int l = ReadVal(str + i, len - i, &e);
+                            i += l;
+                            if (!l)
+                            {
+                                break;
+                            }
+                            // Space
+                            while (i < len && isspace(str[i]))
+                            {
+                                i++;
+                            }
+                            p->rest = MakeSeq(e, NULL);
+                            p = p->rest;
+                        }
+                    }
+                }
+                if (str[i] == ']')
+                {
+                    i++;
                 }
                 *out = list;
                 return i;
@@ -352,7 +396,6 @@ int ReadVal(const char *str, int len, Val **out)
             {
                 Val *sym = NULL;
                 int slen = ReadSym(str + i, len - i, &sym);
-                EscapeStr(sym->symbol, len - i);
                 i += slen;
                 *out = sym;
                 return i;
@@ -502,5 +545,12 @@ char *PrintValStr(Val *v, int readable)
         new[len1] = '\0';
     }
     return new;
+}
+
+void PrintToFile(FILE *f, Val *v)
+{
+    char *s = PrintValStr(v, 1);
+    fprintf(f, "%s", s);
+    free(s);
 }
 

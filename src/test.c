@@ -301,11 +301,24 @@ static void TestPrintStr2(void)
     assert(strcmp(s, "[a]") == 0);
 }
 
+static void TestPrintStr3(void)
+{
+    Val *(*P)(Val *, Val *);
+    P = MakeSeq;
+    Val *(*S)(const char*, int);
+    S = MakeSym;
+    // [a "\n" c]
+    Val *v = P(S("a", 1), P(S("\n", 1), P(S("c", 1), NULL)));
+    char *s = PrintValStr(v, 1);
+    assert(strcmp(s, "[a \"\\n\" c]") == 0);
+}
+
 static void TestPrintStr(void)
 {
     fprintf(stderr, "%s\n", __func__);
     TestPrintStr1();
     TestPrintStr2();
+    TestPrintStr3();
 }
 
 static void TestPrint(void)
@@ -403,12 +416,120 @@ static void TestEqual(void)
     TestEqual7();
 }
 
+static void TestRead1(void)
+{
+    // empty list
+    Val *v;
+    char b[] = "[]";
+    int l;
+    l = ReadVal(b, sizeof(b), &v);
+    assert(l == 2);
+    assert(v == NULL);
+
+    char c[] = "[      ]";
+    l = ReadVal(c, sizeof(c), &v);
+    assert(l == 8);
+    assert(v == NULL);
+}
+
+static void TestRead2(void)
+{
+    Val *v;
+    char b[] = "x";
+    int l;
+    l = ReadVal(b, sizeof(b), &v);
+    assert(l == 1);
+    assert(v);
+    assert(IsSym(v));
+    assert(v->symbol);
+    assert(strcmp(v->symbol, "x") == 0);
+
+    char c[] = "   x";
+    l = ReadVal(c, sizeof(c), &v);
+    assert(l == 4);
+    assert(v);
+    assert(IsSym(v));
+    assert(v->symbol);
+    assert(strcmp(v->symbol, "x") == 0);
+}
+
+static void TestRead3(void)
+{
+    Val *v;
+    char b[] = "[x]";
+    int l;
+    l = ReadVal(b, sizeof(b), &v);
+    assert(l == 3);
+    assert(v);
+    assert(IsSeq(v));
+    assert(v->first);
+    assert(!v->rest);
+    assert(IsSym(v->first));
+    assert(strcmp(v->first->symbol, "x") == 0);
+
+    char c[] = "  [ x ] ";
+    l = ReadVal(c, sizeof(c), &v);
+    assert(l == 7);
+    assert(v);
+    assert(IsSeq(v));
+    assert(v->first);
+    assert(!v->rest);
+    assert(IsSym(v->first));
+    assert(v->first->symbol);
+    assert(strcmp(v->first->symbol, "x") == 0);
+}
+
+static void TestRead4(void)
+{
+    Val *(*P)(Val *, Val *);
+    P = MakeSeq;
+    Val *(*S)(const char*, int);
+    S = MakeSym;
+    Val *ref = P(S("+", 1), P(P(S("*", 1), P(S("x", 1), P(S("y", 1), NULL))), P(S("1", 1), NULL)));
+
+    Val *v;
+    char b[] = "[+ [* x y] 1]";
+    int l;
+    l = ReadVal(b, sizeof(b), &v);
+    assert(l == 13);
+    assert(v);
+    assert(IsEqual(v, ref));
+}
+
+static void TestRead5(void)
+{
+    Val *(*P)(Val *, Val *);
+    P = MakeSeq;
+    Val *(*S)(const char*, int);
+    S = MakeSym;
+    Val *ref = P(S("a", 1), P(S("\n", 1), P(S("c", 1), NULL)));
+
+    Val *v;
+    char b[] = "[a\"\\n\"c]";
+    int l;
+    l = ReadVal(b, sizeof(b), &v);
+    assert(l == 8);
+    assert(v);
+    assert(IsEqual(v, ref));
+}
+
+static void TestRead(void)
+{
+    fprintf(stderr, "%s\n", __func__);
+    TestRead1();
+    TestRead2();
+    TestRead3();
+    TestRead4();
+    TestRead5();
+}
+
 static void Test(void)
 {
     TestEscapeStr();
     TestVal();
     TestEqual();
     TestPrint();
+    TestRead();
     TestCopy();
 }
 

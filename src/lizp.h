@@ -30,6 +30,7 @@ int ReadVal(const char *start, int length, Val **out);
 int PrintValBuf(Val *p, char *out, int length, int readable);
 
 char *PrintValStr(Val *p, int readable);
+void PrintToFile(FILE *f, Val *v);
 
 int EscapeStr(char *str, int len);
 int StrNeedsQuotes(const char *s);
