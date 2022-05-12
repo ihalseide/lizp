@@ -883,6 +883,140 @@ Val *Apply(Val *first, Val *args, Val *env)
         }
         return MakeSymInt(x % y);
     }
+    if (!strcmp("=", s))
+    {
+        // [= x y (expr)...] check equality
+        if (!args || !args->rest)
+        {
+            return NULL;
+        }
+        Val *f = args->first;
+        Val *p = args->rest;
+        while (p && IsSeq(p))
+        {
+            if (!IsEqual(f, p->first))
+            {
+                return NULL;
+            }
+            p = p->rest;
+        }
+        return MakeSymCopy("true", 4);
+    }
+    if (!strcmp("not", s))
+    {
+        // [not expr] boolean not
+        if (!args)
+        {
+            return NULL;
+        }
+        if (IsTrue(args->first))
+        {
+            return NULL;
+        }
+        return MakeSymCopy("true", 4);
+    }
+    if (!strcmp("symbol?", s))
+    {
+        // [symbol? val] check if value is a symbol
+        if (!args)
+        {
+            return NULL;
+        }
+        if (!IsSym(args->first))
+        {
+            return NULL;
+        }
+        return MakeSymCopy("true", 4);
+    }
+    if (!strcmp("list?", s))
+    {
+        // [list? val] check if value is a list
+        if (!args)
+        {
+            return NULL;
+        }
+        if (!IsSeq(args->first))
+        {
+            return NULL;
+        }
+        return MakeSymCopy("true", 4);
+    }
+    if (!strcmp("empty?", s))
+    {
+        // [empty? val] check if value is a the empty list
+        if (!args)
+        {
+            return NULL;
+        }
+        if (args->first)
+        {
+            return NULL;
+        }
+        return MakeSymCopy("true", 4);
+    }
+    if (!strcmp("nth", s))
+    {
+        // [nth index list] get the nth item in a list
+        if (!args || !args->rest)
+        {
+            return NULL;
+        }
+        Val *i = args->first;
+        if (!IsSym(i))
+        {
+            // 1st arg not a symbol
+            return NULL;
+        }
+        Val *list = args->rest->first;
+        if (!IsSeq(list))
+        {
+            // 2nd arg not a list
+            return NULL;
+        }
+        long n = atol(i->symbol);
+        if (n < 0)
+        {
+            // index negative
+            return NULL;
+        }
+        Val *p = list;
+        while (n > 0 && p && IsSeq(p))
+        {
+            p = p->rest;
+            n--;
+        }
+        if (p)
+        {
+            return CopyVal(p->first);
+        }
+        // index too big
+        return NULL;
+    }
+    if (!strcmp("list", s))
+    {
+        // [list (val)...] create list from arguments (variadic)
+        return CopyVal(args);
+    }
+    if (!strcmp("length", s))
+    {
+        // [length list]
+        if (!args)
+        {
+            return NULL;
+        }
+        if (!IsSeq(args->first))
+        {
+            return NULL;
+        }
+        long len = 0;
+        Val *p = args->first;
+        while (p && IsSeq(p))
+        {
+            len++;
+            p = p->rest;
+        }
+        return MakeSymInt(len);
+    }
 
     return NULL;
 }
