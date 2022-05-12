@@ -56,10 +56,23 @@ This is the alphabetical list of current functions:
 * \[- x (y)] with 2 arguments, calculate x - y; with 1 argument calculate -x
 * \[/ x y] calculate x / y
 * \[% x y] calculate x % y
+* \[not val] boolean complement
+* \[symbol? val] check whether val is a symbol
+* \[lambda? val] check whether val is a lambda
+* \[list? val] check whether val is a list
+* \[empty? val] check whether val is an empty list
+* \[nth n list] get the nth item of the list
+* \[list (val)...] create a list
+* \[length list] get the length of a list
 
 This is the alphabetical list of current macros:
-* \[get key] lookup the value for a given "symbol"
-* \[if a b (c)] a=condition, b=consequent, c=alternative, c is optional
-* \[quote expr] return the expression without evaluating it
+* \[and expr1 (expr)...] evaluate each expression until one is false
+* \[cond (expr result)...] evaluate each expr until one is true, and then evaluate the corresponding result
 * \[do (expr)...] evaluate each expression in order (variadic)
+* \[get symbol] explicitly look up the value bound to a given symbol
+* \[if a b (c)] a=condition, b=consequent, c=alternative, c is optional
+* \[lambda \[(sym)... (&sym)] expr] create a lambda function (with no closure)
+* \[let \[(sym val)...] expr] create bindings for symbols within a block
+* \[or expr1 (expr)...] evaluate each expression until one is true
+* \[quote expr] return the expression without evaluating it
 
