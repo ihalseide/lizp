@@ -1159,7 +1159,7 @@ Val *Eval(Val *ast, Val *env)
         Val *val = EnvGet(env, ast);
         if (val)
         {
-            return val;
+            return CopyVal(val);
         }
         // a symbol evaluates to itself if not found
         return CopyVal(ast);
