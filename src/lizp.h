@@ -16,10 +16,12 @@ struct Val
     Val *rest;
 };
 
+Val *AllocVal(void);
 Val *MakeSeq(Val *first, Val *rest);
 Val *MakeSym(const char *name, int len);
-
 Val *CopyVal(Val *p);
+
+void FreeVal(Val *p);
 void FreeValRec(Val *p);
 
 int IsSeq(Val *p);

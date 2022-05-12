@@ -5,17 +5,6 @@
 #include <string.h>
 #include "lizp.h"
 
-// TODO: add BeginRead, Read1, and EndRead?
-// Global, no nested reading.
-//   int BeginRead(const char *str, int len);
-//   int Read1(Val **out);
-//   int EndRead(void);
-// State:
-//   int str, len;
-//   int index, status;
-//   Val *result;
-//   Val *pstack;
-
 // Duplicate string (standard)
 char *strndup(const char *str, int len)
 {
@@ -32,6 +21,19 @@ char *strndup(const char *str, int len)
     return new;
 }
 
+// Allocate value
+Val *AllocVal(void)
+{
+    return malloc(sizeof(Val));
+}
+
+// Free value 
+void FreeVal(Val *p)
+{
+    free(p);
+}
+
+// Free value recursively
 void FreeValRec(Val *v)
 {
     if (IsSeq(v))
@@ -44,7 +46,7 @@ void FreeValRec(Val *v)
             FreeValRec(p->first);
             p->first = NULL;
             n = p->rest;
-            free(p);
+            FreeVal(p);
             p = n;
         }
     }
@@ -56,7 +58,7 @@ void FreeValRec(Val *v)
             free(v->symbol);
             v->symbol = NULL;
         }
-        free(v);
+        FreeVal(v);
     }
 }
 
@@ -112,7 +114,7 @@ Val *MakeSym(const char *buf, int len)
     {
         return NULL;
     }
-    Val *p = malloc(sizeof(*p));
+    Val *p = AllocVal();
     if (p)
     {
         p->flag = F_SYM;
@@ -128,7 +130,7 @@ Val *MakeSeq(Val *first, Val *rest)
         // only allow seq's in the rest slot
         return NULL;
     }
-    Val *p = malloc(sizeof(*p));
+    Val *p = AllocVal();
     if (p)
     {
         p->flag = 0;
