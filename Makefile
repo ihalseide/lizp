@@ -1,6 +1,6 @@
-CC = gcc
+CC = clang
 #COpts = -std=c99 -O3
-COpts = -std=c99 -g -DDEBUG
+COpts = -std=c99 -g -DDEBUG -Wall
 	
 default: lizp
 
