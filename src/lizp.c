@@ -254,6 +254,13 @@ static int ReadSym(const char *str, int len, Val **out)
                         case '\0':
                             done = 1;
                             break;
+                        case '\\':
+                            i++;
+                            if (str[i] == '"')
+                            {
+                                i++;
+                            }
+                            break;
                         case '"':
                             done = 1;
                             good = 1;

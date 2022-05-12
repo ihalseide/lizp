@@ -523,6 +523,19 @@ static void TestRead6(void)
     assert(v == NULL);
 }
 
+static void TestRead7(void)
+{
+    // quoted symbol with quote inside: "\""
+    Val *v;
+    char b[] = "\"\\\"\"";
+    int l = ReadVal(b, sizeof(b), &v);
+    assert(l == 4);
+    assert(v);
+    assert(IsSym(v));
+    assert(v->symbol);
+    assert(strcmp(v->symbol, "\"") == 0);
+}
+
 static void TestRead(void)
 {
     fprintf(stderr, "%s\n", __func__);
@@ -532,6 +545,7 @@ static void TestRead(void)
     TestRead4();
     TestRead5();
     TestRead6();
+    TestRead7();
 }
 
 static void Test(void)
