@@ -22,6 +22,7 @@ Val *AllocVal(void);
 Val *MakeSeq(Val *first, Val *rest);
 Val *MakeSym(char *s);
 Val *MakeSymCopy(const char *name, int len);
+Val *MakeSymInt(long n);
 Val *CopyVal(Val *p);
 
 void FreeVal(Val *p);

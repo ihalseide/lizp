@@ -124,6 +124,16 @@ Val *MakeSymCopy(const char *buf, int len)
     return MakeSym(strndup(buf, len));
 }
 
+// Make a symbol for an integer
+Val *MakeSymInt(long n)
+{
+    const char *fmt = "%ld";
+    const int sz = snprintf(NULL, 0, fmt, n);
+    char buf[sz + 1];
+    snprintf(buf, sizeof(buf), fmt, n);
+    return MakeSymCopy(buf, sz);
+}
+
 // Make sequence
 // - first: sym or seq (null included)
 // - rest: seq (null included)
@@ -759,6 +769,119 @@ Val *Apply(Val *first, Val *args, Val *env)
             p = p->rest;
         }
         return NULL;
+    }
+    if(!strcmp("+", s))
+    {
+        // [+ (e:integer)...] sum
+        long sum = 0;
+        Val *p = args;
+        while (p)
+        {
+            Val *e = p->first;
+            if (!IsSym(e))
+            {
+                return NULL;
+            }
+            long x = atol(e->symbol);
+            sum += x;
+            p = p->rest;
+        }
+        return MakeSymInt(sum);
+    }
+    if(!strcmp("*", s))
+    {
+        // [+ (e:integer)...] product
+        long product = 1;
+        Val *p = args;
+        while (p)
+        {
+            Val *e = p->first;
+            if (!IsSym(e))
+            {
+                return NULL;
+            }
+            long x = atol(e->symbol);
+            product *= x;
+            p = p->rest;
+        }
+        return MakeSymInt(product);
+    }
+    if(!strcmp("-", s))
+    {
+        // [- x:int (y:int)] subtraction
+        if (!args)
+        {
+            return NULL;
+        }
+        Val *vx = args->first;
+        if (!IsSym(vx))
+        {
+            return NULL;
+        }
+        long x = atol(vx->symbol);
+        if (args->rest)
+        {
+            Val *vy = args->rest->first;
+            if (!IsSym(vy))
+            {
+                return NULL;
+            }
+            long y = atol(vy->symbol);
+            return MakeSymInt(x - y);
+        }
+        return MakeSymInt(-x);
+    }
+    if(!strcmp("/", s))
+    {
+        // [/ x:int y:int] division
+        if (!args || !args->rest)
+        {
+            return NULL;
+        }
+        Val *vx = args->first;
+        if (!IsSym(vx))
+        {
+            return NULL;
+        }
+        long x = atol(vx->symbol);
+        Val *vy = args->rest->first;
+        if (!IsSym(vy))
+        {
+            return NULL;
+        }
+        long y = atol(vy->symbol);
+        if (y == 0)
+        {
+            // division by zero
+            return NULL;
+        }
+        return MakeSymInt(x / y);
+    }
+    if(!strcmp("%", s))
+    {
+        // [% x:int y:int] modulo
+        if (!args || !args->rest)
+        {
+            return NULL;
+        }
+        Val *vx = args->first;
+        if (!IsSym(vx))
+        {
+            return NULL;
+        }
+        long x = atol(vx->symbol);
+        Val *vy = args->rest->first;
+        if (!IsSym(vy))
+        {
+            return NULL;
+        }
+        long y = atol(vy->symbol);
+        if (y == 0)
+        {
+            // division by zero
+            return NULL;
+        }
+        return MakeSymInt(x % y);
     }
 
     return NULL;
