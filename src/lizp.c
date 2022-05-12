@@ -603,6 +603,167 @@ int IsTrue(Val *v)
     return 1;
 }
 
+// Set value in environment
+// Returns non-zero upon success
+int EnvSet(Val *env, Val *key, Val *val)
+{
+    if (!env || !IsSeq(env))
+    {
+        return 0;
+    }
+    Val *pair = MakeSeq(key, MakeSeq(val, NULL));
+    // push key-value pair onto the front of the list
+    env->first = MakeSeq(pair, env->first);
+    return 1;
+}
+
+// Get value in environment
+Val *EnvGet(Val *env, Val *key)
+{
+    if (!env)
+    {
+        return NULL;
+    }
+    Val *scope = env;
+    while (scope && IsSeq(scope))
+    {
+        Val *p = scope->first;
+        while (p && IsSeq(p))
+        {
+            Val *pair = p->first;
+            if (pair && IsSeq(pair) && IsEqual(pair->first, key))
+            {
+                if (!pair->rest)
+                {
+                    // env is improperly set up
+                    return NULL;
+                }
+                return pair->rest->first;
+            }
+            p = p->rest;
+        }
+        // outer scope
+        scope = scope->rest;
+    }
+    return NULL;
+}
+
+// Eval macro
+// Return values must not share structure with first, args, or env
+static int Macro(Val *first, Val *args, Val *env, Val **out)
+{
+    char *s = first->symbol;
+    if (!strcmp("get", s))
+    {
+        // [get key] for getting value with a default of null
+        if (!args || args->rest)
+        {
+            *out = NULL;
+            return 1;
+        }
+        Val *key = args->first;
+        *out = CopyVal(EnvGet(env, key));
+        return 1;
+    }
+    if (!strcmp("set", s))
+    {
+        // [set key val]
+        if (!args || !args->rest)
+        {
+            *out = NULL;
+            return 1;
+        }
+        Val *key = args->first;
+        if (!IsSym(key))
+        {
+            *out = NULL;
+            return 1;
+        }
+        Val *val = Eval(args->rest->first, env);
+        EnvSet(env, CopyVal(key), CopyVal(val));
+        *out = val;
+        return 1;
+    }
+    if (!strcmp("if", s))
+    {
+        // [if condition consequent alternative]
+        if (!args || !args->rest)
+        {
+            *out = NULL;
+            return 1;
+        }
+        Val *f = Eval(args->first, env);
+        int t = IsTrue(f);
+        FreeValRec(f);
+        if (t)
+        {
+            *out =  Eval(args->rest->first, env);
+            return 1;
+        }
+        if (args->rest->rest)
+        {
+            *out = Eval(args->rest->rest->first, env);
+            return 1;
+        }
+        *out = NULL;
+        return 1;
+    }
+    if (!strcmp("quote", s))
+    {
+        // [quote expr]
+        if (!args || args->rest)
+        {
+            *out = NULL;
+            return 1;
+        }
+        *out = CopyVal(args->first);
+        return 1;
+    }
+    if (!strcmp("do", s))
+    {
+        // [do (expr)...]
+        Val *p = args;
+        Val *e = NULL;
+        while (p && IsSeq(p))
+        {
+            e = Eval(p->first, env);
+            p = p->rest;
+            if (p)
+            {
+                FreeValRec(e);
+            }
+        }
+        *out = e;
+        return 1;
+    }
+
+    return 0;
+}
+
+// Apply functions
+// Return values must not share structure with first, args, or env
+Val *Apply(Val *first, Val *args, Val *env)
+{
+    if (!first || !IsSym(first))
+    {
+        return NULL;
+    }
+
+    char *s = first->symbol;
+    if (!strcmp("print", s))
+    {
+        Val *p = args;
+        while (p)
+        {
+            PrintValFile(stdout, p->first);
+            p = p->rest;
+        }
+        return NULL;
+    }
+
+    return NULL;
+}
+
 // Evaluate a Val
 // - ast = Abstract Syntax Tree to evaluate
 // - env = environment of symbol-value pairs
@@ -612,37 +773,35 @@ Val *Eval(Val *ast, Val *env)
 {
     if (!ast)
     {
+        // empty list
         return ast;
     }
     if (IsSym(ast))
     {
+        // lookup symbol value
+        Val *val = EnvGet(env, ast);
+        if (val)
+        {
+            return val;
+        }
+        // a symbol evaluates to itself if not found
         return CopyVal(ast);
     }
+    assert(ast);
     assert(IsSeq(ast));
     // eval first element
     Val *first = Eval(ast->first, env);
     // macro?
     if (IsSym(first))
     {
-        Val *args = ast->rest;
-        char *s = first->symbol;
-        if (!strcmp("if", s))
+        Val *result;
+        if (Macro(first, ast->rest, env, &result))
         {
-            Val *f = Eval(args->first, env);
-            int t = IsTrue(f);
-            FreeValRec(f);
-            if (t && args->rest)
-            {
-                return Eval(args->rest->first, env);
-            }
-            if (args->rest->rest)
-            {
-                return Eval(args->rest->rest->first, env);
-            }
-            return NULL;
+            return result;
         }
     }
-    // not macro, eval rest of elements
+    // not a macro
+    // eval rest of elements for apply
     Val *list = MakeSeq(first, NULL);
     Val *p_list = list;
     Val *p_ast = ast->rest;
@@ -652,15 +811,7 @@ Val *Eval(Val *ast, Val *env)
         p_list = p_list->rest;
         p_ast = p_ast->rest;
     }
-    // apply
-    if (!first || !IsSym(first))
-    {
-        return list;
-    }
-    char *s = first->symbol;
-    if (!strcmp("+", s))
-    {
-        return MakeSymCopy("sum", 3);
-    }
-    return list;
+    Val *result = Apply(first, list->rest, env);
+    FreeValRec(list);
+    return result;
 }
