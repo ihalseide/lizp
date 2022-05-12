@@ -8,9 +8,10 @@
 
 int main (int argc, char **argv)
 {
+    printf("\nLIZP read-print loop:\n");
     while (1)
     {
-        printf("\n>>> ");
+        printf(">>> ");
         Val *v;
         char buffer[BUF_SZ];
         if (!fgets(buffer, sizeof(buffer), stdin))
@@ -28,12 +29,12 @@ int main (int argc, char **argv)
             printf("read error\n");
             continue;
         }
-        printf("read length: %d\n", len2);
+        //printf("read length: %d\n", len2);
         int len3 = PrintValBuf(v, buffer, sizeof(buffer), 1);
         FreeValRec(v);
         buffer[len3] = '\0';
         printf("%s\n", buffer);
-        printf("print length: %d\n", len3);
+        //printf("print length: %d\n", len3);
     }
     return 0;
 }
