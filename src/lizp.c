@@ -677,6 +677,7 @@ static int Macro(Val *first, Val *args, Val *env, Val **out)
     }
     if (!strcmp("set", s))
     {
+        // TODO: remove this once "let" is implemented
         // [set key val]
         if (!args || !args->rest)
         {
@@ -746,12 +747,19 @@ static int Macro(Val *first, Val *args, Val *env, Val **out)
         *out = e;
         return 1;
     }
+    // TODO:
+    // [and expr1 (expr)...]
+    // [or expr1 (expr)...]
+    // [cond (condition result)...]
+    // [lambda [(symbol)...] (expr)]
+    // [let [(key val)...] (expr)] (remember to remove `set` afterwards)
 
     return 0;
 }
 
 // Apply functions
 // Return values must not share structure with first, args, or env
+// TODO: handle when first is a lambda
 Val *Apply(Val *first, Val *args, Val *env)
 {
     if (!first || !IsSym(first))
@@ -1017,6 +1025,29 @@ Val *Apply(Val *first, Val *args, Val *env)
         }
         return MakeSymInt(len);
     }
+    // TODO:
+    // [defined? v]
+    // [lambda? v]
+    // [nil? v]
+    // [< v1 v2 (v)...]
+    // [<= v1 v2 (v)...]
+    // [> v1 v2 (v)...]
+    // [>= v1 v2 (v)...]
+    // [chars sym] -> list
+    // [symbol list] -> symbol
+    // [reverse list]
+    // [member item list] -> bool
+    // [count item list] -> int
+    // [concat list (list)...]
+    // [append list val]
+    // [prepend val list]
+    // [join separator (list)...] -> list
+    // [position item list] -> list
+    // [without item list] -> list
+    // [replace item1 item2 list] -> list
+    // [replaceI index item list] -> list
+    // [slice list start (end)]
+    // [zip list (list)...]
 
     return NULL;
 }
