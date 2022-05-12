@@ -927,6 +927,21 @@ static int Macro(Val *first, Val *args, Val *env, Val **out)
     return 0;
 }
 
+static void EnvPush(Val *env)
+{
+    env->rest = MakeSeq(env->first, env->rest);
+    env->first = NULL;
+}
+
+static void EnvPop(Val *env)
+{
+    FreeValRec(env->first);
+    Val *pair = env->rest;
+    env->first = pair->first;
+    env->rest = pair->rest;
+    FreeVal(pair);
+}
+
 // Apply functions
 // Return values must not share structure with first, args, or env
 // TODO: handle when first is a lambda
@@ -939,42 +954,43 @@ Val *Apply(Val *first, Val *args, Val *env)
 
     if (IsLambda(first))
     {
-        printf("LAMBDA!\n");
+        // lambda function application
         Val *params = first->rest->first;
         Val *body = first->rest->rest->first;
         if (args)
         {
             // push env
-            env->rest = MakeSeq(env->first, env->rest);
-            env->first = NULL;
+            EnvPush(env);
             // bind values
             Val *p_params = params;
             Val *p_args = args;
             while (p_params && IsSeq(p_params) && p_args && IsSeq(p_args))
             {
-                EnvSet(env, CopyVal(p_params->first), CopyVal(p_args->first));
+                Val *param = p_params->first;
+                if ('&' == param->symbol[0])
+                {
+                    // symbol beginning with '&' binds the rest of the arguments
+                    if (p_params->rest)
+                    {
+                        // not the last parameter
+                        EnvPop(env);
+                        return NULL;
+                    }
+                    EnvSet(env, CopyVal(param), CopyVal(p_args));
+                    break;
+                }
+                EnvSet(env, CopyVal(param), CopyVal(p_args->first));
                 p_params = p_params->rest;
                 p_args = p_args->rest;
             }
             if ((p_params && !p_args) || (!p_params && p_args))
             {
                 // arity mismatch
-                printf("arity mismatch\n");
-                // env pop
-                FreeValRec(env->first);
-                Val *pair = env->rest;
-                env->first = pair->first;
-                env->rest = pair->rest;
-                FreeVal(pair);
+                EnvPop(env);
                 return NULL;
             }
             Val *result = Eval(body, env);
-            // env pop
-            FreeValRec(env->first);
-            Val *pair = env->rest;
-            env->first = pair->first;
-            env->rest = pair->rest;
-            FreeVal(pair);
+            EnvPop(env);
             return result;
         }
         return Eval(body, env);
@@ -982,7 +998,7 @@ Val *Apply(Val *first, Val *args, Val *env)
 
     if (!IsSym(first))
     {
-        // Invalid function
+        // invalid function
         return NULL;
     }
 
