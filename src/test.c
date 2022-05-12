@@ -469,7 +469,7 @@ static void TestRead3(void)
 
     char c[] = "  [ x ] ";
     l = ReadVal(c, sizeof(c), &v);
-    assert(l == 7);
+    assert(l == 8);
     assert(v);
     assert(IsSeq(v));
     assert(v->first);

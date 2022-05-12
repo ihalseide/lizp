@@ -253,6 +253,7 @@ static int ReadSym(const char *str, int len, Val **out)
                 {
                     switch (str[i])
                     {
+                        case '\n':
                         case '\0':
                             done = 1;
                             break;
@@ -273,25 +274,28 @@ static int ReadSym(const char *str, int len, Val **out)
                             break;
                     }
                 }
-                if (good)
+                if (good && out)
                 {
-                    if (out)
+                    // Make escaped symbol string 
+                    int len = i - j - 1;
+                    if (len == 0)
                     {
-                        int len = i - j - 1;
-                        Val *sym = MakeSymCopy(str + j, len);
-                        if (sym)
-                        {
-                            EscapeStr(sym->symbol, len);
-                        }
-                        *out = sym;
+                        *out = NULL;
+                        return i;
                     }
+                    assert(len > 0);
+                    char *str1 = strndup(str + j, len);
+                    int len2 = EscapeStr(str1, len);
+                    *out = MakeSymCopy(str1, len2);
+                    free(str1);
                     return i;
                 }
-                else
+                // invalid
+                if (out)
                 {
-                    assert(0 && "unexpected end of string error not handled");
+                    *out = NULL;
                 }
-                break;
+                return i;
             }
         default:
             // Symbol
@@ -331,7 +335,7 @@ static int ReadSym(const char *str, int len, Val **out)
 // str = string characters
 // len = string length
 // out = value to return
-// returns number of chars read
+// returns the number of chars read
 int ReadVal(const char *str, int len, Val **out)
 {
     if (!out || !str || !len)
@@ -367,51 +371,54 @@ int ReadVal(const char *str, int len, Val **out)
                     // first item
                     Val *e;
                     int l = ReadVal(str + i, len - i, &e);
-                    i += l;
-                    if (l)
+                    if (l <= 0)
                     {
+                        *out = NULL;
+                        return l;
+                    }
+                    i += l;
+                    // Space
+                    while (i < len && isspace(str[i]))
+                    {
+                        i++;
+                    }
+                    list = MakeSeq(e, NULL);
+                    Val *p = list;
+                    // rest of items
+                    while (i < len && str[i] != ']')
+                    {
+                        Val *e;
+                        int l = ReadVal(str + i, len - i, &e);
+                        i += l;
+                        if (l <= 0)
+                        {
+                            *out = list;
+                            return l;
+                        }
                         // Space
                         while (i < len && isspace(str[i]))
                         {
                             i++;
                         }
-                        list = MakeSeq(e, NULL);
-                        Val *p = list;
-                        // rest of items
-                        while (i < len && str[i] != ']')
-                        {
-                            Val *e;
-                            int l = ReadVal(str + i, len - i, &e);
-                            i += l;
-                            if (!l)
-                            {
-                                break;
-                            }
-                            // Space
-                            while (i < len && isspace(str[i]))
-                            {
-                                i++;
-                            }
-                            p->rest = MakeSeq(e, NULL);
-                            p = p->rest;
-                        }
+                        p->rest = MakeSeq(e, NULL);
+                        p = p->rest;
                     }
                 }
+                *out = list;
                 if (str[i] == ']')
                 {
                     i++;
+                    // Space
+                    while (i < len && isspace(str[i]))
+                    {
+                        i++;
+                    }
                 }
-                else
-                {
-                    assert(0 && "unexpected end of list error not handled");
-                }
-                *out = list;
                 return i;
             }
         case ']':
             // end list
-            assert(0 && "unmatched bracket error not handled");
-            break;
+            return i;
         default:
             // Symbol
             {
@@ -419,6 +426,11 @@ int ReadVal(const char *str, int len, Val **out)
                 int slen = ReadSym(str + i, len - i, &sym);
                 i += slen;
                 *out = sym;
+                // Space
+                while (i < len && isspace(str[i]))
+                {
+                    i++;
+                }
                 return i;
             }
     }
@@ -563,7 +575,7 @@ char *PrintValStr(Val *v, int readable)
     if (new)
     {
         int len2 = PrintValBuf(v, new, len1, readable);
-        (void)len2;
+        assert(len1 == len2);
         new[len1] = '\0';
     }
     return new;

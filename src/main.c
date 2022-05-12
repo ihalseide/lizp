@@ -24,9 +24,9 @@ int main (int argc, char **argv)
             break;
         }
         int len2 = ReadVal(buffer, sizeof(buffer), &v);
-        if (!len2)
+        if (!len2 || len2 < len1 - 1 || !v)
         {
-            printf("read error\n");
+            printf("read error. index %d\n", len2);
             continue;
         }
         //printf("read length: %d\n", len2);
