@@ -699,6 +699,21 @@ Val *EnvGet(Val *env, Val *key)
     return NULL;
 }
 
+static void EnvPush(Val *env)
+{
+    env->rest = MakeSeq(env->first, env->rest);
+    env->first = NULL;
+}
+
+static void EnvPop(Val *env)
+{
+    FreeValRec(env->first);
+    Val *pair = env->rest;
+    env->first = pair->first;
+    env->rest = pair->rest;
+    FreeVal(pair);
+}
+
 // Eval macro
 // Return values must not share structure with first, args, or env
 static int Macro(Val *first, Val *args, Val *env, Val **out)
@@ -716,24 +731,40 @@ static int Macro(Val *first, Val *args, Val *env, Val **out)
         *out = CopyVal(EnvGet(env, key));
         return 1;
     }
-    if (!strcmp("set", s))
+    if (!strcmp("let", s))
     {
-        // TODO: remove this once "let" is implemented
-        // [set key val]
+        // [let [(key val)...] (expr)] (remember to remove `set` afterwards)
         if (!args || !args->rest)
         {
             *out = NULL;
             return 1;
         }
-        Val *key = args->first;
-        if (!IsSym(key))
+        Val *bindings = args->first;
+        Val *body = args->rest->first;
+        if (!IsSeq(bindings))
         {
             *out = NULL;
             return 1;
         }
-        Val *val = Eval(args->rest->first, env);
-        EnvSet(env, CopyVal(key), CopyVal(val));
-        *out = val;
+        EnvPush(env);
+        Val *p_binds = bindings;
+        while (p_binds && IsSeq(p_binds))
+        {
+            Val *sym = p_binds->first;
+            if (!IsSym(sym) || !p_binds->rest || !IsSeq(p_binds->rest))
+            {
+                // invalid symbol or uneven amount of args
+                EnvPop(env);
+                *out = NULL;
+                return 1;
+            }
+            EnvSet(env, CopyVal(sym), Eval(p_binds->rest->first, env));
+            p_binds = p_binds->rest;
+            p_binds = p_binds->rest;
+        }
+        Val *result = Eval(body, env);
+        EnvPop(env);
+        *out = result;
         return 1;
     }
     if (!strcmp("if", s))
@@ -921,25 +952,8 @@ static int Macro(Val *first, Val *args, Val *env, Val **out)
                 MakeSeq(CopyVal(body), NULL)));
         return 1;
     }
-    // TODO:
-    // [let [(key val)...] (expr)] (remember to remove `set` afterwards)
 
     return 0;
-}
-
-static void EnvPush(Val *env)
-{
-    env->rest = MakeSeq(env->first, env->rest);
-    env->first = NULL;
-}
-
-static void EnvPop(Val *env)
-{
-    FreeValRec(env->first);
-    Val *pair = env->rest;
-    env->first = pair->first;
-    env->rest = pair->rest;
-    FreeVal(pair);
 }
 
 // Apply functions
@@ -983,7 +997,7 @@ Val *Apply(Val *first, Val *args, Val *env)
                 p_params = p_params->rest;
                 p_args = p_args->rest;
             }
-            if ((p_params && !p_args) || (!p_params && p_args))
+            if ((p_params == NULL) != (p_args == NULL))
             {
                 // arity mismatch
                 EnvPop(env);
