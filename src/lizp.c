@@ -366,146 +366,124 @@ int ReadVal(const char *str, int len, Val **out)
 // Returns: number of chars written
 int PrintValBuf(Val *v, char *out, int length, int readable)
 {
-    Val mark1, mark2, mark3;
     // String output count / index
     int i = 0;
-    // Value stack
-    Val *stack = MakeSeq(v, NULL);
-    Val *prev = NULL;
-    while (stack)
+    if (IsSeq(v))
     {
-        Val *e = stack->first;
-        Val *old = stack;
-        stack = stack->rest;
-        free(old);
-        if (!e)
+        if (out && i < length)
         {
-            // NULL, empty Sequence
-            if (out && i < length)
-            {
-                // "[]"
-                out[i] = '[';
-                out[i + 1] = ']';
-            }
-            i += 2;
+            out[i] = '[';
         }
-        else if (e == &mark1)
+        i++;
+        if (v)
         {
-            // List end marker
-            if (out && i < length)
+            // first item
+            if (out)
             {
-                out[i] = ']';
+                i += PrintValBuf(v->first, out + i, length - i, readable);
             }
-            i++;
-        }
-        else if (e == &mark2)
-        {
-            // List separator marker
-            if (out && i < length)
+            else
             {
-                out[i] = ' ';
+                i += PrintValBuf(v->first, NULL, 0, readable);
             }
-            i += 1;
-        }
-        else if (e == &mark3)
-        {
-            // List begin marker
-            if (out && i < length)
+            v = v->rest;
+            while (v)
             {
-                out[i] = '[';
-            }
-            i++;
-        }
-        else if (IsSym(e))
-        {
-            // Symbol
-            char *s = e->symbol;
-            int quoted = readable && StrNeedsQuotes(s);
-            if (quoted)
-            {
-                // Opening quote
+                // space
                 if (out && i < length)
                 {
-                    out[i] = '"';
+                    out[i] = ' ';
                 }
                 i++;
-            }
-            // Contents
-            while (*s)
-            {
-                char c = *s;
-                if (quoted)
+                // item
+                if (out)
                 {
-                    // escaping
-                    int esc = 0;
-                    switch (c)
-                    {
-                        case '\n':
-                            c = 'n';
-                            esc = 1;
-                            break;
-                        case '\t':
-                            c = 't';
-                            esc = 1;
-                            break;
-                        case '"':
-                            c = '"';
-                            esc = 1;
-                            break;
-                        case '\\':
-                            c = '\\';
-                            esc = 1;
-                            break;
-                    }
-                    if (esc)
-                    {
-                        if (out && i < length)
-                        {
-                            out[i] = '\\';
-                        }
-                        i++;
-                    }
+                    i += PrintValBuf(v->first, out + i, length - i, readable);
                 }
-                if (out && i < length)
+                else
                 {
-                    out[i] = c;
+                    i += PrintValBuf(v->first, NULL, 0, readable);
                 }
-                i++;
-                s++;
+                v = v->rest;
             }
-            if (quoted)
-            {
-                // Closing quote
-                if (out && i < length)
-                {
-                    out[i] = '"';
-                }
-                i++;
-            }
-            prev = e;
         }
-        else
+        if (out && i < length)
         {
-            // Sequence -> split into smaller units
-            int wrap = !prev || (prev->first == e);
-            if (wrap)
-            {
-                stack = MakeSeq(&mark1, stack); 
-            }
-            if (e->rest) 
-            {
-                stack = MakeSeq(e->rest, stack);
-                stack = MakeSeq(&mark2, stack);
-            }
-            stack = MakeSeq(e->first, stack);
-            if (wrap)
-            {
-                stack = MakeSeq(&mark3, stack);
-            }
+            out[i] = ']';
         }
-        prev = e;
+        i++;
     }
-
+    else if (IsSym(v))
+    {
+        // Symbol
+        char *s = v->symbol;
+        int quoted = readable && StrNeedsQuotes(s);
+        if (quoted)
+        {
+            // Opening quote
+            if (out && i < length)
+            {
+                out[i] = '"';
+            }
+            i++;
+        }
+        // Contents
+        while (*s)
+        {
+            char c = *s;
+            if (quoted)
+            {
+                // escaping
+                int esc = 0;
+                switch (c)
+                {
+                    case '\n':
+                        c = 'n';
+                        esc = 1;
+                        break;
+                    case '\t':
+                        c = 't';
+                        esc = 1;
+                        break;
+                    case '"':
+                        c = '"';
+                        esc = 1;
+                        break;
+                    case '\\':
+                        c = '\\';
+                        esc = 1;
+                        break;
+                }
+                if (esc)
+                {
+                    if (out && i < length)
+                    {
+                        out[i] = '\\';
+                    }
+                    i++;
+                }
+            }
+            if (out && i < length)
+            {
+                out[i] = c;
+            }
+            i++;
+            s++;
+        }
+        if (quoted)
+        {
+            // Closing quote
+            if (out && i < length)
+            {
+                out[i] = '"';
+            }
+            i++;
+        }
+    }
+    else
+    {
+        assert(0 && "invalid type");
+    }
     return i;
 }
 
