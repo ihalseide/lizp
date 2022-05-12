@@ -513,6 +513,16 @@ static void TestRead5(void)
     assert(IsEqual(v, ref));
 }
 
+static void TestRead6(void)
+{
+    // empty string "" -> null []
+    Val *v;
+    char b[] = "\"\"";
+    int l = ReadVal(b, sizeof(b), &v);
+    assert(l == 2);
+    assert(v == NULL);
+}
+
 static void TestRead(void)
 {
     fprintf(stderr, "%s\n", __func__);
@@ -521,6 +531,7 @@ static void TestRead(void)
     TestRead3();
     TestRead4();
     TestRead5();
+    TestRead6();
 }
 
 static void Test(void)

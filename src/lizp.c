@@ -107,7 +107,9 @@ int IsSym(Val *p)
     return p && (p->flag & F_SYM);
 }
 
-// Make symbol (copies buf to take as a name)
+// Make symbol
+// - copies buf to take as a name
+// - empty string -> null []
 Val *MakeSym(const char *buf, int len)
 {
     if (!buf || len <= 0)
@@ -226,6 +228,7 @@ int EscapeStr(char *str, int len)
     return j;
 }
 
+// Read symbol from input stream
 static int ReadSym(const char *str, int len, Val **out)
 {
     int i = 0;
@@ -268,7 +271,10 @@ static int ReadSym(const char *str, int len, Val **out)
                     {
                         int len = i - j - 1;
                         Val *sym = MakeSym(str + j, len);
-                        EscapeStr(sym->symbol, len);
+                        if (sym)
+                        {
+                            EscapeStr(sym->symbol, len);
+                        }
                         *out = sym;
                     }
                     return i;
