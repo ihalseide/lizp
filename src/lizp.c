@@ -747,10 +747,99 @@ static int Macro(Val *first, Val *args, Val *env, Val **out)
         *out = e;
         return 1;
     }
+    if (!strcmp("and", s))
+    {
+        // [and expr1 (expr)...]
+        if (!args)
+        {
+            *out = NULL;
+            return 1;
+        }
+        Val *p = args;
+        while (p && IsSeq(p))
+        {
+            Val *e = Eval(p->first, env);
+            if (!IsTrue(e))
+            {
+                // item is false
+                *out = CopyVal(e);
+                return 1;
+            }
+            p = p->rest;
+            if (!p)
+            {
+                // last item is true
+                *out = CopyVal(e);
+                return 1;
+            }
+            FreeValRec(e);
+        }
+    }
+    if (!strcmp("or", s))
+    {
+        // [or expr1 (expr)...]
+        if (!args)
+        {
+            *out = NULL;
+            return 1;
+        }
+        Val *p = args;
+        while (p && IsSeq(p))
+        {
+            Val *e = Eval(p->first, env);
+            if (IsTrue(e))
+            {
+                // item is true
+                *out = CopyVal(e);
+                return 1;
+            }
+            p = p->rest;
+            if (!p)
+            {
+                // last item is false
+                *out = CopyVal(e);
+                return 1;
+            }
+            FreeValRec(e);
+        }
+    }
+    if (!strcmp("cond", s))
+    {
+        // [cond (condition result)...] (no nested lists)
+        if (!args)
+        {
+            *out = NULL;
+            return 1;
+        }
+        Val *p = args;
+        while (p && IsSeq(p))
+        {
+            Val *e = Eval(p->first, env);
+            if (IsTrue(e))
+            {
+                FreeValRec(e);
+                if (!p->rest)
+                {
+                    // Uneven amount of items
+                    *out = NULL;
+                    return 1;
+                }
+                *out = Eval(p->rest->first, env);
+                return 1;
+            }
+            FreeValRec(e);
+            p = p->rest;
+            if (!p)
+            {
+                // Uneven amount of items
+                *out = NULL;
+                return 1;
+            }
+            p = p->rest;
+        }
+        return 1;
+    }
     // TODO:
-    // [and expr1 (expr)...]
-    // [or expr1 (expr)...]
-    // [cond (condition result)...]
     // [lambda [(symbol)...] (expr)]
     // [let [(key val)...] (expr)] (remember to remove `set` afterwards)
 
