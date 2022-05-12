@@ -24,17 +24,15 @@ int main (int argc, char **argv)
             break;
         }
         int len2 = ReadVal(buffer, sizeof(buffer), &v);
-        if (!len2 || len2 < len1 - 1 || !v)
-        {
-            printf("read error. index %d\n", len2);
-            continue;
-        }
-        //printf("read length: %d\n", len2);
         int len3 = PrintValBuf(v, buffer, sizeof(buffer), 1);
-        FreeValRec(v);
         buffer[len3] = '\0';
         printf("%s\n", buffer);
-        //printf("print length: %d\n", len3);
+        Val *e = Eval(v, NULL);
+        FreeValRec(v);
+        int len4 = PrintValBuf(e, buffer, sizeof(buffer), 1);
+        FreeValRec(e);
+        buffer[len4] = '\0';
+        printf("%s\n", buffer);
     }
     return 0;
 }
