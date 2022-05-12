@@ -548,6 +548,15 @@ static void TestRead(void)
     TestRead7();
 }
 
+static void TestIsTrue(void)
+{
+    fprintf(stderr, "%s\n", __func__);
+    assert(!IsTrue(NULL));
+    assert(!IsTrue(MakeSymCopy("false", 5)));
+    assert(IsTrue(MakeSymCopy("x", 1)));
+    assert(IsTrue(MakeSeq(MakeSymCopy("y", 1), NULL)));
+}
+
 static void Test(void)
 {
     TestEscapeStr();
@@ -556,6 +565,7 @@ static void Test(void)
     TestPrint();
     TestRead();
     TestCopy();
+    TestIsTrue();
 }
 
 int main(void)
