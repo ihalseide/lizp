@@ -32,6 +32,7 @@ int IsSeq(Val *p);
 int IsSym(Val *p);
 int IsTrue(Val *v);
 int IsEqual(Val *x, Val *y);
+int IsLambda(Val *v);
 
 int ReadVal(const char *start, int length, Val **out);
 int PrintValBuf(Val *p, char *out, int length, int readable);

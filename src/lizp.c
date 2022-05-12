@@ -613,6 +613,47 @@ int IsTrue(Val *v)
     return 1;
 }
 
+// Check whether a value is a lambda value (special list)
+int IsLambda(Val *v)
+{
+    if (!v || !IsSeq(v))
+    {
+        return 0;
+    }
+    Val *l = v->first;
+    if (!l || !IsSym(l))
+    {
+        return 0;
+    }
+    if (strcmp(l->symbol, "lambda"))
+    {
+        return 0;
+    }
+    if (!v->rest)
+    {
+        return 0;
+    }
+    Val *params = v->rest->first;
+    if (!IsSeq(params))
+    {
+        return 0;
+    }
+    Val *pp = params;
+    while (pp && IsSeq(pp))
+    {
+        if (!IsSym(pp->first))
+        {
+            return 0;
+        }
+        pp = pp->rest;
+    }
+    if (!v->rest->rest)
+    {
+        return 0;
+    }
+    return 1;
+}
+
 // Set value in environment
 // Returns non-zero upon success
 int EnvSet(Val *env, Val *key, Val *val)
@@ -839,8 +880,48 @@ static int Macro(Val *first, Val *args, Val *env, Val **out)
         }
         return 1;
     }
+    if (!strcmp("lambda", s))
+    {
+        // [lambda [(symbol)...] (expr)]
+        if (!args)
+        {
+            *out = NULL;
+            return 1;
+        }
+        Val *params = args->first;
+        if (!IsSeq(params))
+        {
+            *out = NULL;
+            return 1;
+        }
+        Val *p = params;
+        // params must be symbols
+        while (p && IsSeq(p))
+        {
+            if (!IsSym(p->first))
+            {
+                *out = NULL;
+                return 1;
+            }
+            p = p->rest;
+        }
+        Val *body = args->rest;
+        if (body)
+        {
+            if (body->rest)
+            {
+                // too many arguments to lambda
+                *out = NULL;
+                return 1;
+            }
+            body = body->first;
+        }
+        // make lambda... with an explicit NULL body if a body is not provided
+        *out = MakeSeq(CopyVal(first), MakeSeq(CopyVal(params),
+                MakeSeq(CopyVal(body), NULL)));
+        return 1;
+    }
     // TODO:
-    // [lambda [(symbol)...] (expr)]
     // [let [(key val)...] (expr)] (remember to remove `set` afterwards)
 
     return 0;
@@ -851,8 +932,57 @@ static int Macro(Val *first, Val *args, Val *env, Val **out)
 // TODO: handle when first is a lambda
 Val *Apply(Val *first, Val *args, Val *env)
 {
-    if (!first || !IsSym(first))
+    if (!first)
     {
+        return NULL;
+    }
+
+    if (IsLambda(first))
+    {
+        printf("LAMBDA!\n");
+        Val *params = first->rest->first;
+        Val *body = first->rest->rest->first;
+        if (args)
+        {
+            // push env
+            env->rest = MakeSeq(env->first, env->rest);
+            env->first = NULL;
+            // bind values
+            Val *p_params = params;
+            Val *p_args = args;
+            while (p_params && IsSeq(p_params) && p_args && IsSeq(p_args))
+            {
+                EnvSet(env, CopyVal(p_params->first), CopyVal(p_args->first));
+                p_params = p_params->rest;
+                p_args = p_args->rest;
+            }
+            if ((p_params && !p_args) || (!p_params && p_args))
+            {
+                // arity mismatch
+                printf("arity mismatch\n");
+                // env pop
+                FreeValRec(env->first);
+                Val *pair = env->rest;
+                env->first = pair->first;
+                env->rest = pair->rest;
+                FreeVal(pair);
+                return NULL;
+            }
+            Val *result = Eval(body, env);
+            // env pop
+            FreeValRec(env->first);
+            Val *pair = env->rest;
+            env->first = pair->first;
+            env->rest = pair->rest;
+            FreeVal(pair);
+            return result;
+        }
+        return Eval(body, env);
+    }
+
+    if (!IsSym(first))
+    {
+        // Invalid function
         return NULL;
     }
 
@@ -1114,9 +1244,22 @@ Val *Apply(Val *first, Val *args, Val *env)
         }
         return MakeSymInt(len);
     }
+    if (!strcmp("lambda?", s))
+    {
+        // [lambda? v]
+        if (!args)
+        {
+            return NULL;
+        }
+        Val *v = args->first;
+        if (!IsLambda(v))
+        {
+            return NULL;
+        }
+        return CopyVal(v);
+    }
     // TODO:
     // [defined? v]
-    // [lambda? v]
     // [nil? v]
     // [< v1 v2 (v)...]
     // [<= v1 v2 (v)...]
@@ -1162,6 +1305,11 @@ Val *Eval(Val *ast, Val *env)
             return CopyVal(val);
         }
         // a symbol evaluates to itself if not found
+        return CopyVal(ast);
+    }
+    if (IsLambda(ast))
+    {
+        // lambda values are self-evaluating
         return CopyVal(ast);
     }
     assert(ast);
