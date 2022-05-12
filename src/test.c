@@ -70,11 +70,11 @@ static void TestVal1(void)
 {
     // Check invalid arguments
     Val *x;
-    x = MakeSym("", 0);
+    x = MakeSymCopy("", 0);
     assert(!x);
-    x = MakeSym(NULL, 0);
+    x = MakeSymCopy(NULL, 0);
     assert(!x);
-    x = MakeSym(NULL, 10);
+    x = MakeSymCopy(NULL, 10);
     assert(!x);
 }
 
@@ -82,17 +82,17 @@ static void TestVal2(void)
 {
     // Check invalid arguments
     Val * x;
-    x = MakeSym("string", 0);
+    x = MakeSymCopy("string", 0);
     assert(!x);
-    x = MakeSym(NULL, -10);
+    x = MakeSymCopy(NULL, -10);
     assert(!x);
-    x = MakeSym("string", -10);
+    x = MakeSymCopy("string", -10);
     assert(!x);
 }
 
 static void TestVal3(void)
 {
-    Val *v = MakeSym("a", 1);
+    Val *v = MakeSymCopy("a", 1);
     assert(v);
     assert(IsSym(v));
     assert(!IsSeq(v));
@@ -102,7 +102,7 @@ static void TestVal3(void)
 
 static void TestVal4(void)
 {
-    Val *v = MakeSym("\na", 2);
+    Val *v = MakeSymCopy("\na", 2);
     assert(v);
     assert(IsSym(v));
     assert(!IsSeq(v));
@@ -112,7 +112,7 @@ static void TestVal4(void)
 
 static void TestVal5(void)
 {
-    Val *v = MakeSeq(MakeSym("a", 1), NULL);
+    Val *v = MakeSeq(MakeSymCopy("a", 1), NULL);
     assert(v);
     assert(IsSeq(v));
     assert(!IsSym(v));
@@ -126,13 +126,13 @@ static void TestVal5(void)
 
 static void TestVal6(void)
 {
-    Val *v = MakeSeq(MakeSym("a", 1), MakeSym("b", 1));
+    Val *v = MakeSeq(MakeSymCopy("a", 1), MakeSymCopy("b", 1));
     assert(!v);
 }
 
 static void TestVal7(void)
 {
-    Val *v = MakeSeq(MakeSym("a", 1), MakeSeq(MakeSym("b", 1), NULL));
+    Val *v = MakeSeq(MakeSymCopy("a", 1), MakeSeq(MakeSymCopy("b", 1), NULL));
     assert(v);
     assert(IsSeq(v));
     assert(!IsSym(v));
@@ -177,7 +177,7 @@ static void TestPrintBuf1(void)
 
 static void TestPrintBuf2(void)
 {
-    Val *v = MakeSym("a", 1);
+    Val *v = MakeSymCopy("a", 1);
     char buf[100];
     int readable = 1;
     int l = PrintValBuf(v, buf, sizeof(buf), readable);
@@ -188,7 +188,7 @@ static void TestPrintBuf2(void)
 
 static void TestPrintBuf3(void)
 {
-    Val *v = MakeSym("xyz", 3);
+    Val *v = MakeSymCopy("xyz", 3);
     char buf[100];
     int readable = 1;
     int l = PrintValBuf(v, buf, sizeof(buf), readable);
@@ -202,7 +202,7 @@ static void TestPrintBuf4(void)
     char buf[100];
     int readable;
     int l;
-    Val *v = MakeSym("\na", 2);
+    Val *v = MakeSymCopy("\na", 2);
 
     readable = 1;
     l = PrintValBuf(v, buf, sizeof(buf), readable);
@@ -219,7 +219,7 @@ static void TestPrintBuf4(void)
 
 static void TestPrintBuf5(void)
 {
-    Val *v = MakeSym("two words", 9);
+    Val *v = MakeSymCopy("two words", 9);
     char buf[100];
     int readable;
     int l;
@@ -239,7 +239,7 @@ static void TestPrintBuf5(void)
 
 static void TestPrintBuf6(void)
 {
-    Val *v = MakeSym("\"q\"", 3);
+    Val *v = MakeSymCopy("\"q\"", 3);
     char buf[100];
     int readable;
     int l;
@@ -259,7 +259,7 @@ static void TestPrintBuf6(void)
 
 static void TestPrintBuf7(void)
 {
-    Val *v = MakeSym("a", 1);
+    Val *v = MakeSymCopy("a", 1);
     int l = PrintValBuf(v, NULL, 0, 1);
     assert(l == 1);
 }
@@ -267,7 +267,7 @@ static void TestPrintBuf7(void)
 static void TestPrintBuf8(void)
 {
     // [a xy]
-    Val *v = MakeSeq(MakeSym("a", 1), MakeSeq(MakeSym("xy", 2), NULL));
+    Val *v = MakeSeq(MakeSymCopy("a", 1), MakeSeq(MakeSymCopy("xy", 2), NULL));
     int l = PrintValBuf(v, NULL, 0, 1);
     assert(l == 6);
 }
@@ -288,14 +288,14 @@ static void TestPrintBuf(void)
 
 static void TestPrintStr1(void)
 {
-    char *s = PrintValStr(MakeSym("a", 1), 1);
+    char *s = PrintValStr(MakeSymCopy("a", 1), 1);
     assert(s);
     assert(strcmp(s, "a") == 0);
 }
 
 static void TestPrintStr2(void)
 {
-    Val *v = MakeSeq(MakeSym("a", 1), NULL);
+    Val *v = MakeSeq(MakeSymCopy("a", 1), NULL);
     char *s = PrintValStr(v, 1);
     assert(s);
     assert(strcmp(s, "[a]") == 0);
@@ -306,7 +306,7 @@ static void TestPrintStr3(void)
     Val *(*P)(Val *, Val *);
     P = MakeSeq;
     Val *(*S)(const char*, int);
-    S = MakeSym;
+    S = MakeSymCopy;
     // [a "\n" c]
     Val *v = P(S("a", 1), P(S("\n", 1), P(S("c", 1), NULL)));
     char *s = PrintValStr(v, 1);
@@ -330,7 +330,7 @@ static void TestPrint(void)
 
 static void TestCopy1(void)
 {
-    Val *v = MakeSym("string", 6);
+    Val *v = MakeSymCopy("string", 6);
     assert(v);
     Val *c = CopyVal(v);
     assert(v);
@@ -356,22 +356,22 @@ static void TestEqual1(void)
 
 static void TestEqual2(void)
 {
-    Val *v = MakeSym("3", 1);
+    Val *v = MakeSymCopy("3", 1);
     assert(!IsEqual(v, NULL));
     FreeValRec(v);
 }
 
 static void TestEqual3(void)
 {
-    Val *v = MakeSym("a", 1);
+    Val *v = MakeSymCopy("a", 1);
     assert(IsEqual(v, v));
     FreeValRec(v);
 }
 
 static void TestEqual4(void)
 {
-    Val *a = MakeSym("3", 1);
-    Val *b = MakeSym("3", 1);
+    Val *a = MakeSymCopy("3", 1);
+    Val *b = MakeSymCopy("3", 1);
     assert(IsEqual(a, b));
     FreeValRec(a);
     FreeValRec(b);
@@ -388,8 +388,8 @@ static void TestEqual5(void)
 
 static void TestEqual6(void)
 {
-    Val *a = MakeSeq(MakeSym("a",1), NULL);
-    Val *b = MakeSeq(MakeSym("a",1), NULL);
+    Val *a = MakeSeq(MakeSymCopy("a",1), NULL);
+    Val *b = MakeSeq(MakeSymCopy("a",1), NULL);
     assert(IsEqual(a, b));
     FreeValRec(a);
     FreeValRec(b);
@@ -397,8 +397,8 @@ static void TestEqual6(void)
 
 static void TestEqual7(void)
 {
-    Val *a = MakeSeq(MakeSym("a",1), NULL);
-    Val *b = MakeSeq(MakeSym("b",1), NULL);
+    Val *a = MakeSeq(MakeSymCopy("a",1), NULL);
+    Val *b = MakeSeq(MakeSymCopy("b",1), NULL);
     assert(!IsEqual(a, b));
     FreeValRec(a);
     FreeValRec(b);
@@ -484,7 +484,7 @@ static void TestRead4(void)
     Val *(*P)(Val *, Val *);
     P = MakeSeq;
     Val *(*S)(const char*, int);
-    S = MakeSym;
+    S = MakeSymCopy;
     Val *ref = P(S("+", 1), P(P(S("*", 1), P(S("x", 1), P(S("y", 1), NULL))), P(S("1", 1), NULL)));
 
     Val *v;
@@ -501,7 +501,7 @@ static void TestRead5(void)
     Val *(*P)(Val *, Val *);
     P = MakeSeq;
     Val *(*S)(const char*, int);
-    S = MakeSym;
+    S = MakeSymCopy;
     Val *ref = P(S("a", 1), P(S("\n", 1), P(S("c", 1), NULL)));
 
     Val *v;

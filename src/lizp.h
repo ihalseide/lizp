@@ -3,7 +3,9 @@
 
 #define F_SYM  1
 
-// Is a Sequence or a Symbol
+// A Value is a Sequence or a Symbol.
+// Sequence: first (Val), rest (Seq)
+// Symbol: symbol string
 typedef struct Val Val;
 struct Val
 {
@@ -18,7 +20,8 @@ struct Val
 
 Val *AllocVal(void);
 Val *MakeSeq(Val *first, Val *rest);
-Val *MakeSym(const char *name, int len);
+Val *MakeSym(char *s);
+Val *MakeSymCopy(const char *name, int len);
 Val *CopyVal(Val *p);
 
 void FreeVal(Val *p);

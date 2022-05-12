@@ -108,11 +108,10 @@ int IsSym(Val *p)
 }
 
 // Make symbol
-// - copies buf to take as a name
 // - empty string -> null []
-Val *MakeSym(const char *buf, int len)
+Val *MakeSym(char *s)
 {
-    if (!buf || len <= 0)
+    if (!s)
     {
         return NULL;
     }
@@ -120,16 +119,30 @@ Val *MakeSym(const char *buf, int len)
     if (p)
     {
         p->flag = F_SYM;
-        p->symbol = strndup(buf, len);
+        p->symbol = s;
     }
     return p;
 }
 
+// Make symbol
+// - copies buf to take as a name
+// - empty string -> null []
+Val *MakeSymCopy(const char *buf, int len)
+{
+    if (!buf || len <= 0)
+    {
+        return NULL;
+    }
+    return MakeSym(strndup(buf, len));
+}
+
+// Make sequence
+// - first: sym or seq (null included)
+// - rest: seq (null included)
 Val *MakeSeq(Val *first, Val *rest)
 {
     if (rest && !IsSeq(rest))
     {
-        // only allow seq's in the rest slot
         return NULL;
     }
     Val *p = AllocVal();
@@ -149,7 +162,7 @@ Val *CopyVal(Val *p)
     {
         if (IsSym(p))
         {
-            return MakeSym(p->symbol, strlen(p->symbol));
+            return MakeSymCopy(p->symbol, strlen(p->symbol));
         }
         // Seq
         Val *copy = MakeSeq(CopyVal(p->first), NULL);
@@ -270,7 +283,7 @@ static int ReadSym(const char *str, int len, Val **out)
                     if (out)
                     {
                         int len = i - j - 1;
-                        Val *sym = MakeSym(str + j, len);
+                        Val *sym = MakeSymCopy(str + j, len);
                         if (sym)
                         {
                             EscapeStr(sym->symbol, len);
@@ -312,7 +325,7 @@ static int ReadSym(const char *str, int len, Val **out)
                 }
                 if (out)
                 {
-                    *out = MakeSym(str + j, i - j);
+                    *out = MakeSymCopy(str + j, i - j);
                 }
                 return i;
             }
