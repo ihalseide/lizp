@@ -3,23 +3,9 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#define STRNDUP_IMPL
+#include "strndup.h"
 #include "lizp.h"
-
-// Duplicate string (standard)
-char *strndup(const char *str, int len)
-{
-    if (!str || len < 0)
-    {
-        return NULL;
-    }
-    char *new = malloc(len + 1);
-    if (new)
-    {
-        memcpy(new, str, len);
-        new[len] = 0;
-    }
-    return new;
-}
 
 // Allocate value
 Val *AllocVal(void)
