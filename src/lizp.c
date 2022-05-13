@@ -1333,12 +1333,132 @@ Val *Apply(Val *first, Val *args, Val *env)
         }
         return CopyVal(v);
     }
+    if (!strcmp("<=", s))
+    {
+        // [<= x y (expr)...] check number order
+        if (!args || !args->rest)
+        {
+            return NULL;
+        }
+        Val *f = args->first;
+        if (!IsSym(f))
+        {
+            return NULL;
+        }
+        long x = atol(f->symbol);
+        Val *p = args->rest;
+        while (p && IsSeq(p))
+        {
+            Val *e = p->first;
+            if (!IsSym(e))
+            {
+                return NULL;
+            }
+            long y = atol(e->symbol);
+            if (!(x <= y))
+            {
+                return MakeFalse();
+            }
+            x = y;
+            p = p->rest;
+        }
+        return MakeTrue();
+    }
+    if (!strcmp(">=", s))
+    {
+        // [>= x y (expr)...] check number order
+        if (!args || !args->rest)
+        {
+            return NULL;
+        }
+        Val *f = args->first;
+        if (!IsSym(f))
+        {
+            return NULL;
+        }
+        long x = atol(f->symbol);
+        Val *p = args->rest;
+        while (p && IsSeq(p))
+        {
+            Val *e = p->first;
+            if (!IsSym(e))
+            {
+                return NULL;
+            }
+            long y = atol(e->symbol);
+            if (!(x >= y))
+            {
+                return MakeFalse();
+            }
+            x = y;
+            p = p->rest;
+        }
+        return MakeTrue();
+    }
+    if (!strcmp("<", s))
+    {
+        // [< x y (expr)...] check number order
+        if (!args || !args->rest)
+        {
+            return NULL;
+        }
+        Val *f = args->first;
+        if (!IsSym(f))
+        {
+            return NULL;
+        }
+        long x = atol(f->symbol);
+        Val *p = args->rest;
+        while (p && IsSeq(p))
+        {
+            Val *e = p->first;
+            if (!IsSym(e))
+            {
+                return NULL;
+            }
+            long y = atol(e->symbol);
+            if (!(x < y))
+            {
+                return MakeFalse();
+            }
+            x = y;
+            p = p->rest;
+        }
+        return MakeTrue();
+    }
+    if (!strcmp(">", s))
+    {
+        // [> x y (expr)...] check number order
+        if (!args || !args->rest)
+        {
+            return NULL;
+        }
+        Val *f = args->first;
+        if (!IsSym(f))
+        {
+            return NULL;
+        }
+        long x = atol(f->symbol);
+        Val *p = args->rest;
+        while (p && IsSeq(p))
+        {
+            Val *e = p->first;
+            if (!IsSym(e))
+            {
+                return NULL;
+            }
+            long y = atol(e->symbol);
+            if (!(x > y))
+            {
+                return MakeFalse();
+            }
+            x = y;
+            p = p->rest;
+        }
+        return MakeTrue();
+    }
     // TODO:
     // [nil? v]
-    // [< v1 v2 (v)...]
-    // [<= v1 v2 (v)...]
-    // [> v1 v2 (v)...]
-    // [>= v1 v2 (v)...]
     // [chars sym] -> list
     // [symbol list] -> symbol
     // [reverse list]
