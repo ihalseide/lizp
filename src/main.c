@@ -39,12 +39,12 @@ int main (int argc, char **argv)
             continue;
         }
 
-        printf("expr: ");
-        PrintValFile(stdout, expr, 1);
-        putchar('\n');
+        //printf("expr: ");
+        //PrintValFile(stdout, expr, 1);
+        //putchar('\n');
 
         Val *val = Eval(expr, env);
-        printf("eval: ");
+        //printf("eval: ");
         PrintValFile(stdout, val, 1);
         putchar('\n');
 

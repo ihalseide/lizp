@@ -2,7 +2,7 @@
 
 This is my own (work-in-progress) implementation of a Lisp programming language.
 My inspiration is the "Make a Lisp" project at https://github.com/kanaka/mal.
-Warning: there is no garbage collection.
+Memory is managed manually.
 
 ![Terminal window screenshot](./screenshot.png)
 
@@ -22,7 +22,7 @@ make test && ./test
 
 ## Literal values
 
-There are only 2 data types: lists, and symbols. The reader is sensitive to
+There are only 2 real data types: lists, and symbols. The reader is sensitive to
 letter case.
 
 * Lists: are delimited by square brackets: \[...] (which are the superior
@@ -36,7 +36,7 @@ letter case.
   * .
   * "[]"
   * "with space"
-  * "\""
+  * "\\""
 
 ## Evaluation
 
@@ -64,6 +64,10 @@ This is the alphabetical list of current functions:
 * \[nth n list] get the nth item of the list
 * \[list (val)...] create a list
 * \[length list] get the length of a list
+* \[> x y (n)...] return true only if each number is strictly decreasing
+* \[< x y (n)...] return true only if each number is strictly increasing
+* \[>= x y (n)...] return true only if each number is decreasing or equal
+* \[<= x y (n)...] return true only if each number is increasing or equal
 
 This is the alphabetical list of current macros:
 * \[and expr1 (expr)...] evaluate each expression until one is false
