@@ -10,10 +10,10 @@ int main (int argc, char **argv)
 {
     Val *env = MakeSeq(NULL, NULL);
 
-    printf("\nLIZP read-print loop:\n");
+    printf("\nLIZP read-print loop:");
     while (1)
     {
-        printf(">>> ");
+        printf("\n>>> ");
         char buffer[BUF_SZ];
         if (!fgets(buffer, sizeof(buffer), stdin))
         {
@@ -45,8 +45,8 @@ int main (int argc, char **argv)
 
         Val *val = Eval(expr, env);
         //printf("eval: ");
-        PrintValFile(stdout, val, 1);
         putchar('\n');
+        PrintValFile(stdout, val, 1);
 
         FreeValRec(expr);
         FreeValRec(val);
