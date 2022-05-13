@@ -592,9 +592,9 @@ char *PrintValStr(Val *v, int readable)
 }
 
 // Print value to a file
-void PrintValFile(FILE *f, Val *v)
+void PrintValFile(FILE *f, Val *v, int readable)
 {
-    char *s = PrintValStr(v, 1);
+    char *s = PrintValStr(v, readable);
     fprintf(f, "%s", s);
     free(s);
 }
@@ -612,6 +612,16 @@ int IsTrue(Val *v)
         return 0;
     }
     return 1;
+}
+
+Val *MakeTrue(void)
+{
+    return MakeSymCopy("true", 4);
+}
+
+Val *MakeFalse(void)
+{
+    return MakeSymCopy("false", 4);
 }
 
 // Check whether a value is a lambda value (special list)
@@ -741,7 +751,7 @@ static int Macro(Val *first, Val *args, Val *env, Val **out)
         }
         if (EnvGet(env, sym, NULL))
         {
-            *out = MakeSymCopy("true", 4);
+            *out = MakeTrue();
             return 1;
         }
         *out = NULL;
@@ -1053,10 +1063,11 @@ Val *Apply(Val *first, Val *args, Val *env)
     char *s = first->symbol;
     if (!strcmp("print", s))
     {
+        int readable = 0;
         Val *p = args;
         while (p)
         {
-            PrintValFile(stdout, p->first);
+            PrintValFile(stdout, p->first, readable);
             p = p->rest;
         }
         return NULL;
@@ -1191,7 +1202,7 @@ Val *Apply(Val *first, Val *args, Val *env)
             }
             p = p->rest;
         }
-        return MakeSymCopy("true", 4);
+        return MakeTrue();
     }
     if (!strcmp("not", s))
     {
@@ -1204,7 +1215,7 @@ Val *Apply(Val *first, Val *args, Val *env)
         {
             return NULL;
         }
-        return MakeSymCopy("true", 4);
+        return MakeTrue();
     }
     if (!strcmp("symbol?", s))
     {
@@ -1217,7 +1228,7 @@ Val *Apply(Val *first, Val *args, Val *env)
         {
             return NULL;
         }
-        return MakeSymCopy("true", 4);
+        return MakeTrue();
     }
     if (!strcmp("list?", s))
     {
@@ -1230,7 +1241,7 @@ Val *Apply(Val *first, Val *args, Val *env)
         {
             return NULL;
         }
-        return MakeSymCopy("true", 4);
+        return MakeTrue();
     }
     if (!strcmp("empty?", s))
     {
@@ -1243,7 +1254,7 @@ Val *Apply(Val *first, Val *args, Val *env)
         {
             return NULL;
         }
-        return MakeSymCopy("true", 4);
+        return MakeTrue();
     }
     if (!strcmp("nth", s))
     {

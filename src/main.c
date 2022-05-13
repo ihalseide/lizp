@@ -40,12 +40,12 @@ int main (int argc, char **argv)
         }
 
         printf("expr: ");
-        PrintValFile(stdout, expr);
+        PrintValFile(stdout, expr, 1);
         putchar('\n');
 
         Val *val = Eval(expr, env);
         printf("eval: ");
-        PrintValFile(stdout, val);
+        PrintValFile(stdout, val, 1);
         putchar('\n');
 
         FreeValRec(expr);
