@@ -3,9 +3,31 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#define STB_DS_IMPLEMENTATION
+#include "stb_ds.h"
 #define STRNDUP_IMPL
 #include "strndup.h"
 #include "lizp.h"
+
+// Dynamic array of function pointers
+LizpFunc **da_funcs;
+
+long PutFunc(LizpFunc *func)
+{
+    long id = arrlen(da_funcs);
+    arrput(da_funcs, func);
+    return id;
+}
+
+LizpFunc *GetFunc(long id)
+{
+    int len = arrlen(da_funcs);
+    if (id < 0 || id >= len)
+    {
+        return NULL;
+    }
+    return da_funcs[id];
+}
 
 // Allocate value
 Val *AllocVal(void)
@@ -160,9 +182,9 @@ Val *CopyVal(Val *p)
     {
         return p;
     }
-    if (IsSym(p))
+    if (!IsSeq(p))
     {
-        return MakeSymCopy(p->symbol, strlen(p->symbol));
+        return MakeSym(strdup(p->symbol));
     }
     // Seq
     Val *copy = MakeSeq(CopyVal(p->first), NULL);
@@ -665,6 +687,35 @@ int IsLambda(Val *v)
     return 1;
 }
 
+// Check if a list is a wrapper for a C function
+// [func number]
+int IsFunc(Val *v)
+{
+    if (!v || !IsSeq(v))
+    {
+        return 0;
+    }
+    Val *sym = v->first;
+    if (!sym || !IsSym(sym) || strcmp(sym->symbol, "func"))
+    {
+        return 0;
+    }
+    if (!v->rest)
+    {
+        return 0;
+    }
+    Val *id = v->rest->first;
+    if (!IsSym(id))
+    {
+        return 0;
+    }
+    if (v->rest->rest)
+    {
+        return 0;
+    }
+    return 1;
+}
+
 // Set value in environment
 // Returns non-zero upon success
 int EnvSet(Val *env, Val *key, Val *val)
@@ -1062,9 +1113,22 @@ Val *Apply(Val *first, Val *args, Val *env)
         return Eval(body, env);
     }
 
+    if (IsFunc(first))
+    {
+        // C function binding
+        long id = atol(first->rest->first->symbol);
+        LizpFunc *func = GetFunc(id);
+        if (!func)
+        {
+            // invalid function id or pointer
+            return NULL;
+        }
+        return func(args);
+    }
+
     if (!IsSym(first))
     {
-        // invalid function
+        // invalid built-in function
         return NULL;
     }
 
@@ -1541,4 +1605,32 @@ Val *Eval(Val *ast, Val *env)
     Val *result = Apply(first, list->rest, env);
     FreeValRec(list);
     return result;
+}
+
+// Set a symbol value to be associated with a C function
+int EnvSetFunc(Val *env, const char *name, LizpFunc *func)
+{
+    if (!env || !name || !func)
+    {
+        return 0;
+    }
+    Val *key = MakeSym(strdup(name));
+    if (!key)
+    {
+        return 0;
+    }
+    long handle = PutFunc(func);
+    Val *val = MakeSeq(MakeSymCopy("func", 4), MakeSeq(MakeSymInt(handle), NULL));
+    if (!val)
+    {
+        return 0;
+    }
+    int success = EnvSet(env, key, val);
+    if (success)
+    {
+        return success;
+    }
+    FreeValRec(key);
+    FreeValRec(val);
+    return 0;
 }

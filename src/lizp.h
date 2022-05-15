@@ -1,19 +1,21 @@
 #ifndef _lizp_h_
 #define _lizp_h_
 
+typedef struct Val Val;
+typedef Val *LizpFunc(Val *args);
+
 #define F_SYM  1
 
 // A Value is a Sequence or a Symbol.
 // Sequence: first (Val), rest (Seq)
 // Symbol: symbol string
-typedef struct Val Val;
 struct Val
 {
     unsigned int flag;
     union
     {
-        char *symbol;
         Val *first;
+        char *symbol;
     };
     Val *rest;
 };
@@ -30,6 +32,7 @@ void FreeValRec(Val *p);
 
 int EnvSet(Val *env, Val *key, Val *val);
 int EnvGet(Val *env, Val *key, Val **out);
+int EnvSetFunc(Val *env, const char *name, LizpFunc * func);
 void EnvPush(Val *env);
 void EnvPop(Val *env);
 
