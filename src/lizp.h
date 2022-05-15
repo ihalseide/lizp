@@ -28,6 +28,11 @@ Val *CopyVal(Val *p);
 void FreeVal(Val *p);
 void FreeValRec(Val *p);
 
+int EnvSet(Val *env, Val *key, Val *val);
+int EnvGet(Val *env, Val *key, Val **out);
+void EnvPush(Val *env);
+void EnvPop(Val *env);
+
 int IsSeq(Val *p);
 int IsSym(Val *p);
 int IsTrue(Val *v);

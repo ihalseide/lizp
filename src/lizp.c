@@ -715,14 +715,22 @@ int EnvGet(Val *env, Val *key, Val **out)
     return 0;
 }
 
-static void EnvPush(Val *env)
+void EnvPush(Val *env)
 {
+    if (!env)
+    {
+        return;
+    }
     env->rest = MakeSeq(env->first, env->rest);
     env->first = NULL;
 }
 
-static void EnvPop(Val *env)
+void EnvPop(Val *env)
 {
+    if (!env)
+    {
+        return;
+    }
     FreeValRec(env->first);
     Val *pair = env->rest;
     env->first = pair->first;
