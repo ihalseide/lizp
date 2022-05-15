@@ -557,6 +557,147 @@ static void TestIsTrue(void)
     assert(IsTrue(MakeSeq(MakeSymCopy("y", 1), NULL)));
 }
 
+static void TestEval1(void)
+{
+    Val *i, *o;
+
+    i = MakeSym("x");
+    o = Eval(i, NULL);
+    assert(i);
+    assert(o);
+    assert(IsEqual(i, o));
+
+    i = MakeSym("false");
+    o = Eval(i, NULL);
+    assert(i);
+    assert(o);
+    assert(IsEqual(i, o));
+
+    i = MakeSym("word and such");
+    o = Eval(i, NULL);
+    assert(i);
+    assert(o);
+    assert(IsEqual(i, o));
+}
+
+static void TestEval2(void)
+{
+    Val *i, *o;
+
+    i = NULL;
+    o = Eval(i, NULL);
+    assert(!i);
+    assert(o == i);
+    assert(IsEqual(o, i));
+}
+
+static void TestEvalPlus(void)
+{
+    Val *i, *o;
+    const char *expr;
+
+    // +
+    expr = "[+ 1 2]";
+    ReadVal(expr, strlen(expr), &i);
+    assert(i);
+    o = Eval(i, NULL);
+    assert(o);
+    assert(IsEqual(o, MakeSym("3")));
+}
+
+static void TestEvalIf(void)
+{
+    Val *i, *o;
+    const char *expr;
+
+    expr = "[if false 1 2]";
+    ReadVal(expr, strlen(expr), &i);
+    assert(i);
+    o = Eval(i, NULL);
+    assert(o);
+    assert(IsEqual(o, MakeSym("2")));
+
+    expr = "[if x 1 2]";
+    ReadVal(expr, strlen(expr), &i);
+    assert(i);
+    o = Eval(i, NULL);
+    assert(o);
+    assert(IsEqual(o, MakeSym("1")));
+}
+
+static void TestEvalDefined(void)
+{
+    const char *expr;
+    Val *i, *o;
+
+}
+
+static void TestEvalGet(void)
+{
+    const char *expr;
+    Val *i, *o;
+}
+
+static void TestEvalQuote(void)
+{
+    const char *expr;
+    Val *i, *o;
+}
+
+static void TestEvalDo(void)
+{
+    const char *expr;
+    Val *i, *o;
+}
+
+static void TestEvalAnd(void)
+{
+    const char *expr;
+    Val *i, *o;
+}
+
+static void TestEvalOr(void)
+{
+    const char *expr;
+    Val *i, *o;
+}
+
+static void TestEvalLet(void)
+{
+    const char *expr;
+    Val *i, *o;
+}
+
+static void TestEvalCond(void)
+{
+    const char *expr;
+    Val *i, *o;
+}
+
+static void TestEvalLambda(void)
+{
+    const char *expr;
+    Val *i, *o;
+}
+
+static void TestEval(void)
+{
+    fprintf(stderr, "%s\n", __func__);
+    TestEval1();
+    TestEval2();
+    TestEvalPlus();
+    TestEvalIf();
+    TestEvalDefined();
+    TestEvalGet();
+    TestEvalQuote();
+    TestEvalDo();
+    TestEvalAnd();
+    TestEvalOr();
+    TestEvalLet();
+    TestEvalCond();
+    TestEvalLambda();
+}
+
 static void Test(void)
 {
     TestEscapeStr();
@@ -566,6 +707,7 @@ static void Test(void)
     TestRead();
     TestCopy();
     TestIsTrue();
+    TestEval();
 }
 
 int main(void)
