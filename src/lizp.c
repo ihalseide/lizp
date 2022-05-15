@@ -643,7 +643,7 @@ Val *MakeTrue(void)
 
 Val *MakeFalse(void)
 {
-    return MakeSymCopy("false", 4);
+    return MakeSymCopy("false", 5);
 }
 
 // Check whether a value is a lambda value (special list)
