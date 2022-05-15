@@ -1059,6 +1059,17 @@ static int Macro(Val *first, Val *args, Val *env, Val **out)
     return 0;
 }
 
+long ListLength(Val *l)
+{
+    long len = 0;
+    while (l && IsSeq(l))
+    {
+        len++;
+        l = l->rest;
+    }
+    return len;
+}
+
 // Apply functions
 // Return values must not share structure with first, args, or env
 // TODO: handle when first is a lambda
@@ -1382,14 +1393,7 @@ Val *Apply(Val *first, Val *args, Val *env)
         {
             return NULL;
         }
-        long len = 0;
-        Val *p = args->first;
-        while (p && IsSeq(p))
-        {
-            len++;
-            p = p->rest;
-        }
-        return MakeSymInt(len);
+        return MakeSymInt(ListLength(args->first));
     }
     if (!strcmp("lambda?", s))
     {
@@ -1529,23 +1533,236 @@ Val *Apply(Val *first, Val *args, Val *env)
         }
         return MakeTrue();
     }
-    // TODO:
+    if (!strcmp("nil?", s))
+    {
     // [nil? v]
+        if (!args)
+        {
+            return NULL;
+        }
+        if (args->first)
+        {
+            return MakeFalse();
+        }
+        return MakeTrue();
+    }
+    if (!strcmp("chars", s))
+    {
     // [chars sym] -> list
+        if (!args)
+        {
+            return NULL;
+        }
+        Val *sym = args->first;
+        if (!IsSym(sym))
+        {
+            return NULL;
+        }
+        char *s = sym->symbol;
+        Val *result = MakeSeq(MakeSymCopy(s, 1), NULL);
+        s++;
+        Val *p = result;
+        while (*s)
+        {
+            p->rest = MakeSeq(MakeSymCopy(s, 1), NULL);
+            p = p->rest;
+            s++;
+        }
+        return result;
+    }
+    if (!strcmp("symbol", s))
+    {
     // [symbol list] -> symbol
+        if (!args)
+        {
+            return NULL;
+        }
+        Val *list = args->first;
+        if (!list || !IsSeq(list))
+        {
+            return NULL;
+        }
+        int len = ListLength(list);
+        char *sym = malloc(1 + len);
+        int i = 0;
+        Val *p = list;
+        while (p && IsSeq(list))
+        {
+            Val *e = p->first;
+            if (!IsSym(e))
+            {
+                free(sym);
+                return NULL;
+            }
+            sym[i] = e->symbol[0];
+            i++;
+            p = p->rest;
+        }
+        sym[len] = 0;
+        // ok because sym was created with malloc()
+        return MakeSym(sym);
+    }
+    if (!strcmp("member?", s))
+    {
+        // [member? item list]
+        if (!args || !args->rest)
+        {
+            return NULL;
+        }
+        Val *item = args->first;
+        Val *list = args->rest->first;
+        if (!IsSeq(list))
+        {
+            return NULL;
+        }
+        while (list && IsSeq(list))
+        {
+            if (IsEqual(list->first, item))
+            {
+                return MakeTrue();
+            }
+            list = list->rest;
+        }
+        return MakeFalse();
+    }
+    if (!strcmp("count", s))
+    {
+        // [count item list] -> int
+        if (!args || !args->rest)
+        {
+            return NULL;
+        }
+        Val *item = args->first;
+        Val *list = args->rest->first;
+        if (!IsSeq(list))
+        {
+            return NULL;
+        }
+        long count = 0;
+        while (list && IsSeq(list))
+        {
+            if (IsEqual(list->first, item))
+            {
+                count++;
+            }
+            list = list->rest;
+        }
+        return MakeSymInt(count);
+    }
+    if (!strcmp("position", s))
+    {
+        // [position item list] -> list
+        if (!args || !args->rest)
+        {
+            return NULL;
+        }
+        Val *item = args->first;
+        Val *list = args->rest->first;
+        if (!IsSeq(list))
+        {
+            return NULL;
+        }
+        long i = 0;
+        while (list && IsSeq(list))
+        {
+            if (IsEqual(item, list->first))
+            {
+                return MakeSymInt(i);
+            }
+            i++;
+            list = list->rest;
+        }
+        return MakeFalse();
+    }
+    if (!strcmp("slice", s))
+    {
+        // [slice list start (end)]
+        // gets a sublist "slice" inclusive of start and end
+        if (!args || !args->rest)
+        {
+            return NULL;
+        }
+        Val *list = args->first;
+        if (!IsSeq(list))
+        {
+            return NULL;
+        }
+        Val *start = args->rest->first;
+        if (!IsSym(start))
+        {
+            return NULL;
+        }
+        long start_i = atol(start->symbol);
+        if (start_i < 0)
+        {
+            return NULL;
+        }
+        if (!args->rest->rest)
+        {
+            // [slice list start]
+            while (start_i > 0 && list && IsSeq(list))
+            {
+                list = list->rest;
+                start_i--;
+            }
+            if (!list)
+            {
+                return NULL;
+            }
+            Val *result = MakeSeq(CopyVal(list->first), NULL);
+            list = list->rest;
+            Val *p_result = result;
+            while (list && IsSeq(list))
+            {
+                p_result->rest = MakeSeq(CopyVal(list->first), NULL);
+                p_result = p_result->rest;
+                list = list->rest;
+            }
+            return result;
+        }
+        // [slice list start end]
+        Val *end = args->rest->rest->first;
+        if (!IsSym(end))
+        {
+            return NULL;
+        }
+        long end_i = atol(end->symbol);
+        if (end_i <= start_i)
+        {
+            return NULL;
+        }
+        while (start_i > 0 && list && IsSeq(list))
+        {
+            list = list->rest;
+            start_i--;
+        }
+        if (!list)
+        {
+            return NULL;
+        }
+        Val *result = MakeSeq(CopyVal(list->first), NULL);
+        list = list->rest;
+        Val *p_result = result;
+        long i = end_i - start_i;
+        while (i > 0 && list && IsSeq(list))
+        {
+            p_result->rest = MakeSeq(CopyVal(list->first), NULL);
+            p_result = p_result->rest;
+            list = list->rest;
+            i--;
+        }
+        return result;
+    }
+    // TODO:
     // [reverse list]
-    // [member item list] -> bool
-    // [count item list] -> int
-    // [concat list (list)...]
+    // [concat list.1 (list.N)...]
     // [append list val]
     // [prepend val list]
     // [join separator (list)...] -> list
-    // [position item list] -> list
     // [without item list] -> list
     // [replace item1 item2 list] -> list
     // [replaceI index item list] -> list
-    // [slice list start (end)]
-    // [zip list (list)...]
+    // [zip list.1 (list.N)...]
 
     return NULL;
 }
@@ -1578,6 +1795,7 @@ Val *Eval(Val *ast, Val *env)
         // lambda values are self-evaluating
         return CopyVal(ast);
     }
+    // eval lists...
     assert(ast);
     assert(IsSeq(ast));
     // eval first element
