@@ -11,14 +11,59 @@
 // TODO: add functions
 // [reverse list]
 // [concat list.1 (list.N)...]
-// [append list val]
-// [prepend val list]
 // [join separator (list)...] -> list
 // [without item list] -> list
 // [replace item1 item2 list] -> list
 // [replaceI index item list] -> list
 // [zip list.1 (list.N)...]
 
+// [append val list]
+Val *Lappend(Val *args)
+{
+    if (!args || !args->rest)
+    {
+        return NULL;
+    }
+    Val *v = args->first;
+    Val *list = args->rest->first;
+    if (!IsList(list))
+    {
+        return NULL;
+    }
+    Val *last = MakeList(CopyVal(v), NULL);
+    if (!list)
+    {
+        // empty list -> single-item list
+        return last;
+    }
+    // Create a new list and put "last" at the end
+    Val *new = CopyVal(list);
+    Val *p = new;
+    while (p->rest)
+    {
+        p = p->rest;
+    }
+    p->rest = last;
+    return new;
+}
+
+// [prepend val list]
+Val *Lprepend(Val *args)
+{
+    if (!args || !args->rest)
+    {
+        return NULL;
+    }
+    Val *v = args->first;
+    Val *list = args->rest->first;
+    if (!IsList(list))
+    {
+        return NULL;
+    }
+    return MakeList(CopyVal(v), CopyVal(list));
+}
+
+// [print (v)...]
 Val *Lprint(Val *args)
 {
     int readable = 0;
@@ -31,9 +76,9 @@ Val *Lprint(Val *args)
     return NULL;
 }
 
+// [+ (e:integer)...] sum
 Val *Lplus(Val *args)
 {
-    // [+ (e:integer)...] sum
     long sum = 0;
     Val *p = args;
     while (p)
@@ -50,9 +95,9 @@ Val *Lplus(Val *args)
     return MakeSymInt(sum);
 }
 
+// [+ (e:integer)...] product
 Val *Lmultiply(Val *args)
 {
-    // [+ (e:integer)...] product
     long product = 1;
     Val *p = args;
     while (p)
@@ -69,9 +114,9 @@ Val *Lmultiply(Val *args)
     return MakeSymInt(product);
 }
 
+// [- x:int (y:int)] subtraction
 Val *Lsubtract(Val *args)
 {
-    // [- x:int (y:int)] subtraction
     if (!args)
     {
         return NULL;
@@ -95,9 +140,9 @@ Val *Lsubtract(Val *args)
     return MakeSymInt(-x);
 }
 
+// [/ x:int y:int] division
 Val *Ldivide(Val *args)
 {
-    // [/ x:int y:int] division
     if (!args || !args->rest)
     {
         return NULL;
@@ -122,9 +167,9 @@ Val *Ldivide(Val *args)
     return MakeSymInt(x / y);
 }
 
+// [% x:int y:int] modulo
 Val *Lmod(Val *args)
 {
-    // [% x:int y:int] modulo
     if (!args || !args->rest)
     {
         return NULL;
@@ -149,9 +194,9 @@ Val *Lmod(Val *args)
     return MakeSymInt(x % y);
 }
 
+// [= x y (expr)...] check equality
 Val *Lequal(Val *args)
 {
-    // [= x y (expr)...] check equality
     if (!args || !args->rest)
     {
         return NULL;
@@ -169,9 +214,9 @@ Val *Lequal(Val *args)
     return MakeTrue();
 }
 
+// [not expr] boolean not
 Val *Lnot(Val *args)
 {
-    // [not expr] boolean not
     if (!args)
     {
         return NULL;
@@ -183,9 +228,9 @@ Val *Lnot(Val *args)
     return MakeTrue();
 }
 
+// [symbol? val] check if value is a symbol
 Val *Lsymbol_q(Val *args)
 {
-    // [symbol? val] check if value is a symbol
     if (!args)
     {
         return NULL;
@@ -197,9 +242,9 @@ Val *Lsymbol_q(Val *args)
     return MakeTrue();
 }
 
+// [list? val] check if value is a list
 Val *Llist_q(Val *args)
 {
-    // [list? val] check if value is a list
     if (!args)
     {
         return NULL;
@@ -211,9 +256,9 @@ Val *Llist_q(Val *args)
     return MakeTrue();
 }
 
+// [empty? val] check if value is a the empty list
 Val *Lempty_q(Val *args)
 {
-    // [empty? val] check if value is a the empty list
     if (!args)
     {
         return NULL;
@@ -225,9 +270,9 @@ Val *Lempty_q(Val *args)
     return MakeTrue();
 }
 
+// [nth index list] get the nth item in a list
 Val *Lnth(Val *args)
 {
-    // [nth index list] get the nth item in a list
     if (!args || !args->rest)
     {
         return NULL;
@@ -264,15 +309,15 @@ Val *Lnth(Val *args)
     return NULL;
 }
 
+// [list (val)...] create list from arguments (variadic)
 Val *Llist(Val *args)
 {
-    // [list (val)...] create list from arguments (variadic)
     return CopyVal(args);
 }
 
+// [length list]
 Val *Llength(Val *args)
 {
-    // [length list]
     if (!args)
     {
         return NULL;
@@ -284,9 +329,9 @@ Val *Llength(Val *args)
     return MakeSymInt(ListLength(args->first));
 }
 
+// [lambda? v]
 Val *Llambda_q(Val *args)
 {
-    // [lambda? v]
     if (!args)
     {
         return NULL;
@@ -299,9 +344,9 @@ Val *Llambda_q(Val *args)
     return CopyVal(v);
 }
 
+// [<= x y (expr)...] check number order
 Val *Lincreasing(Val *args)
 {
-    // [<= x y (expr)...] check number order
     if (!args || !args->rest)
     {
         return NULL;
@@ -331,9 +376,9 @@ Val *Lincreasing(Val *args)
     return MakeTrue();
 }
 
+// [>= x y (expr)...] check number order
 Val *Ldecreasing(Val *args)
 {
-    // [>= x y (expr)...] check number order
     if (!args || !args->rest)
     {
         return NULL;
@@ -363,9 +408,9 @@ Val *Ldecreasing(Val *args)
     return MakeTrue();
 }
 
+// [< x y (expr)...] check number order
 Val *Lstrictly_increasing(Val *args)
 {
-    // [< x y (expr)...] check number order
     if (!args || !args->rest)
     {
         return NULL;
@@ -395,9 +440,9 @@ Val *Lstrictly_increasing(Val *args)
     return MakeTrue();
 }
 
+// [> x y (expr)...] check number order
 Val *Lstrictly_decreasing(Val *args)
 {
-    // [> x y (expr)...] check number order
     if (!args || !args->rest)
     {
         return NULL;
@@ -427,9 +472,9 @@ Val *Lstrictly_decreasing(Val *args)
     return MakeTrue();
 }
 
+// [chars sym] -> list
 Val *Lchars(Val *args)
 {
-    // [chars sym] -> list
     if (!args)
     {
         return NULL;
@@ -452,9 +497,9 @@ Val *Lchars(Val *args)
     return result;
 }
 
+// [symbol list] -> symbol
 Val *Lsymbol(Val *args)
 {
-    // [symbol list] -> symbol
     if (!args)
     {
         return NULL;
@@ -485,9 +530,9 @@ Val *Lsymbol(Val *args)
     return MakeSym(sym);
 }
 
+// [member? item list]
 Val *Lmember_q(Val *args)
 {
-    // [member? item list]
     if (!args || !args->rest)
     {
         return NULL;
@@ -509,9 +554,9 @@ Val *Lmember_q(Val *args)
     return MakeFalse();
 }
 
+// [count item list] -> int
 Val *Lcount(Val *args)
 {
-    // [count item list] -> int
     if (!args || !args->rest)
     {
         return NULL;
@@ -534,9 +579,9 @@ Val *Lcount(Val *args)
     return MakeSymInt(count);
 }
 
+// [position item list] -> list
 Val *Lposition(Val *args)
 {
-    // [position item list] -> list
     if (!args || !args->rest)
     {
         return NULL;
@@ -560,10 +605,10 @@ Val *Lposition(Val *args)
     return MakeFalse();
 }
 
+// [slice list start (end)]
+// gets a sublist "slice" inclusive of start and end
 Val *Lslice(Val *args)
 {
-    // [slice list start (end)]
-    // gets a sublist "slice" inclusive of start and end
     if (!args || !args->rest)
     {
         return NULL;
@@ -667,6 +712,8 @@ void RegisterFuncs(Val *env)
     EnvSetFunc(env, "length", Llength);
     EnvSetFunc(env, "not", Lnot);
     EnvSetFunc(env, "nth", Lnth);
+    EnvSetFunc(env, "prepend", Lprepend);
+    EnvSetFunc(env, "append", Lappend);
 }
 
 // Read value from buffer with comments
@@ -676,6 +723,7 @@ int ReadValC(const char *s, int len, Val **out)
     return ReadVal(s, len2, out);
 }
 
+// read, eval, print loop
 void REPL(Val *env)
 {
     printf("\nLIZP read-eval-print loop:");
