@@ -41,19 +41,21 @@ void EnvPop(Val *env);
 
 int IsList(Val *p);
 int IsSym(Val *p);
+
+int EscapeStr(char *str, int len);
+int StrNeedsQuotes(const char *s);
+long ListLength(Val *l);
+
 int IsTrue(Val *v);
 int IsEqual(Val *x, Val *y);
 int IsLambda(Val *v);
-long ListLength(Val *l);
+int IsFunc(Val *v);
 
 int ReadVal(const char *start, int length, Val **out);
 int PrintValBuf(Val *p, char *out, int length, int readable);
 
 char *PrintValStr(Val *p, int readable);
 void PrintValFile(FILE *f, Val *v, int readable);
-
-int EscapeStr(char *str, int len);
-int StrNeedsQuotes(const char *s);
 
 Val *Eval(Val *ast, Val *env);
 
