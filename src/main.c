@@ -19,6 +19,13 @@
 // [replaceI index item list] -> list
 // [zip list.1 (list.N)...]
 
+// Read value from buffer with comments
+int ReadValC(const char *s, int len, Val **out)
+{
+    int len2 = strcspn(s, ";");
+    return ReadVal(s, len2, out);
+}
+
 Val *Lprint(Val *args)
 {
     int readable = 0;
