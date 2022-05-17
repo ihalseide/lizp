@@ -1,7 +1,10 @@
+// String functions for non-POSIX systems
+
 #ifndef _strndup_h_
 #define _strndup_h_
 
 char *strndup(const char *str, int len);
+char *strdup(const char *str);
 
 #endif
 
@@ -16,11 +19,37 @@ char *strndup(const char *str, int len)
     {
         return NULL;
     }
-    char *p = malloc(len + 1);
+    int n = 0;
+    while (str[n] && n < len)
+    {
+        n++;
+    }
+    char *p = malloc(n + 1);
     if (p)
     {
-        memcpy(p, str, len);
-        p[len] = 0;
+        memcpy(p, str, n);
+        p[n] = 0;
+    }
+    return p;
+}
+
+// Duplicate string
+char *strdup(const char *str)
+{
+    if (!str)
+    {
+        return NULL;
+    }
+    int n = 0;
+    while (str[n])
+    {
+        n++;
+    }
+    char *p = malloc(n + 1);
+    if (p)
+    {
+        memcpy(p, str, n);
+        p[n] = 0;
     }
     return p;
 }

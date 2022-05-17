@@ -27,6 +27,9 @@ Val *MakeSymCopy(const char *name, int len);
 Val *MakeSymInt(long n);
 Val *CopyVal(Val *p);
 
+Val *MakeTrue(void);
+Val *MakeFalse(void);
+
 void FreeVal(Val *p);
 void FreeValRec(Val *p);
 
@@ -41,6 +44,7 @@ int IsSym(Val *p);
 int IsTrue(Val *v);
 int IsEqual(Val *x, Val *y);
 int IsLambda(Val *v);
+long ListLength(Val *l);
 
 int ReadVal(const char *start, int length, Val **out);
 int PrintValBuf(Val *p, char *out, int length, int readable);
