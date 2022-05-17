@@ -6,9 +6,9 @@ typedef Val *LizpFunc(Val *args);
 
 #define F_SYM  1
 
-// A Value is a Sequence or a Symbol.
-// Sequence: first (Val), rest (Seq)
-// Symbol: symbol string
+// A Value is a List or a Symbol.
+// List: first (Val), rest (List)
+// Symbol: string
 struct Val
 {
     unsigned int flag;
@@ -21,7 +21,7 @@ struct Val
 };
 
 Val *AllocVal(void);
-Val *MakeSeq(Val *first, Val *rest);
+Val *MakeList(Val *first, Val *rest);
 Val *MakeSym(char *s);
 Val *MakeSymCopy(const char *name, int len);
 Val *MakeSymInt(long n);
@@ -39,7 +39,7 @@ int EnvSetFunc(Val *env, const char *name, LizpFunc * func);
 void EnvPush(Val *env);
 void EnvPop(Val *env);
 
-int IsSeq(Val *p);
+int IsList(Val *p);
 int IsSym(Val *p);
 int IsTrue(Val *v);
 int IsEqual(Val *x, Val *y);

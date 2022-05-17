@@ -158,7 +158,7 @@ Val *Lequal(Val *args)
     }
     Val *f = args->first;
     Val *p = args->rest;
-    while (p && IsSeq(p))
+    while (p && IsList(p))
     {
         if (!IsEqual(f, p->first))
         {
@@ -204,7 +204,7 @@ Val *Llist_q(Val *args)
     {
         return NULL;
     }
-    if (!IsSeq(args->first))
+    if (!IsList(args->first))
     {
         return NULL;
     }
@@ -239,7 +239,7 @@ Val *Lnth(Val *args)
         return NULL;
     }
     Val *list = args->rest->first;
-    if (!IsSeq(list))
+    if (!IsList(list))
     {
         // 2nd arg not a list
         return NULL;
@@ -251,7 +251,7 @@ Val *Lnth(Val *args)
         return NULL;
     }
     Val *p = list;
-    while (n > 0 && p && IsSeq(p))
+    while (n > 0 && p && IsList(p))
     {
         p = p->rest;
         n--;
@@ -277,7 +277,7 @@ Val *Llength(Val *args)
     {
         return NULL;
     }
-    if (!IsSeq(args->first))
+    if (!IsList(args->first))
     {
         return NULL;
     }
@@ -313,7 +313,7 @@ Val *Lincreasing(Val *args)
     }
     long x = atol(f->symbol);
     Val *p = args->rest;
-    while (p && IsSeq(p))
+    while (p && IsList(p))
     {
         Val *e = p->first;
         if (!IsSym(e))
@@ -345,7 +345,7 @@ Val *Ldecreasing(Val *args)
     }
     long x = atol(f->symbol);
     Val *p = args->rest;
-    while (p && IsSeq(p))
+    while (p && IsList(p))
     {
         Val *e = p->first;
         if (!IsSym(e))
@@ -377,7 +377,7 @@ Val *Lstrictly_increasing(Val *args)
     }
     long x = atol(f->symbol);
     Val *p = args->rest;
-    while (p && IsSeq(p))
+    while (p && IsList(p))
     {
         Val *e = p->first;
         if (!IsSym(e))
@@ -409,7 +409,7 @@ Val *Lstrictly_decreasing(Val *args)
     }
     long x = atol(f->symbol);
     Val *p = args->rest;
-    while (p && IsSeq(p))
+    while (p && IsList(p))
     {
         Val *e = p->first;
         if (!IsSym(e))
@@ -440,12 +440,12 @@ Val *Lchars(Val *args)
         return NULL;
     }
     char *s = sym->symbol;
-    Val *result = MakeSeq(MakeSymCopy(s, 1), NULL);
+    Val *result = MakeList(MakeSymCopy(s, 1), NULL);
     s++;
     Val *p = result;
     while (*s)
     {
-        p->rest = MakeSeq(MakeSymCopy(s, 1), NULL);
+        p->rest = MakeList(MakeSymCopy(s, 1), NULL);
         p = p->rest;
         s++;
     }
@@ -460,7 +460,7 @@ Val *Lsymbol(Val *args)
         return NULL;
     }
     Val *list = args->first;
-    if (!list || !IsSeq(list))
+    if (!list || !IsList(list))
     {
         return NULL;
     }
@@ -468,7 +468,7 @@ Val *Lsymbol(Val *args)
     char *sym = malloc(1 + len);
     int i = 0;
     Val *p = list;
-    while (p && IsSeq(list))
+    while (p && IsList(list))
     {
         Val *e = p->first;
         if (!IsSym(e))
@@ -494,11 +494,11 @@ Val *Lmember_q(Val *args)
     }
     Val *item = args->first;
     Val *list = args->rest->first;
-    if (!IsSeq(list))
+    if (!IsList(list))
     {
         return NULL;
     }
-    while (list && IsSeq(list))
+    while (list && IsList(list))
     {
         if (IsEqual(list->first, item))
         {
@@ -518,12 +518,12 @@ Val *Lcount(Val *args)
     }
     Val *item = args->first;
     Val *list = args->rest->first;
-    if (!IsSeq(list))
+    if (!IsList(list))
     {
         return NULL;
     }
     long count = 0;
-    while (list && IsSeq(list))
+    while (list && IsList(list))
     {
         if (IsEqual(list->first, item))
         {
@@ -543,12 +543,12 @@ Val *Lposition(Val *args)
     }
     Val *item = args->first;
     Val *list = args->rest->first;
-    if (!IsSeq(list))
+    if (!IsList(list))
     {
         return NULL;
     }
     long i = 0;
-    while (list && IsSeq(list))
+    while (list && IsList(list))
     {
         if (IsEqual(item, list->first))
         {
@@ -569,7 +569,7 @@ Val *Lslice(Val *args)
         return NULL;
     }
     Val *list = args->first;
-    if (!IsSeq(list))
+    if (!IsList(list))
     {
         return NULL;
     }
@@ -586,7 +586,7 @@ Val *Lslice(Val *args)
     if (!args->rest->rest)
     {
         // [slice list start]
-        while (start_i > 0 && list && IsSeq(list))
+        while (start_i > 0 && list && IsList(list))
         {
             list = list->rest;
             start_i--;
@@ -595,12 +595,12 @@ Val *Lslice(Val *args)
         {
             return NULL;
         }
-        Val *result = MakeSeq(CopyVal(list->first), NULL);
+        Val *result = MakeList(CopyVal(list->first), NULL);
         list = list->rest;
         Val *p_result = result;
-        while (list && IsSeq(list))
+        while (list && IsList(list))
         {
-            p_result->rest = MakeSeq(CopyVal(list->first), NULL);
+            p_result->rest = MakeList(CopyVal(list->first), NULL);
             p_result = p_result->rest;
             list = list->rest;
         }
@@ -617,7 +617,7 @@ Val *Lslice(Val *args)
     {
         return NULL;
     }
-    while (start_i > 0 && list && IsSeq(list))
+    while (start_i > 0 && list && IsList(list))
     {
         list = list->rest;
         start_i--;
@@ -626,13 +626,13 @@ Val *Lslice(Val *args)
     {
         return NULL;
     }
-    Val *result = MakeSeq(CopyVal(list->first), NULL);
+    Val *result = MakeList(CopyVal(list->first), NULL);
     list = list->rest;
     Val *p_result = result;
     long i = end_i - start_i;
-    while (i > 0 && list && IsSeq(list))
+    while (i > 0 && list && IsList(list))
     {
-        p_result->rest = MakeSeq(CopyVal(list->first), NULL);
+        p_result->rest = MakeList(CopyVal(list->first), NULL);
         p_result = p_result->rest;
         list = list->rest;
         i--;
@@ -672,7 +672,7 @@ void RegisterFuncs(Val *env)
 
 int main (int argc, char **argv)
 {
-    Val *env = MakeSeq(NULL, NULL);
+    Val *env = MakeList(NULL, NULL);
     RegisterFuncs(env);
     assert(env);
     printf("\nLIZP read-eval-print loop:");
@@ -692,15 +692,14 @@ int main (int argc, char **argv)
             break;
         }
         Val *expr = NULL;
-        int readlen = ReadVal(buffer, len, &expr);
+        int readlen = ReadValC(buffer, len, &expr);
+        if (!readlen)
+        {
+            continue;
+        }
         if (!expr)
         {
             printf("[]\n");
-            continue;
-        }
-        if (readlen != len)
-        {
-            printf("read error\n");
             continue;
         }
 

@@ -46,12 +46,12 @@ void FreeVal(Val *p)
 // Free value recursively
 void FreeValRec(Val *v)
 {
-    if (IsSeq(v))
+    if (IsList(v))
     {
-        // Sequence or NULL
+        // List or NULL
         Val *p = v;
         Val *n;
-        while (p && IsSeq(p))
+        while (p && IsList(p))
         {
             FreeValRec(p->first);
             p->first = NULL;
@@ -89,10 +89,10 @@ int IsEqual(Val *x, Val *y)
         }
         return *a == *b;
     }
-    if (IsSeq(x))
+    if (IsList(x))
     {
         Val *px = x, *py = y;
-        while (px && IsSeq(px) && py && IsSeq(py))
+        while (px && IsList(px) && py && IsList(py))
         {
             if (!IsEqual(px->first, py->first))
             {
@@ -108,7 +108,7 @@ int IsEqual(Val *x, Val *y)
 
 // Check if a value is a sequence
 // NULL is also considered an empty sequence
-int IsSeq(Val *p)
+int IsList(Val *p)
 {
     return !p || (p && !(p->flag & F_SYM));
 }
@@ -161,9 +161,9 @@ Val *MakeSymInt(long n)
 // Make sequence
 // - first: sym or seq (null included)
 // - rest: seq (null included)
-Val *MakeSeq(Val *first, Val *rest)
+Val *MakeList(Val *first, Val *rest)
 {
-    if (rest && !IsSeq(rest))
+    if (rest && !IsList(rest))
     {
         return NULL;
     }
@@ -184,17 +184,17 @@ Val *CopyVal(Val *p)
     {
         return p;
     }
-    if (!IsSeq(p))
+    if (!IsList(p))
     {
         return MakeSym(strdup(p->symbol));
     }
-    // Seq
-    Val *copy = MakeSeq(CopyVal(p->first), NULL);
+    // List
+    Val *copy = MakeList(CopyVal(p->first), NULL);
     Val *pcopy = copy;
     p = p->rest;
-    while (IsSeq(p) && p)
+    while (IsList(p) && p)
     {
-        pcopy->rest = MakeSeq(CopyVal(p->first), NULL);
+        pcopy->rest = MakeList(CopyVal(p->first), NULL);
         pcopy = pcopy->rest;
         p = p->rest;
     }
@@ -407,7 +407,7 @@ int ReadVal(const char *str, int len, Val **out)
                     int l = ReadVal(str + i, len - i, &e);
                     if (l <= 0)
                     {
-                        *out = NULL;
+                        *out = e;
                         return l;
                     }
                     i += l;
@@ -416,7 +416,7 @@ int ReadVal(const char *str, int len, Val **out)
                     {
                         i++;
                     }
-                    list = MakeSeq(e, NULL);
+                    list = MakeList(e, NULL);
                     Val *p = list;
                     // rest of items
                     while (i < len && str[i] != ']')
@@ -424,6 +424,8 @@ int ReadVal(const char *str, int len, Val **out)
                         Val *e;
                         int l = ReadVal(str + i, len - i, &e);
                         i += l;
+                        p->rest = MakeList(e, NULL);
+                        p = p->rest;
                         if (l <= 0)
                         {
                             *out = list;
@@ -434,8 +436,6 @@ int ReadVal(const char *str, int len, Val **out)
                         {
                             i++;
                         }
-                        p->rest = MakeSeq(e, NULL);
-                        p = p->rest;
                     }
                 }
                 *out = list;
@@ -478,7 +478,7 @@ int PrintValBuf(Val *v, char *out, int length, int readable)
 {
     // String output count / index
     int i = 0;
-    if (IsSeq(v))
+    if (IsList(v))
     {
         if (out && i < length)
         {
@@ -651,7 +651,7 @@ Val *MakeFalse(void)
 // Check whether a value is a lambda value (special list)
 int IsLambda(Val *v)
 {
-    if (!v || !IsSeq(v))
+    if (!v || !IsList(v))
     {
         return 0;
     }
@@ -669,12 +669,12 @@ int IsLambda(Val *v)
         return 0;
     }
     Val *params = v->rest->first;
-    if (!IsSeq(params))
+    if (!IsList(params))
     {
         return 0;
     }
     Val *pp = params;
-    while (pp && IsSeq(pp))
+    while (pp && IsList(pp))
     {
         if (!IsSym(pp->first))
         {
@@ -693,7 +693,7 @@ int IsLambda(Val *v)
 // [func number]
 int IsFunc(Val *v)
 {
-    if (!v || !IsSeq(v))
+    if (!v || !IsList(v))
     {
         return 0;
     }
@@ -722,13 +722,13 @@ int IsFunc(Val *v)
 // Returns non-zero upon success
 int EnvSet(Val *env, Val *key, Val *val)
 {
-    if (!env || !IsSeq(env))
+    if (!env || !IsList(env))
     {
         return 0;
     }
-    Val *pair = MakeSeq(key, MakeSeq(val, NULL));
+    Val *pair = MakeList(key, MakeList(val, NULL));
     // push key-value pair onto the front of the list
-    env->first = MakeSeq(pair, env->first);
+    env->first = MakeList(pair, env->first);
     return 1;
 }
 
@@ -740,13 +740,13 @@ int EnvGet(Val *env, Val *key, Val **out)
         return 0;
     }
     Val *scope = env;
-    while (scope && IsSeq(scope))
+    while (scope && IsList(scope))
     {
         Val *p = scope->first;
-        while (p && IsSeq(p))
+        while (p && IsList(p))
         {
             Val *pair = p->first;
-            if (pair && IsSeq(pair) && IsEqual(pair->first, key))
+            if (pair && IsList(pair) && IsEqual(pair->first, key))
             {
                 // found
                 if (!pair->rest)
@@ -774,7 +774,7 @@ void EnvPush(Val *env)
     {
         return;
     }
-    env->rest = MakeSeq(env->first, env->rest);
+    env->rest = MakeList(env->first, env->rest);
     env->first = NULL;
 }
 
@@ -847,17 +847,17 @@ static int Macro(Val *first, Val *args, Val *env, Val **out)
         }
         Val *bindings = args->first;
         Val *body = args->rest->first;
-        if (!IsSeq(bindings))
+        if (!IsList(bindings))
         {
             *out = NULL;
             return 1;
         }
         EnvPush(env);
         Val *p_binds = bindings;
-        while (p_binds && IsSeq(p_binds))
+        while (p_binds && IsList(p_binds))
         {
             Val *sym = p_binds->first;
-            if (!IsSym(sym) || !p_binds->rest || !IsSeq(p_binds->rest))
+            if (!IsSym(sym) || !p_binds->rest || !IsList(p_binds->rest))
             {
                 // invalid symbol or uneven amount of args
                 EnvPop(env);
@@ -913,7 +913,7 @@ static int Macro(Val *first, Val *args, Val *env, Val **out)
         // [do (expr)...]
         Val *p = args;
         Val *e = NULL;
-        while (p && IsSeq(p))
+        while (p && IsList(p))
         {
             e = Eval(p->first, env);
             p = p->rest;
@@ -934,7 +934,7 @@ static int Macro(Val *first, Val *args, Val *env, Val **out)
             return 1;
         }
         Val *p = args;
-        while (p && IsSeq(p))
+        while (p && IsList(p))
         {
             Val *e = Eval(p->first, env);
             if (!IsTrue(e))
@@ -962,7 +962,7 @@ static int Macro(Val *first, Val *args, Val *env, Val **out)
             return 1;
         }
         Val *p = args;
-        while (p && IsSeq(p))
+        while (p && IsList(p))
         {
             Val *e = Eval(p->first, env);
             if (IsTrue(e))
@@ -990,7 +990,7 @@ static int Macro(Val *first, Val *args, Val *env, Val **out)
             return 1;
         }
         Val *p = args;
-        while (p && IsSeq(p))
+        while (p && IsList(p))
         {
             Val *e = Eval(p->first, env);
             if (IsTrue(e))
@@ -1026,14 +1026,14 @@ static int Macro(Val *first, Val *args, Val *env, Val **out)
             return 1;
         }
         Val *params = args->first;
-        if (!IsSeq(params))
+        if (!IsList(params))
         {
             *out = NULL;
             return 1;
         }
         Val *p = params;
         // params must be symbols
-        while (p && IsSeq(p))
+        while (p && IsList(p))
         {
             if (!IsSym(p->first))
             {
@@ -1054,8 +1054,8 @@ static int Macro(Val *first, Val *args, Val *env, Val **out)
             body = body->first;
         }
         // make lambda... with an explicit NULL body if a body is not provided
-        *out = MakeSeq(CopyVal(first), MakeSeq(CopyVal(params),
-                MakeSeq(CopyVal(body), NULL)));
+        *out = MakeList(CopyVal(first), MakeList(CopyVal(params),
+                MakeList(CopyVal(body), NULL)));
         return 1;
     }
 
@@ -1065,7 +1065,7 @@ static int Macro(Val *first, Val *args, Val *env, Val **out)
 long ListLength(Val *l)
 {
     long len = 0;
-    while (l && IsSeq(l))
+    while (l && IsList(l))
     {
         len++;
         l = l->rest;
@@ -1095,7 +1095,7 @@ Val *Apply(Val *first, Val *args, Val *env)
             // bind values
             Val *p_params = params;
             Val *p_args = args;
-            while (p_params && IsSeq(p_params) && p_args && IsSeq(p_args))
+            while (p_params && IsList(p_params) && p_args && IsList(p_args))
             {
                 Val *param = p_params->first;
                 if ('&' == param->symbol[0])
@@ -1174,7 +1174,7 @@ Val *Eval(Val *ast, Val *env)
     }
     // eval lists...
     assert(ast);
-    assert(IsSeq(ast));
+    assert(IsList(ast));
     // eval first element
     Val *first = Eval(ast->first, env);
     // macro?
@@ -1188,12 +1188,12 @@ Val *Eval(Val *ast, Val *env)
     }
     // not a macro
     // eval rest of elements for apply
-    Val *list = MakeSeq(first, NULL);
+    Val *list = MakeList(first, NULL);
     Val *p_list = list;
     Val *p_ast = ast->rest;
-    while (p_ast && IsSeq(p_ast))
+    while (p_ast && IsList(p_ast))
     {
-        p_list->rest = MakeSeq(Eval(p_ast->first, env), NULL);
+        p_list->rest = MakeList(Eval(p_ast->first, env), NULL);
         p_list = p_list->rest;
         p_ast = p_ast->rest;
     }
@@ -1215,7 +1215,7 @@ int EnvSetFunc(Val *env, const char *name, LizpFunc *func)
         return 0;
     }
     long handle = PutFunc(func);
-    Val *val = MakeSeq(MakeSymCopy("native func", 11), MakeSeq(MakeSymInt(handle), NULL));
+    Val *val = MakeList(MakeSymCopy("native func", 11), MakeList(MakeSymInt(handle), NULL));
     if (!val)
     {
         return 0;
