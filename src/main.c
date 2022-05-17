@@ -19,13 +19,6 @@
 // [replaceI index item list] -> list
 // [zip list.1 (list.N)...]
 
-// Read value from buffer with comments
-int ReadValC(const char *s, int len, Val **out)
-{
-    int len2 = strcspn(s, ";");
-    return ReadVal(s, len2, out);
-}
-
 Val *Lprint(Val *args)
 {
     int readable = 0;
@@ -649,7 +642,6 @@ Val *Lslice(Val *args)
 
 void RegisterFuncs(Val *env)
 {
-    assert(env);
     EnvSetFunc(env, "print", Lprint);
     EnvSetFunc(env, "+", Lplus);
     EnvSetFunc(env, "*", Lmultiply);
@@ -677,23 +669,28 @@ void RegisterFuncs(Val *env)
     EnvSetFunc(env, "nth", Lnth);
 }
 
-int main (int argc, char **argv)
+// Read value from buffer with comments
+int ReadValC(const char *s, int len, Val **out)
 {
-    Val *env = MakeList(NULL, NULL);
-    RegisterFuncs(env);
-    assert(env);
+    int len2 = strcspn(s, ";");
+    return ReadVal(s, len2, out);
+}
+
+void REPL(Val *env)
+{
     printf("\nLIZP read-eval-print loop:");
+    char buffer[BUF_SZ];
     while (1)
     {
+        // Read
         printf("\n>>> ");
-        char buffer[BUF_SZ];
         if (!fgets(buffer, sizeof(buffer), stdin))
         {
             printf("end of input\n");
             break;
         }
         int len = strlen(buffer);
-        if (len <= 1)
+        if (len <= 0)
         {
             printf("end of input\n");
             break;
@@ -704,18 +701,29 @@ int main (int argc, char **argv)
         {
             continue;
         }
-        if (!expr)
-        {
-            printf("[]\n");
-            continue;
-        }
 
+        // Eval
         Val *val = Eval(expr, env);
+
+        // Print
         putchar('\n');
         PrintValFile(stdout, val, 1);
+
         FreeValRec(expr);
         FreeValRec(val);
     }
+}
+
+int main (int argc, char **argv)
+{
+    if (argc > 1)
+    {
+        fprintf(stderr, "%s: error: too many arguments\n", argv[0]);
+        return 1;
+    }
+    Val *env = MakeList(NULL, NULL);
+    RegisterFuncs(env);
+    REPL(env);
     return 0;
 }
 
