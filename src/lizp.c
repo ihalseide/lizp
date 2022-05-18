@@ -360,6 +360,8 @@ static int ReadSym(const char *str, int len, Val **out)
                         case '"':
                         case '[':
                         case ']':
+                        case '(':
+                        case ')':
                             done = 1;
                             break;
                         default:
@@ -403,32 +405,15 @@ int ReadVal(const char *str, int len, Val **out)
         }
         switch (str[i])
         {
-            case '(':
-                // comment
-                {
-                    int level = 1;
-                    while (i < len && str[i] && level > 0)
-                    {
-                        i++;
-                        switch (str[i])
-                        {
-                            case '(':
-                                level++;
-                                break;
-                            case ')':
-                                level--;
-                                break;
-                        }
-                    }
-                    if (str[i] == ')')
-                    {
-                        i++;
-                    }
-                    break;
-                }
             case '\0':
                 // end of string
                 *out = NULL;
+                return i;
+            case ']':
+                // unmated list
+                return i;
+            case ')':
+                // unmatched comment
                 return i;
             case '[':
                 // begin list
@@ -491,9 +476,29 @@ int ReadVal(const char *str, int len, Val **out)
                     }
                     return i;
                 }
-            case ']':
-                // end list
-                return i;
+            case '(':
+                // comment
+                {
+                    int level = 1;
+                    while (i < len && str[i] && level > 0)
+                    {
+                        i++;
+                        switch (str[i])
+                        {
+                            case '(':
+                                level++;
+                                break;
+                            case ')':
+                                level--;
+                                break;
+                        }
+                    }
+                    if (str[i] == ')')
+                    {
+                        i++;
+                    }
+                    break;
+                }
             default:
                 // Symbol
                 {
