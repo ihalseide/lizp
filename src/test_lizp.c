@@ -2,6 +2,11 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#define STB_DS_IMPLEMENTATION
+#include "stb_ds.h"
+#define STRNDUP_IMPLEMENTATION
+#include "strndup.h"
+#define LIZP_IMPLEMENTATION
 #include "lizp.h"
 
 // Note: does not free memory
