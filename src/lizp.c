@@ -106,17 +106,30 @@ int IsEqual(Val *x, Val *y)
     return 0;
 }
 
-// Check if a value is a sequence
-// NULL is also considered an empty sequence
+// Check if a value is a list
+// NULL is also considered an empty list
 int IsList(Val *p)
 {
-    return !p || (p && !(p->flag & F_SYM));
+    return !p || (p && !p->is_sym);
 }
 
 // Check if a value is a symbol
 int IsSym(Val *p)
 {
-    return p && (p->flag & F_SYM);
+    return p && p->is_sym;
+}
+
+//  check if a value is a integer symbol
+int IsSymInt(Val *v)
+{
+    if (!IsSym(v))
+    {
+        return 0;
+    }
+    char *end;
+    int base = 10;
+    strtol(v->symbol, &end, base);
+    return end && !(*end);
 }
 
 // Make symbol
@@ -130,7 +143,7 @@ Val *MakeSym(char *s)
     Val *p = AllocVal();
     if (p)
     {
-        p->flag = F_SYM;
+        p->is_sym = 1;
         p->symbol = s;
     }
     return p;
@@ -158,9 +171,10 @@ Val *MakeSymInt(long n)
     return MakeSymCopy(buf, sz);
 }
 
-// Make sequence
-// - first: sym or seq (null included)
-// - rest: seq (null included)
+// Make a proper list.
+// - first: sym or list (null included)
+// - rest: list (NULL included)
+// NOTE: rest must be NULL or a list Val.
 Val *MakeList(Val *first, Val *rest)
 {
     if (rest && !IsList(rest))
@@ -170,7 +184,7 @@ Val *MakeList(Val *first, Val *rest)
     Val *p = AllocVal();
     if (p)
     {
-        p->flag = 0;
+        p->is_sym = 0;
         p->first = first;
         p->rest = rest;
     }
@@ -640,6 +654,51 @@ Val *MakeFalse(void)
     return MakeSymCopy("false", 5);
 }
 
+// make a list of the form [error rest...]
+Val *MakeError(Val *rest)
+{
+    Val *e = MakeSym(strdup("error"));
+    if (IsList(rest))
+    {
+        return MakeList(e, rest);
+    }
+    return MakeList(e, MakeList(rest, NULL));
+}
+
+Val *MakeErrorMessage(const char *msg)
+{
+    return MakeError(MakeSym(strdup(msg)));
+}
+
+// make an error for improper number of arguments
+// if max is negative, there is no max
+Val *MakeArgumentsError(const char *func, int min, int max)
+{
+    if (min == max)
+    {
+        // exact amount of arguments
+        const char *fmt = "`%s` requires %d argument(s)";
+        int sz = snprintf(NULL, 0, fmt, func, min);
+        char *buf = malloc(sz + 1);
+        snprintf(buf, sz + 1, fmt, func, min);
+        return MakeError(MakeSym(buf));
+    }
+    if (max > 0)
+    {
+        const char *fmt = "`%s` requires at least %d argument(s) and at most %d argument(s)";
+        int sz = snprintf(NULL, 0, fmt, func, min, max);
+        char *buf = malloc(sz + 1);
+        snprintf(buf, sz + 1, fmt, func, min, max);
+        return MakeError(MakeSym(buf));
+    }
+    // no maximum
+    const char *fmt = "`%s` requires at least %d argument(s)";
+    int sz = snprintf(NULL, 0, fmt, func, min);
+    char *buf = malloc(sz + 1);
+    snprintf(buf, sz + 1, fmt, func, min);
+    return MakeError(MakeSym(buf));
+}
+
 // Check whether a value is a lambda value (special list)
 int IsLambda(Val *v)
 {
@@ -682,6 +741,7 @@ int IsLambda(Val *v)
 }
 
 // Check if a list is a wrapper for a C function
+// (a "native func")
 // [func number]
 int IsFunc(Val *v)
 {
@@ -708,6 +768,17 @@ int IsFunc(Val *v)
         return 0;
     }
     return 1;
+}
+
+// check if the value matches the form [error ...]
+int IsError(Val *v)
+{
+    if (!IsList(v))
+    {
+        return 0;
+    }
+    Val *first = v->first;
+    return IsSym(first) && !strcmp("error", first->symbol);
 }
 
 // Set value in environment
@@ -760,6 +831,7 @@ int EnvGet(Val *env, Val *key, Val **out)
     return 0;
 }
 
+// push a new context onto the environment
 void EnvPush(Val *env)
 {
     if (!env)
@@ -770,6 +842,7 @@ void EnvPush(Val *env)
     env->first = NULL;
 }
 
+// pop off the latest context from the environment
 void EnvPop(Val *env)
 {
     if (!env)
@@ -784,64 +857,74 @@ void EnvPop(Val *env)
     FreeVal(pair);
 }
 
-// Eval macro
-// Return values must not share structure with first, args, or env
+// Evaluate a macro
+// Returns whether `first` is a symbol for a macro. If it is a macro,
+// the macro code is executed, otherwise this function does nothing.
+// NOTE: Return values must not share structure with first, args, or env
 static int Macro(Val *first, Val *args, Val *env, Val **out)
 {
     char *s = first->symbol;
     if (!strcmp("defined?", s))
     {
         // [defined? v]
-        if (!args)
+        if (!args || args->rest)
         {
-            *out = NULL;
+            *out = MakeArgumentsError(s, 1, 1);
             return 1;
         }
         Val *sym = args->first;
         if (!IsSym(sym))
         {
-            *out = NULL;
+            *out = MakeErrorMessage("first argument must be a symbol");
             return 1;
         }
-        if (EnvGet(env, sym, NULL))
-        {
-            *out = MakeTrue();
-            return 1;
-        }
-        *out = NULL;
+        *out = EnvGet(env, sym, NULL)? MakeTrue() : MakeFalse();
         return 1;
     }
     if (!strcmp("get", s))
     {
-        // [get key] for getting value with a default of null
-        if (!args || args->rest)
+        // [get key (if-undefined)] for getting value with a default of if-undefined
+        if (!args || (args->rest && args->rest->rest))
         {
-            *out = NULL;
+            *out = MakeArgumentsError(s, 1, 2);
             return 1;
         }
         Val *key = args->first;
+        if (!IsSym(key))
+        {
+            *out = MakeError(MakeList(CopyVal(key), MakeList(
+                            MakeSym(strdup("is not a symbol")), NULL)));
+            return 1;
+        }
         Val *val;
         if (EnvGet(env, key, &val))
         {
             *out = CopyVal(val);
             return 1;
         }
-        *out = NULL;
+        if (args->rest)
+        {
+            // if-undefined default value
+            *out = CopyVal(args->rest->first);
+            return 1;
+        }
+        // default is error
+        *out = MakeErrorMessage("undefined symbol");
         return 1;
     }
     if (!strcmp("let", s))
     {
-        // [let [(key val)...] (expr)] (remember to remove `set` afterwards)
-        if (!args || !args->rest)
+        // [let [(key val)...] (expr)]
+        if (!args || !args->rest || args->rest->rest)
         {
-            *out = NULL;
+            *out = MakeArgumentsError(s, 2, 2);
             return 1;
         }
         Val *bindings = args->first;
         Val *body = args->rest->first;
         if (!IsList(bindings))
         {
-            *out = NULL;
+            *out = MakeErrorMessage("`let` first argument must be a list");
             return 1;
         }
         EnvPush(env);
@@ -853,11 +936,12 @@ static int Macro(Val *first, Val *args, Val *env, Val **out)
             {
                 // invalid symbol or uneven amount of args
                 EnvPop(env);
-                *out = NULL;
+                *out = MakeErrorMessage("`let` bindings list must consist of alternating symbols and expressions");
                 return 1;
             }
-            EnvSet(env, CopyVal(sym), Eval(p_binds->rest->first, env));
             p_binds = p_binds->rest;
+            Val *expr = p_binds->first;
+            EnvSet(env, CopyVal(sym), Eval(expr, env));
             p_binds = p_binds->rest;
         }
         Val *result = Eval(body, env);
@@ -867,10 +951,10 @@ static int Macro(Val *first, Val *args, Val *env, Val **out)
     }
     if (!strcmp("if", s))
     {
-        // [if condition consequent alternative]
-        if (!args || !args->rest)
+        // [if condition consequent (alternative)]
+        if (!args || !args->rest || (args->rest->rest && args->rest->rest->rest))
         {
-            *out = NULL;
+            *out = MakeArgumentsError(s, 2, 3);
             return 1;
         }
         Val *f = Eval(args->first, env);
@@ -878,15 +962,19 @@ static int Macro(Val *first, Val *args, Val *env, Val **out)
         FreeValRec(f);
         if (t)
         {
-            *out =  Eval(args->rest->first, env);
+            Val *consequent = args->rest->first;
+            *out =  Eval(consequent, env);
             return 1;
         }
-        if (args->rest->rest)
+        Val *alt_list = args->rest->rest;
+        if (!alt_list )
         {
-            *out = Eval(args->rest->rest->first, env);
+            // default alternative
+            *out = NULL;
             return 1;
         }
-        *out = NULL;
+        Val *alternative = alt_list->first;
+        *out = Eval(alternative, env);
         return 1;
     }
     if (!strcmp("quote", s))
@@ -894,7 +982,7 @@ static int Macro(Val *first, Val *args, Val *env, Val **out)
         // [quote expr]
         if (!args || args->rest)
         {
-            *out = NULL;
+            *out = MakeArgumentsError(s, 1, 1);
             return 1;
         }
         *out = CopyVal(args->first);
@@ -911,6 +999,7 @@ static int Macro(Val *first, Val *args, Val *env, Val **out)
             p = p->rest;
             if (p)
             {
+                // free all values except the last one
                 FreeValRec(e);
             }
         }
@@ -944,6 +1033,9 @@ static int Macro(Val *first, Val *args, Val *env, Val **out)
             }
             FreeValRec(e);
         }
+        // malformed list
+        *out = NULL;
+        return 1;
     }
     if (!strcmp("or", s))
     {
@@ -972,13 +1064,23 @@ static int Macro(Val *first, Val *args, Val *env, Val **out)
             }
             FreeValRec(e);
         }
+        // malformed list
+        *out = NULL;
+        return 1;
     }
     if (!strcmp("cond", s))
     {
         // [cond (condition result)...] (no nested lists)
-        if (!args)
+        if (!args || !args->rest)
         {
-            *out = NULL;
+            *out = MakeArgumentsError(s, 2, -1);
+            return 1;
+        }
+        if (ListLength(args) % 2 != 0)
+        {
+            *out = MakeErrorMessage("`cond` requires an even amount of"
+                                    " alternating condition expressions and"
+                                    " consequence expressions");
             return 1;
         }
         Val *p = args;
@@ -988,48 +1090,43 @@ static int Macro(Val *first, Val *args, Val *env, Val **out)
             if (IsTrue(e))
             {
                 FreeValRec(e);
-                if (!p->rest)
-                {
-                    // Uneven amount of items
-                    *out = NULL;
-                    return 1;
-                }
+                assert(p->rest);
                 *out = Eval(p->rest->first, env);
                 return 1;
             }
             FreeValRec(e);
             p = p->rest;
-            if (!p)
-            {
-                // Uneven amount of items
-                *out = NULL;
-                return 1;
-            }
+            assert(p);
             p = p->rest;
         }
+        // no condition matched
+        *out = NULL;
         return 1;
     }
     if (!strcmp("lambda", s))
     {
         // [lambda [(symbol)...] (expr)]
-        if (!args)
+        if (!args || !args->rest || args->rest->rest)
         {
-            *out = NULL;
+            *out = MakeArgumentsError(s, 2, 2);
             return 1;
         }
         Val *params = args->first;
         if (!IsList(params))
         {
-            *out = NULL;
+            *out = MakeErrorMessage("`lambda` first argument must be a list of"
+                                    " symbols");
             return 1;
         }
         Val *p = params;
         // params must be symbols
         while (p && IsList(p))
         {
-            if (!IsSym(p->first))
+            Val *e = p->first;
+            if (!IsSym(e))
             {
-                *out = NULL;
+                *out = MakeError(MakeList(CopyVal(e), MakeList(
+                                MakeSym(strdup("is not a symbol")), NULL)));
                 return 1;
             }
             p = p->rest;
@@ -1037,12 +1134,6 @@ static int Macro(Val *first, Val *args, Val *env, Val **out)
         Val *body = args->rest;
         if (body)
         {
-            if (body->rest)
-            {
-                // too many arguments to lambda
-                *out = NULL;
-                return 1;
-            }
             body = body->first;
         }
         // make lambda... with an explicit NULL body if a body is not provided
@@ -1050,10 +1141,12 @@ static int Macro(Val *first, Val *args, Val *env, Val **out)
                 MakeList(CopyVal(body), NULL)));
         return 1;
     }
-
+    // not a macro
     return 0;
 }
 
+// Get the length of a list.
+// Returns 0 for a non-list value.
 long ListLength(Val *l)
 {
     long len = 0;
@@ -1070,14 +1163,9 @@ long ListLength(Val *l)
 // TODO: handle when first is a lambda
 Val *Apply(Val *first, Val *args, Val *env)
 {
-    if (!first)
-    {
-        return NULL;
-    }
-
     if (IsLambda(first))
     {
-        // lambda function application
+        // lambda function
         Val *params = first->rest->first;
         Val *body = first->rest->rest->first;
         if (args)
@@ -1100,6 +1188,7 @@ Val *Apply(Val *first, Val *args, Val *env)
                         return NULL;
                     }
                     EnvSet(env, CopyVal(param), CopyVal(p_args));
+                    // p_params and p_args will both be non-null
                     break;
                 }
                 EnvSet(env, CopyVal(param), CopyVal(p_args->first));
@@ -1108,7 +1197,7 @@ Val *Apply(Val *first, Val *args, Val *env)
             }
             if ((p_params == NULL) != (p_args == NULL))
             {
-                // arity mismatch
+                // parameters-arguments arity mismatch
                 EnvPop(env);
                 return NULL;
             }
@@ -1118,10 +1207,9 @@ Val *Apply(Val *first, Val *args, Val *env)
         }
         return Eval(body, env);
     }
-
     if (IsFunc(first))
     {
-        // C function binding
+        // native function
         long id = atol(first->rest->first->symbol);
         LizpFunc *func = GetFunc(id);
         if (!func)
@@ -1131,16 +1219,17 @@ Val *Apply(Val *first, Val *args, Val *env)
         }
         return func(args);
     }
-
     // invalid function
-    return NULL;
+    return MakeError(MakeList(CopyVal(first), MakeList(
+                    MakeSym(strdup("is not a function")), NULL)));
 }
 
-// Evaluate a Val
+// Evaluate a Val value
 // - ast = Abstract Syntax Tree to evaluate
-// - env = environment of symbol-value pairs
-// Returns evaluated value
-// - must only return new values that do not share structure with ast or env
+// - env = environment of symbol-value pairs for bindings
+// Returns the evaluated value
+// NOTE: must only return new values that do not share any
+//       structure with the ast or the env
 Val *Eval(Val *ast, Val *env)
 {
     if (!ast)
@@ -1169,6 +1258,10 @@ Val *Eval(Val *ast, Val *env)
     assert(IsList(ast));
     // eval first element
     Val *first = Eval(ast->first, env);
+    if (IsError(first))
+    {
+        return first;
+    }
     // macro?
     if (IsSym(first))
     {
@@ -1185,7 +1278,13 @@ Val *Eval(Val *ast, Val *env)
     Val *p_ast = ast->rest;
     while (p_ast && IsList(p_ast))
     {
-        p_list->rest = MakeList(Eval(p_ast->first, env), NULL);
+        Val *e = Eval(p_ast->first, env);
+        if (IsError(e))
+        {
+            FreeValRec(list);
+            return e;
+        }
+        p_list->rest = MakeList(e, NULL);
         p_list = p_list->rest;
         p_ast = p_ast->rest;
     }
@@ -1221,3 +1320,4 @@ int EnvSetFunc(Val *env, const char *name, LizpFunc *func)
     FreeValRec(val);
     return 0;
 }
+
