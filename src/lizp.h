@@ -1460,7 +1460,6 @@ int EnvSetFunc(Val *env, const char *name, LizpFunc *func)
 #ifdef LIZP_CORE_FUNCTIONS
 void LizpRegisterCoreFuncs(Val *env)
 {
-    EnvSetFunc(env, "print", Lprint);
     EnvSetFunc(env, "+", Lplus);
     EnvSetFunc(env, "*", Lmultiply);
     EnvSetFunc(env, "/", Ldivide);
