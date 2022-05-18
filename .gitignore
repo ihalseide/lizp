@@ -1,10 +1,5 @@
 # Build files
-*.o
-*.out
-*.gch
-lizp
-test
-
-# Special names
-_*
+repl
+test_core
+test_lizp
 
