@@ -243,11 +243,18 @@ Val *Lsymbol_q(Val *args)
     {
         return NULL;
     }
-    if (!IsSym(args->first))
+    Val *v = args->first;
+    return !IsSym(v)? MakeTrue() : MakeFalse();
+}
+
+// [integer? val] check if value is a integer symbol
+Val *Linteger_q(Val *args)
+{
+    if (!args)
     {
         return NULL;
     }
-    return MakeTrue();
+    return IsSymInt(args->first)? MakeTrue() : MakeFalse();
 }
 
 // [list? val] check if value is a list
@@ -345,11 +352,29 @@ Val *Llambda_q(Val *args)
         return NULL;
     }
     Val *v = args->first;
-    if (!IsLambda(v))
+    return IsLambda(v)? MakeTrue() : MakeFalse();
+}
+
+// [function? v]
+Val *Lfunction_q(Val *args)
+{
+    if (!args)
     {
         return NULL;
     }
-    return CopyVal(v);
+    Val *v = args->first;
+    return IsFunc(v)? MakeTrue() : MakeFalse();
+}
+
+// [native? v]
+Val *Lnative_q(Val *args)
+{
+    if (!args)
+    {
+        return NULL;
+    }
+    Val *v = args->first;
+    return (IsFunc(v) || IsLambda(v))? MakeTrue() : MakeFalse();
 }
 
 // [<= x y (expr)...] check number order
@@ -709,8 +734,11 @@ void RegisterFuncs(Val *env)
     EnvSetFunc(env, "empty?", Lempty_q);
     EnvSetFunc(env, "member?", Lmember_q);
     EnvSetFunc(env, "symbol?", Lsymbol_q);
+    EnvSetFunc(env, "integer?", Linteger_q);
     EnvSetFunc(env, "list?", Llist_q);
     EnvSetFunc(env, "lambda?", Llambda_q);
+    EnvSetFunc(env, "function?", Lfunction_q);
+    EnvSetFunc(env, "native?", Lnative_q);
     EnvSetFunc(env, "chars", Lchars);
     EnvSetFunc(env, "symbol", Lsymbol);
     EnvSetFunc(env, "list", Llist);
