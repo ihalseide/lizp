@@ -1,6 +1,5 @@
-#COpts = -std=c99 -O3
-COpts = -std=c99 -g -DDEBUG -Wall
-	
+COpts=-std=c99 -O3
+
 default: test_lizp test_core repl
 
 test_lizp: src/test_lizp.c
