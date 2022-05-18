@@ -752,11 +752,33 @@ void RegisterFuncs(Val *env)
     EnvSetFunc(env, "append", Lappend);
 }
 
-// Read value from buffer with comments
-int ReadValC(const char *s, int len, Val **out)
+// do one read-eval-print cycle on the string
+void rep(const char *str, int len, Val *env)
 {
-    int len2 = strcspn(s, ";");
-    return ReadVal(s, len2, out);
+    if (!str || !*str || len <= 0)
+    {
+        return;
+    }
+
+    Val *expr = NULL;
+    int readlen = ReadVal(str, len, &expr);
+    if (!readlen)
+    {
+        return;
+    }
+
+    // debug print
+    //PrintValFile(stdout, expr, 1);
+
+    // Eval
+    Val *val = Eval(expr, env);
+
+    // Print
+    putchar('\n');
+    PrintValFile(stdout, val, 1);
+
+    FreeValRec(expr);
+    FreeValRec(val);
 }
 
 // read, eval, print loop
@@ -779,34 +801,52 @@ void REPL(Val *env)
             printf("end of input\n");
             break;
         }
-        Val *expr = NULL;
-        int readlen = ReadValC(buffer, len, &expr);
-        if (!readlen)
-        {
-            continue;
-        }
-
-        // Eval
-        Val *val = Eval(expr, env);
-
-        // Print
-        putchar('\n');
-        PrintValFile(stdout, val, 1);
-
-        FreeValRec(expr);
-        FreeValRec(val);
+        rep(buffer, len, env);
     }
+}
+
+void LoadFile(const char *fname, Val *env)
+{
+    // read file contents wrapped in a "do" block
+    FILE *f = fopen(fname, "rb");
+    if (!f)
+    {
+        perror("fopen");
+        return;
+    }
+    fseek(f, 0, SEEK_END);
+    long file_sz = ftell(f);
+    rewind(f);
+    char prelude[] = "[do\n";
+    long buffer_sz = sizeof(prelude) - 1 + file_sz + 2;
+    char *buffer = malloc(buffer_sz);
+    if (!buffer)
+    {
+        fclose(f);
+        return;
+    }
+    fread(buffer + sizeof(prelude) - 1, file_sz, 1, f);
+    fclose(f);
+    memcpy(buffer, prelude, sizeof(prelude) - 1);
+    buffer[buffer_sz - 2] = ']';
+    buffer[buffer_sz - 1] = 0;
+    rep(buffer, buffer_sz, env);
+    free(buffer);
 }
 
 int main (int argc, char **argv)
 {
-    if (argc > 1)
+    if (argc > 2)
     {
         fprintf(stderr, "%s: error: too many arguments\n", argv[0]);
         return 1;
     }
     Val *env = MakeList(NULL, NULL);
     RegisterFuncs(env);
+    if (argc > 1)
+    {
+        LoadFile(argv[1], env);
+    }
     REPL(env);
     return 0;
 }
