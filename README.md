@@ -11,7 +11,7 @@ Memory is managed manually.
 To get right into the REPL you just need Make and a C compiler. Run this:
 
 ```shell
-make && ./lizp
+make repl && ./repl
 ```
 
 To run tests:

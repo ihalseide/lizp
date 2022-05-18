@@ -1,19 +1,23 @@
-COpts = -std=c99 -O3
-#COpts = -std=c99 -g -DDEBUG -Wall
+#COpts = -std=c99 -O3
+COpts = -std=c99 -g -DDEBUG -Wall
 	
-default: lizp
+default: test repl
 
-lizp: src/main.c lizp.o
-	$(CC) $(COpts) -o lizp src/main.c lizp.o
+test: test_lizp test_core
+	./test_lizp
+	./test_core
 
-test: src/test.c lizp.o
-	$(CC) $(COpts) -o test src/test.c lizp.o
+test_lizp: src/test_lizp.c
+	$(CC) $(COpts) -o $@ src/test_lizp.c
 
-lizp.o: src/lizp.c src/lizp.h
-	$(CC) $(COpts) -o lizp.o -c src/lizp.c
+test_core: src/test_core.c
+	$(CC) $(COpts) -o $@ src/test_core.c
+
+repl: src/repl.c
+	$(CC) $(COpts) -o $@ src/repl.c
 
 clean:
-	rm lizp.o
-	rm lizp
-	rm test
+	rm repl
+	rm test_lizp
+	rm test_core
 

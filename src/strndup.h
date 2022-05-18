@@ -8,7 +8,7 @@ char *strdup(const char *str);
 
 #endif
 
-#ifdef STRNDUP_IMPL
+#ifdef STRNDUP_IMPLEMENTATION
 
 #include <stdlib.h>
 
@@ -54,4 +54,4 @@ char *strdup(const char *str)
     return p;
 }
 
-#endif
+#endif /* STRNDUP_IMPL */
