@@ -2,12 +2,12 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#define LIZP_IMPLEMENTATION
+#include "lizp.h"
 #define STB_DS_IMPLEMENTATION
 #include "stb_ds.h"
 #define STRNDUP_IMPLEMENTATION
 #include "strndup.h"
-#define LIZP_IMPLEMENTATION
-#include "lizp.h"
 
 // Note: does not free memory
 
@@ -596,20 +596,6 @@ static void TestEval2(void)
     assert(IsEqual(o, i));
 }
 
-static void TestEvalPlus(void)
-{
-    Val *i, *o;
-    const char *expr;
-
-    // +
-    expr = "[+ 1 2]";
-    ReadVal(expr, strlen(expr), &i);
-    assert(i);
-    o = Eval(i, NULL);
-    assert(o);
-    assert(IsEqual(o, MakeSym("3")));
-}
-
 static void TestEvalIf(void)
 {
     Val *i, *o;
@@ -632,57 +618,38 @@ static void TestEvalIf(void)
 
 static void TestEvalDefined(void)
 {
-    const char *expr;
-    Val *i, *o;
-
 }
 
 static void TestEvalGet(void)
 {
-    const char *expr;
-    Val *i, *o;
 }
 
 static void TestEvalQuote(void)
 {
-    const char *expr;
-    Val *i, *o;
 }
 
 static void TestEvalDo(void)
 {
-    const char *expr;
-    Val *i, *o;
 }
 
 static void TestEvalAnd(void)
 {
-    const char *expr;
-    Val *i, *o;
 }
 
 static void TestEvalOr(void)
 {
-    const char *expr;
-    Val *i, *o;
 }
 
 static void TestEvalLet(void)
 {
-    const char *expr;
-    Val *i, *o;
 }
 
 static void TestEvalCond(void)
 {
-    const char *expr;
-    Val *i, *o;
 }
 
 static void TestEvalLambda(void)
 {
-    const char *expr;
-    Val *i, *o;
 }
 
 static void TestEval(void)
