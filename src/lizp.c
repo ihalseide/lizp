@@ -226,6 +226,8 @@ int StrNeedsQuotes(const char *s)
         {
             case '[':
             case ']':
+            case '(':
+            case ')':
             case '\n':
             case '\t':
             case '"':
@@ -392,95 +394,121 @@ int ReadVal(const char *str, int len, Val **out)
     }
 
     int i = 0;
-    // Space
-    while (i < len && isspace(str[i]))
+    while (1)
     {
-        i++;
-    }
-    switch (str[i])
-    {
-        case '\0':
-            // end of string
-            *out = NULL;
-            return i;
-        case '[':
-            // begin list
-            {
-                i++;
-                // space
-                while (i < len && isspace(str[i]))
+        // Space
+        while (i < len && isspace(str[i]))
+        {
+            i++;
+        }
+        switch (str[i])
+        {
+            case '(':
+                // comment
+                {
+                    int level = 1;
+                    while (i < len && str[i] && level > 0)
+                    {
+                        i++;
+                        switch (str[i])
+                        {
+                            case '(':
+                                level++;
+                                break;
+                            case ')':
+                                level--;
+                                break;
+                        }
+                    }
+                    if (str[i] == ')')
+                    {
+                        i++;
+                    }
+                    break;
+                }
+            case '\0':
+                // end of string
+                *out = NULL;
+                return i;
+            case '[':
+                // begin list
                 {
                     i++;
-                }
-                // elements
-                Val *list = NULL;
-                if (str[i] != ']')
-                {
-                    // first item
-                    Val *e;
-                    int l = ReadVal(str + i, len - i, &e);
-                    if (l <= 0)
-                    {
-                        *out = e;
-                        return l;
-                    }
-                    i += l;
-                    // Space
+                    // space
                     while (i < len && isspace(str[i]))
                     {
                         i++;
                     }
-                    list = MakeList(e, NULL);
-                    Val *p = list;
-                    // rest of items
-                    while (i < len && str[i] != ']')
+                    // elements
+                    Val *list = NULL;
+                    if (str[i] != ']')
                     {
+                        // first item
                         Val *e;
                         int l = ReadVal(str + i, len - i, &e);
-                        i += l;
-                        p->rest = MakeList(e, NULL);
-                        p = p->rest;
                         if (l <= 0)
                         {
-                            *out = list;
+                            *out = e;
                             return l;
                         }
+                        i += l;
+                        // Space
+                        while (i < len && isspace(str[i]))
+                        {
+                            i++;
+                        }
+                        list = MakeList(e, NULL);
+                        Val *p = list;
+                        // rest of items
+                        while (i < len && str[i] != ']')
+                        {
+                            Val *e;
+                            int l = ReadVal(str + i, len - i, &e);
+                            i += l;
+                            p->rest = MakeList(e, NULL);
+                            p = p->rest;
+                            if (l <= 0)
+                            {
+                                *out = list;
+                                return l;
+                            }
+                            // Space
+                            while (i < len && isspace(str[i]))
+                            {
+                                i++;
+                            }
+                        }
+                    }
+                    *out = list;
+                    if (str[i] == ']')
+                    {
+                        i++;
                         // Space
                         while (i < len && isspace(str[i]))
                         {
                             i++;
                         }
                     }
+                    return i;
                 }
-                *out = list;
-                if (str[i] == ']')
+            case ']':
+                // end list
+                return i;
+            default:
+                // Symbol
                 {
-                    i++;
+                    Val *sym = NULL;
+                    int slen = ReadSym(str + i, len - i, &sym);
+                    i += slen;
+                    *out = sym;
                     // Space
                     while (i < len && isspace(str[i]))
                     {
                         i++;
                     }
+                    return i;
                 }
-                return i;
-            }
-        case ']':
-            // end list
-            return i;
-        default:
-            // Symbol
-            {
-                Val *sym = NULL;
-                int slen = ReadSym(str + i, len - i, &sym);
-                i += slen;
-                *out = sym;
-                // Space
-                while (i < len && isspace(str[i]))
-                {
-                    i++;
-                }
-                return i;
-            }
+        }
     }
 }
 
