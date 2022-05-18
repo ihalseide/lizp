@@ -615,14 +615,6 @@ char *PrintValStr(Val *v, int readable)
     return new;
 }
 
-// Print value to a file
-void PrintValFile(FILE *f, Val *v, int readable)
-{
-    char *s = PrintValStr(v, readable);
-    fprintf(f, "%s", s);
-    free(s);
-}
-
 // Check whether a value is considered as true
 int IsTrue(Val *v)
 {

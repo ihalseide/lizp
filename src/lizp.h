@@ -55,7 +55,6 @@ int ReadVal(const char *start, int length, Val **out);
 int PrintValBuf(Val *p, char *out, int length, int readable);
 
 char *PrintValStr(Val *p, int readable);
-void PrintValFile(FILE *f, Val *v, int readable);
 
 Val *Eval(Val *ast, Val *env);
 

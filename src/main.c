@@ -63,6 +63,14 @@ Val *Lprepend(Val *args)
     return MakeList(CopyVal(v), CopyVal(list));
 }
 
+// Print value to a file
+void PrintValFile(FILE *f, Val *v, int readable)
+{
+    char *s = PrintValStr(v, readable);
+    fprintf(f, "%s", s);
+    free(s);
+}
+
 // [print (v)...]
 Val *Lprint(Val *args)
 {
