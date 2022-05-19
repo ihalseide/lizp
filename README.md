@@ -8,16 +8,10 @@ Memory is managed manually.
 
 ## Quick Start
 
-To get right into the REPL you just need Make and a C compiler. Run this:
+To get right into the REPL you just need a C compiler. Run this:
 
 ```shell
-make repl && ./repl
-```
-
-To run tests:
-
-```shell
-make test && ./test
+cc -o repl src/repl.c && ./repl
 ```
 
 ## Literal values
