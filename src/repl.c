@@ -8,8 +8,6 @@
 #include "lizp.h"
 #define STB_DS_IMPLEMENTATION
 #include "stb_ds.h"
-#define STRNDUP_IMPLEMENTATION
-#include "strndup.h"
 
 #define BUF_SZ (2*1024)
 
@@ -42,7 +40,10 @@ void rep(const char *str, int len, Val *env)
         return;
     }
 
-    Val *expr = NULL;
+    // debug print
+    //printf("\n<str len=%d>%.*s</str>", len, len, str);
+
+    Val *expr;
     int readlen = ReadVal(str, len, &expr);
     if (!readlen)
     {
@@ -50,6 +51,7 @@ void rep(const char *str, int len, Val *env)
     }
 
     // debug print
+    //putchar('\n');
     //PrintValFile(stdout, expr, 1);
 
     // Eval
@@ -118,12 +120,14 @@ void LoadFile(const char *fname, Val *env)
 
 int main (int argc, char **argv)
 {
+    // init environment
     Val *env = MakeList(NULL, NULL);
     LizpRegisterCoreFuncs(env);
     EnvSetFunc(env, "print", Lprint);
     // load each file given on the command line
     for (int i = 1; i < argc; i++)
     {
+        printf("loading %s\n", argv[i]);
         LoadFile(argv[i], env);
     }
     REPL(env);
