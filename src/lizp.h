@@ -10,6 +10,9 @@ typedef Val *LizpFunc(Val *args);
 struct Val
 {
     unsigned int is_sym : 1;
+#if DEBUG
+    unsigned int id;
+#endif
     union
     {
         Val *first;
@@ -31,6 +34,7 @@ Val *MakeList(Val *first, Val *rest);
 Val *MakeSym(char *s);
 Val *MakeSymCopy(const char *name, int len);
 Val *MakeSymInt(long n);
+Val *MakeSymStr(const char *s);
 Val *MakeTrue(void);
 
 int IsEqual(Val *x, Val *y);
@@ -57,11 +61,14 @@ int EnvSetFunc(Val *env, const char *name, LizpFunc * func);
 void EnvPop(Val *env);
 void EnvPush(Val *env);
 
+// These are exposed for testing and debugging purposes
+int IsSeparate(Val *a, Val *b);
+int SkipChars(const char *str, int len);
+
 #ifdef LIZP_CORE_FUNCTIONS
 // For optional core Lizp functions that would be useful for most lizp scripts
 
 void LizpRegisterCoreFuncs(Val *env);
-
 Val *Lreverse(Val *args);    // [reverse list] reverse a list
 Val *Lconcat(Val *args);     // [concat list.1 (list.N)...] concatenate lists together
 Val *Ljoin(Val *args);       // [join separator (list)...] join together each list with the separator list in between
@@ -100,6 +107,7 @@ Val *Lmember_q(Val *args);   // [member? item list]
 Val *Lcount(Val *args);      // [count item list] -> int
 Val *Lposition(Val *args);   // [position item list] -> list
 Val *Lslice(Val *args);      // [slice list start (end)] gets a sublist "slice" inclusive of start and end
+
 #endif /* LIZP_CORE_FUNCTIONS */
 #endif /* _lizp_h_ */
 
@@ -114,18 +122,25 @@ Val *Lslice(Val *args);      // [slice list start (end)] gets a sublist "slice" 
 // Dynamic array of function pointers
 LizpFunc **da_funcs;
 
-// Add function to dynamic array
-long PutFunc(LizpFunc *func)
+#if DEBUG
+// count allocated values
+static int val_count = 0;
+#endif
+
+// Put function in the dynamic array
+// Meant to be used by `EnvSetFunc` to bind native functions
+size_t PutFunc(LizpFunc *func)
 {
-    long id = arrlen(da_funcs);
+    size_t id = arrlen(da_funcs);
     arrput(da_funcs, func);
     return id;
 }
 
-// Find function in dynamic array
-LizpFunc *GetFunc(long id)
+// Get function from the dynamic array
+// Meant to be used by `Apply` to look up native functions
+LizpFunc *GetFunc(size_t id)
 {
-    int len = arrlen(da_funcs);
+    size_t len = arrlen(da_funcs);
     if (id < 0 || id >= len)
     {
         return NULL;
@@ -136,42 +151,58 @@ LizpFunc *GetFunc(long id)
 // Allocate a new value
 Val *AllocVal(void)
 {
-    return malloc(sizeof(Val));
+    Val *p = malloc(sizeof(Val));
+#if DEBUG
+    static int last_id = 0;
+    if (p)
+    {
+        p->id = last_id;
+        last_id++;
+        val_count++;
+    }
+#endif
+    return p;
 }
 
 // Free value 
 void FreeVal(Val *p)
 {
+#if DEBUG
+    val_count--;
+#endif
+    if (IsSym(p) && p->symbol)
+    {
+        free(p->symbol);
+    }
     free(p);
 }
 
 // Free value recursively
 void FreeValRec(Val *v)
 {
-    if (IsList(v))
+    if (!v)
     {
-        // List or NULL
-        Val *p = v;
-        Val *n;
-        while (p && IsList(p))
-        {
-            FreeValRec(p->first);
-            p->first = NULL;
-            n = p->rest;
-            FreeVal(p);
-            p = n;
-        }
+        // NULL
+        return;
     }
-    else
+    if (IsSym(v))
     {
         // Symbol
-        if (v->symbol)
-        {
-            free(v->symbol);
-            v->symbol = NULL;
-        }
         FreeVal(v);
+        return;
     }
+    // List
+    assert(IsList(v));
+    Val *p = v;
+    Val *n;
+    while (p && IsList(p))
+    {
+        FreeValRec(p->first);
+        n = p->rest;
+        FreeVal(p);
+        p = n;
+    }
+    return;
 }
 
 int IsEqual(Val *x, Val *y)
@@ -235,13 +266,10 @@ int IsSymInt(Val *v)
 }
 
 // Make symbol
-// - empty string -> null []
+// NOTE: does not make a copy of the `s` string
 Val *MakeSym(char *s)
 {
-    if (!s || *s == 0)
-    {
-        return NULL;
-    }
+    assert(s);
     Val *p = AllocVal();
     if (p)
     {
@@ -260,7 +288,20 @@ Val *MakeSymCopy(const char *buf, int len)
     {
         return NULL;
     }
-    return MakeSym(strndup(buf, len));
+    char *new = malloc(len + 1);
+    memcpy(new, buf, len);
+    new[len] = 0;
+    return MakeSym(new);
+}
+
+// Make symbol by copying the null-terminated `str`
+Val *MakeSymStr(const char *str)
+{
+    int len = strlen(str);
+    char *new = malloc(len + 1);
+    memcpy(new, str, len);
+    new[len] = 0;
+    return MakeSym(new);
 }
 
 // Make a symbol for an integer
@@ -302,7 +343,7 @@ Val *CopyVal(Val *p)
     }
     if (!IsList(p))
     {
-        return MakeSym(strdup(p->symbol));
+        return MakeSymStr(p->symbol);
     }
     // List
     Val *copy = MakeList(CopyVal(p->first), NULL);
@@ -436,7 +477,9 @@ static int ReadSym(const char *str, int len, Val **out)
                         return i;
                     }
                     assert(len > 0);
-                    char *str1 = strndup(str + j, len);
+                    char *str1 = malloc(len + 1);
+                    memcpy(str1, str + j, len);
+                    str1[len] = 0;
                     int len2 = EscapeStr(str1, len);
                     *out = MakeSymCopy(str1, len2);
                     free(str1);
@@ -485,6 +528,40 @@ static int ReadSym(const char *str, int len, Val **out)
     }
 }
 
+// Skip space and nested comments within `str`
+// Returns the next index into `str`
+int SkipChars(const char *str, int len)
+{
+    int i = 0;
+    int level = 0; // nesting level
+    while (i < len)
+    {
+        char c = str[i];
+        if (!c)
+        {
+            break;
+        }
+        if (c == '(')
+        {
+            i++;
+            level++;
+            continue;
+        }
+        if (level && c == ')')
+        {
+            i++;
+            level--;
+            continue;
+        }
+        if (!level && !isspace(c))
+        {
+            break;
+        }
+        i++;
+    }
+    return i;
+}
+
 // Read value from input stream
 // str = string characters
 // len = string length
@@ -496,110 +573,63 @@ int ReadVal(const char *str, int len, Val **out)
     {
         return 0;
     }
-
     int i = 0;
     while (1)
     {
-        // Space
-        while (i < len && isspace(str[i]))
-        {
-            i++;
-        }
+        i += SkipChars(str + i, len - i);
         switch (str[i])
         {
-            case '\0':
-                // end of string
+            case '\0': // end of string
+            case ']': // unmatched list
+            case '(': // uncaught comment
+            case ')': // uncaught comment
                 *out = NULL;
-                return i;
-            case ']':
-                // unmated list
-                return i;
-            case ')':
-                // unmatched comment
                 return i;
             case '[':
                 // begin list
                 {
                     i++;
-                    // space
-                    while (i < len && isspace(str[i]))
+                    // empty list?
+                    i += SkipChars(str + i, len - i);
+                    if (str[i] == ']')
                     {
                         i++;
+                        *out = NULL;
+                        return i;
                     }
-                    // elements
-                    Val *list = NULL;
-                    if (str[i] != ']')
+                    // first item
+                    Val *e;
+                    int l = ReadVal(str + i, len - i, &e);
+                    if (!l)
                     {
-                        // first item
+                        *out = NULL;
+                        return i;
+                    };
+                    i += l;
+                    Val *list = MakeList(e, NULL);
+                    Val *p = list;
+                    // rest of items
+                    while (i < len && str[i] != ']')
+                    {
                         Val *e;
                         int l = ReadVal(str + i, len - i, &e);
+                        i += l;
+                        p->rest = MakeList(e, NULL);
+                        p = p->rest;
                         if (l <= 0)
                         {
-                            *out = e;
+                            *out = list;
                             return l;
                         }
-                        i += l;
-                        // Space
-                        while (i < len && isspace(str[i]))
-                        {
-                            i++;
-                        }
-                        list = MakeList(e, NULL);
-                        Val *p = list;
-                        // rest of items
-                        while (i < len && str[i] != ']')
-                        {
-                            Val *e;
-                            int l = ReadVal(str + i, len - i, &e);
-                            i += l;
-                            p->rest = MakeList(e, NULL);
-                            p = p->rest;
-                            if (l <= 0)
-                            {
-                                *out = list;
-                                return l;
-                            }
-                            // Space
-                            while (i < len && isspace(str[i]))
-                            {
-                                i++;
-                            }
-                        }
+                        i += SkipChars(str + i, len - i);
                     }
                     *out = list;
                     if (str[i] == ']')
                     {
                         i++;
-                        // Space
-                        while (i < len && isspace(str[i]))
-                        {
-                            i++;
-                        }
+                        i += SkipChars(str + i, len - i);
                     }
                     return i;
-                }
-            case '(':
-                // comment
-                {
-                    int level = 1;
-                    while (i < len && str[i] && level > 0)
-                    {
-                        i++;
-                        switch (str[i])
-                        {
-                            case '(':
-                                level++;
-                                break;
-                            case ')':
-                                level--;
-                                break;
-                        }
-                    }
-                    if (str[i] == ')')
-                    {
-                        i++;
-                    }
-                    break;
                 }
             default:
                 // Symbol
@@ -608,11 +638,7 @@ int ReadVal(const char *str, int len, Val **out)
                     int slen = ReadSym(str + i, len - i, &sym);
                     i += slen;
                     *out = sym;
-                    // Space
-                    while (i < len && isspace(str[i]))
-                    {
-                        i++;
-                    }
+                    i += SkipChars(str + i, len - i);
                     return i;
                 }
         }
@@ -792,7 +818,7 @@ Val *MakeFalse(void)
 // make a list of the form [error rest...]
 Val *MakeError(Val *rest)
 {
-    Val *e = MakeSym(strdup("error"));
+    Val *e = MakeSymStr("error");
     if (IsList(rest))
     {
         return MakeList(e, rest);
@@ -802,7 +828,7 @@ Val *MakeError(Val *rest)
 
 Val *MakeErrorMessage(const char *msg)
 {
-    return MakeError(MakeSym(strdup(msg)));
+    return MakeError(MakeSymStr(msg));
 }
 
 // make an error for improper number of arguments
@@ -900,6 +926,7 @@ int IsFunc(Val *v)
     }
     if (v->rest->rest)
     {
+        // too many items
         return 0;
     }
     return 1;
@@ -908,7 +935,7 @@ int IsFunc(Val *v)
 // check if the value matches the form [error ...]
 int IsError(Val *v)
 {
-    if (!IsList(v))
+    if (!v || !IsList(v))
     {
         return 0;
     }
@@ -917,6 +944,7 @@ int IsError(Val *v)
 }
 
 // Set value in environment
+// Arguments should by copies of Values
 // Returns non-zero upon success
 int EnvSet(Val *env, Val *key, Val *val)
 {
@@ -1028,7 +1056,7 @@ static int Macro(Val *first, Val *args, Val *env, Val **out)
         if (!IsSym(key))
         {
             *out = MakeError(MakeList(CopyVal(key), MakeList(
-                            MakeSym(strdup("is not a symbol")), NULL)));
+                            MakeSymStr("is not a symbol"), NULL)));
             return 1;
         }
         Val *val;
@@ -1076,12 +1104,19 @@ static int Macro(Val *first, Val *args, Val *env, Val **out)
             }
             p_binds = p_binds->rest;
             Val *expr = p_binds->first;
-            EnvSet(env, CopyVal(sym), Eval(expr, env));
+            Val *val = Eval(expr, env);
+            if (IsError(val))
+            {
+                // eval error
+                *out = val;
+                EnvPop(env);
+                return 1;
+            }
+            EnvSet(env, CopyVal(sym), val);
             p_binds = p_binds->rest;
         }
-        Val *result = Eval(body, env);
+        *out = Eval(body, env);
         EnvPop(env);
-        *out = result;
         return 1;
     }
     if (!strcmp("if", s))
@@ -1093,18 +1128,24 @@ static int Macro(Val *first, Val *args, Val *env, Val **out)
             return 1;
         }
         Val *f = Eval(args->first, env);
+        if (IsError(f))
+        {
+            // eval error
+            *out = f;
+            return 1;
+        }
         int t = IsTrue(f);
         FreeValRec(f);
         if (t)
         {
             Val *consequent = args->rest->first;
-            *out =  Eval(consequent, env);
+            *out = Eval(consequent, env);
             return 1;
         }
         Val *alt_list = args->rest->rest;
-        if (!alt_list )
+        if (!alt_list)
         {
-            // default alternative
+            // no alternative
             *out = NULL;
             return 1;
         }
@@ -1131,6 +1172,12 @@ static int Macro(Val *first, Val *args, Val *env, Val **out)
         while (p && IsList(p))
         {
             e = Eval(p->first, env);
+            if (IsError(e))
+            {
+                // eval error
+                *out = e;
+                return 1;
+            }
             p = p->rest;
             if (p)
             {
@@ -1153,17 +1200,22 @@ static int Macro(Val *first, Val *args, Val *env, Val **out)
         while (p && IsList(p))
         {
             Val *e = Eval(p->first, env);
+            if (IsError(e))
+            {
+                *out = e;
+                return 1;
+            }
             if (!IsTrue(e))
             {
                 // item is false
-                *out = CopyVal(e);
+                *out = e;
                 return 1;
             }
             p = p->rest;
             if (!p)
             {
                 // last item is true
-                *out = CopyVal(e);
+                *out = e;
                 return 1;
             }
             FreeValRec(e);
@@ -1184,17 +1236,22 @@ static int Macro(Val *first, Val *args, Val *env, Val **out)
         while (p && IsList(p))
         {
             Val *e = Eval(p->first, env);
+            if (IsError(e))
+            {
+                *out = e;
+                return 1;
+            }
             if (IsTrue(e))
             {
                 // item is true
-                *out = CopyVal(e);
+                *out = e;
                 return 1;
             }
             p = p->rest;
             if (!p)
             {
                 // last item is false
-                *out = CopyVal(e);
+                *out = e;
                 return 1;
             }
             FreeValRec(e);
@@ -1222,6 +1279,11 @@ static int Macro(Val *first, Val *args, Val *env, Val **out)
         while (p && IsList(p))
         {
             Val *e = Eval(p->first, env);
+            if (IsError(e))
+            {
+                *out = e;
+                return 1;
+            }
             if (IsTrue(e))
             {
                 FreeValRec(e);
@@ -1261,17 +1323,17 @@ static int Macro(Val *first, Val *args, Val *env, Val **out)
             if (!IsSym(e))
             {
                 *out = MakeError(MakeList(CopyVal(e), MakeList(
-                                MakeSym(strdup("is not a symbol")), NULL)));
+                                MakeSymStr("is not a symbol"), NULL)));
                 return 1;
             }
             p = p->rest;
         }
+        // make lambda... with an explicit NULL body if a body is not provided
         Val *body = args->rest;
         if (body)
         {
             body = body->first;
         }
-        // make lambda... with an explicit NULL body if a body is not provided
         *out = MakeList(CopyVal(first), MakeList(CopyVal(params),
                 MakeList(CopyVal(body), NULL)));
         return 1;
@@ -1282,9 +1344,9 @@ static int Macro(Val *first, Val *args, Val *env, Val **out)
 
 // Get the length of a list.
 // Returns 0 for a non-list value.
-long ListLength(Val *l)
+int ListLength(Val *l)
 {
-    long len = 0;
+    int len = 0;
     while (l && IsList(l))
     {
         len++;
@@ -1298,65 +1360,67 @@ long ListLength(Val *l)
 // TODO: handle when first is a lambda
 Val *Apply(Val *first, Val *args, Val *env)
 {
+    // check lambda function
     if (IsLambda(first))
     {
-        // lambda function
         Val *params = first->rest->first;
         Val *body = first->rest->rest->first;
-        if (args)
+        // push env
+        EnvPush(env);
+        // bind values
+        Val *p_params = params;
+        Val *p_args = args;
+        while (p_params && IsList(p_params) && p_args && IsList(p_args))
         {
-            // push env
-            EnvPush(env);
-            // bind values
-            Val *p_params = params;
-            Val *p_args = args;
-            while (p_params && IsList(p_params) && p_args && IsList(p_args))
+            Val *param = p_params->first;
+            // parameter beginning with '&' binds the rest of the arguments
+            if ('&' == param->symbol[0])
             {
-                Val *param = p_params->first;
-                if ('&' == param->symbol[0])
+                if (p_params->rest)
                 {
-                    // symbol beginning with '&' binds the rest of the arguments
-                    if (p_params->rest)
-                    {
-                        // not the last parameter
-                        EnvPop(env);
-                        return NULL;
-                    }
-                    EnvSet(env, CopyVal(param), CopyVal(p_args));
-                    // p_params and p_args will both be non-null
-                    break;
+                    // error: not the last parameter
+                    EnvPop(env);
+                    return NULL;
                 }
-                EnvSet(env, CopyVal(param), CopyVal(p_args->first));
-                p_params = p_params->rest;
-                p_args = p_args->rest;
+                EnvSet(env, CopyVal(param), CopyVal(p_args));
+                // p_params and p_args will both be non-null
+                break;
             }
-            if ((p_params == NULL) != (p_args == NULL))
-            {
-                // parameters-arguments arity mismatch
-                EnvPop(env);
-                return NULL;
-            }
-            Val *result = Eval(body, env);
-            EnvPop(env);
-            return result;
+            // normal parameter
+            EnvSet(env, CopyVal(param), CopyVal(p_args->first));
+            p_params = p_params->rest;
+            p_args = p_args->rest;
         }
-        return Eval(body, env);
+        // check a parameters-arguments arity mismatch
+        if ((p_params == NULL) != (p_args == NULL))
+        {
+            // error
+            EnvPop(env);
+            return NULL;
+        }
+        Val *result = Eval(body, env);
+        EnvPop(env);
+        assert(IsSeparate(result, env));
+        assert(IsSeparate(result, args));
+        return result;
     }
+    // check native function
     if (IsFunc(first))
     {
-        // native function
         long id = atol(first->rest->first->symbol);
         LizpFunc *func = GetFunc(id);
         if (!func)
         {
-            // invalid function id or pointer
+            // error: invalid function id or pointer
             return NULL;
         }
-        return func(args);
+        Val *result = func(args);
+        assert(IsSeparate(result, args));
+        return result;
     }
     // invalid function
     return MakeError(MakeList(CopyVal(first), MakeList(
-                    MakeSym(strdup("is not a function")), NULL)));
+                    MakeSymStr("is not a function"), NULL)));
 }
 
 // Evaluate a Val value
@@ -1393,6 +1457,8 @@ Val *Eval(Val *ast, Val *env)
     assert(IsList(ast));
     // eval first element
     Val *first = Eval(ast->first, env);
+    assert(IsSeparate(first, ast->first));
+    assert(IsSeparate(first, env));
     if (IsError(first))
     {
         return first;
@@ -1403,6 +1469,9 @@ Val *Eval(Val *ast, Val *env)
         Val *result;
         if (Macro(first, ast->rest, env, &result))
         {
+            assert(IsSeparate(result, first));
+            assert(IsSeparate(result, env));
+            assert(IsSeparate(result, ast->rest));
             return result;
         }
     }
@@ -1414,6 +1483,8 @@ Val *Eval(Val *ast, Val *env)
     while (p_ast && IsList(p_ast))
     {
         Val *e = Eval(p_ast->first, env);
+        assert(IsSeparate(e, ast));
+        assert(IsSeparate(e, env));
         if (IsError(e))
         {
             FreeValRec(list);
@@ -1424,6 +1495,9 @@ Val *Eval(Val *ast, Val *env)
         p_ast = p_ast->rest;
     }
     Val *result = Apply(first, list->rest, env);
+    assert(IsSeparate(result, list));
+    assert(IsSeparate(result, env));
+    assert(IsSeparate(result, ast));
     FreeValRec(list);
     return result;
 }
@@ -1435,7 +1509,7 @@ int EnvSetFunc(Val *env, const char *name, LizpFunc *func)
     {
         return 0;
     }
-    Val *key = MakeSym(strdup(name));
+    Val *key = MakeSymStr(name);
     if (!key)
     {
         return 0;
@@ -1447,13 +1521,332 @@ int EnvSetFunc(Val *env, const char *name, LizpFunc *func)
         return 0;
     }
     int success = EnvSet(env, key, val);
-    if (success)
+    if (!success)
     {
-        return success;
+        FreeValRec(key);
+        FreeValRec(val);
+        return 0;
     }
-    FreeValRec(key);
-    FreeValRec(val);
+    return success;
+}
+
+// Match Arguments
+// Check if the `args` list matches the given `form`
+// If the `args` do not match, then `err` is set to a new value (which can be
+//   passed to `MakeError`)
+// Examples for the `form` string:
+// - "v" any value
+// - "l" a list
+// - "s" a symbol
+// - "L" a non-empty list
+// - "n" an integer symbol (number)
+// - "(" mark the rest of the arguments as optional. must be last
+// - "&T" variadic, mark the rest of the arguments as optional and all with the same type of T. must be last
+// - "vl" takes any value then a list
+// - "n(n" takes 1 or 2 integers
+// - "sl(s" takes a symbol and a list, and optionally another symbol
+// - "(s" optionally takes one symbol
+// - "&s" takes any amount of symbols
+// - "nn&n" takes at least 2 integers and optionally more integers
+// FIXME: optional arguments do not work yet
+int MatchArgs(const char *form, Val *args, Val **err)
+{
+    if (!IsList(args))
+    {
+        // `args` should be a list
+        *err = MakeSymStr("`MatchArgs`: error: argument `args` is not an argument list");
+        return 0;
+    }
+    if (!form || !*form)
+    {
+        // match no arguments
+        if (args)
+        {
+            if (err)
+            {
+                *err = MakeSymStr("takes no arguments");
+            }
+            return 0;
+        }
+        return 1;
+    }
+    int i = 0;
+    int optional = 0;
+    int variadic = 0;
+    int done = 0;
+    Val *p = args;
+    while (!done && form[i])
+    {
+        switch (form[i])
+        {
+            case 'v':
+                // any Value
+                if (optional && !p)
+                {
+                    done = 1;
+                    break;
+                }
+                if (!optional && !p)
+                {
+                    if (err)
+                    {
+                        const char *missing = " is missing, and it can be any"
+                            " kind of value";
+                        *err = MakeError(
+                               MakeList(MakeSymStr("argument number "),
+                                 MakeList(MakeSymInt(i + 1),
+                                   MakeList(MakeSymStr(missing),
+                                     NULL))));
+                    }
+                    return 0;
+                }
+                if (!variadic)
+                {
+                    i++;
+                }
+                p = p->rest;
+                break;
+            case 'l':
+                // list
+                if (optional && !p)
+                {
+                    done = 1;
+                    break;
+                }
+                if (!optional && !p)
+                {
+                    if (err)
+                    {
+                        const char *missing = " is missing, but it should be a"
+                            " list";
+                        *err = MakeError(
+                               MakeList(MakeSymStr("argument number "),
+                                 MakeList(MakeSymInt(i + 1),
+                                   MakeList(MakeSymStr(missing),
+                                       NULL))));
+                    }
+                    return 0;
+                }
+                if (!IsList(p->first))
+                {
+                    if (err)
+                    {
+                        *err = MakeList(CopyVal(p->first),
+                                MakeList(MakeSymStr("should be a list"),
+                                    NULL));
+                    }
+                    return 0;
+                }
+                if (!variadic)
+                {
+                    i++;
+                }
+                p = p->rest;
+                break;
+            case 's':
+                // symbol
+                if (optional && !p)
+                {
+                    done = 1;
+                    break;
+                }
+                if (!optional && !p)
+                {
+                    if (err)
+                    {
+                        const char *missing = " is missing, but it should be a"
+                            " symbol";
+                        *err = MakeError(
+                               MakeList(MakeSymStr("argument number "),
+                                 MakeList(MakeSymInt(i + 1),
+                                   MakeList(MakeSymStr(missing),
+                                       NULL))));
+                    }
+                    return 0;
+                }
+                if (!IsSym(p->first))
+                {
+                    if (err)
+                    {
+                        *err = MakeList(CopyVal(p->first), MakeList(
+                                    MakeSymStr("should be a symbol"),
+                                    NULL));
+                    }
+                    return 0;
+                }
+                if (!variadic)
+                {
+                    i++;
+                }
+                p = p->rest;
+                break;
+            case 'L':
+                // non-empty list
+                if (optional && !p)
+                {
+                    done = 1;
+                    break;
+                }
+                if (!optional && !p)
+                {
+                    if (err)
+                    {
+                        const char *missing = " is missing, but it should be a"
+                            " non-empty list";
+                        *err = MakeError(
+                               MakeList(MakeSymStr("argument number "),
+                                 MakeList(MakeSymInt(i + 1),
+                                   MakeList(MakeSymStr(missing),
+                                       NULL))));
+                    }
+                    return 0;
+                }
+                if (!p->first || !IsList(p->first))
+                {
+                    if (err)
+                    {
+                        *err = MakeList(CopyVal(p->first), MakeList(
+                                    MakeSymStr("should be a non-empty list"),
+                                    NULL));
+                    }
+                    return 0;
+                }
+                if (!variadic)
+                {
+                    i++;
+                }
+                p = p->rest;
+                break;
+            case 'n':
+                // integer/number symbol
+                if (optional && !p)
+                {
+                    done = 1;
+                    break;
+                }
+                if (!optional && !p)
+                {
+                    if (err)
+                    {
+                        const char *missing = " is missing, but it should be a"
+                            " symbol for an integer";
+                        *err = MakeError(
+                                MakeList(MakeSymStr("argument number "),
+                                    MakeList(MakeSymInt(i + 1),
+                                        MakeList(MakeSymStr(missing),
+                                            NULL))));
+                    }
+                    return 0;
+                }
+                if (!IsSymInt(p->first))
+                {
+                    if (err)
+                    {
+                        *err = MakeList(CopyVal(p->first),
+                                MakeList(MakeSymStr(
+                                        "should be a symbol for an integer"),
+                                    NULL));
+                    }
+                    return 0;
+                }
+                if (!variadic)
+                {
+                    i++;
+                }
+                p = p->rest;
+                break;
+            case '(':
+                // mark the rest of the arguments as optional
+                if (optional)
+                {
+                    // error
+                    if (err)
+                    {
+                        *err = MakeErrorMessage(
+                                "`MatchArgs`: bad `form` argument: optional"
+                                " marker '(' found after a previous optional or"
+                                " variadic marker");
+                    }
+                    return 0;
+                }
+                optional = 1;
+                i++;
+                if (p)
+                {
+                    p = p->rest;
+                }
+                break;
+            case '&':
+                // mark the rest of the arguments variadic (and optional)
+                if (optional)
+                {
+                    // error
+                    if (err)
+                    {
+                        *err = MakeErrorMessage(
+                                "`MatchArgs`: bad `form` argument: variadic"
+                                " marker '&' found after a previous optional or"
+                                " variadic marker");
+                    }
+                    return 0;
+                }
+                variadic = 1;
+                optional = 1;
+                i++;
+                if (p)
+                {
+                    p = p->rest;
+                }
+                break;
+            default:
+                // invalid character
+                if (err)
+                {
+                    *err = MakeErrorMessage("invalid form string for `MatchArgs`");
+                }
+                return 0;
+        }
+    }
+    if (!p)
+    {
+        return 1;
+    }
     return 0;
+}
+
+// Check if two values do not share structure
+int IsSeparate(Val *a, Val *b)
+{
+    if (!a || !b)
+    {
+        return 1;
+    }
+    if (a == b)
+    {
+        return 0;
+    }
+    if (IsSym(a) && IsSym(b))
+    {
+        return a->symbol != b->symbol;
+    }
+    if (IsList(a) && IsList(b))
+    {
+        return IsSeparate(a->first, b->first)
+            && IsSeparate(a->first, b->rest)
+            && IsSeparate(a->rest, b->first)
+            && IsSeparate(a->rest, b->rest);
+    }
+    // symbol and list
+    // make sure `a` is list and `b` is symbol
+    if (IsSym(a))
+    {
+        // swap a and b
+        Val *t = b;
+        b = a;
+        a = t;
+    }
+    return IsSeparate(a->first, b)
+        && IsSeparate(a->rest, b);
 }
 
 #ifdef LIZP_CORE_FUNCTIONS
