@@ -110,7 +110,6 @@ Val *Lslice(Val *args);      // [slice list start (end)] gets a sublist "slice" 
 #include <stdio.h>
 #include <string.h>
 #include "stb_ds.h"
-#include "strndup.h"
 
 // Dynamic array of function pointers
 LizpFunc **da_funcs;

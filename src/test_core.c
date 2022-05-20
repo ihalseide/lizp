@@ -4,8 +4,6 @@
 #include "lizp.h"
 #define STB_DS_IMPLEMENTATION
 #include "stb_ds.h"
-#define STRNDUP_IMPLEMENTATION
-#include "strndup.h"
 
 int main(void)
 {
