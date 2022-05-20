@@ -68,7 +68,6 @@ void rep(const char *str, int len, Val *env)
 // read, eval, print loop
 void REPL(Val *env)
 {
-    printf("\nLIZP read-eval-print loop:");
     char buffer[BUF_SZ];
     while (1)
     {
@@ -76,17 +75,16 @@ void REPL(Val *env)
         printf("\n>>> ");
         if (!fgets(buffer, sizeof(buffer), stdin))
         {
-            printf("end of input\n");
             break;
         }
         int len = strlen(buffer);
         if (len <= 0)
         {
-            printf("end of input\n");
             break;
         }
         rep(buffer, len, env);
     }
+    printf("end of input\n");
 }
 
 void LoadFile(const char *fname, Val *env)
@@ -124,12 +122,16 @@ int main (int argc, char **argv)
     Val *env = MakeList(NULL, NULL);
     LizpRegisterCoreFuncs(env);
     EnvSetFunc(env, "print", Lprint);
+    EnvSetSym(env, "#f", MakeFalse());
+    EnvSetSym(env, "#t", MakeTrue());
     // load each file given on the command line
     for (int i = 1; i < argc; i++)
     {
         printf("loading %s\n", argv[i]);
         LoadFile(argv[i], env);
     }
+    // read-eval-print loop
+    printf("\nLIZP read-eval-print loop:");
     REPL(env);
     return 0;
 }

@@ -69,6 +69,7 @@ int EnvGet(Val *env, Val *key, Val **out);
 int EnvSet(Val *env, Val *key, Val *val);
 int EnvSetFunc(Val *env, const char *name, LizpFunc * func);
 int EnvSetFuncEx(Val *env, const char *name, const char *form, LizpFunc *f);
+int EnvSetSym(Val *env, const char *symbol, Val *val);
 void EnvPop(Val *env);
 void EnvPush(Val *env);
 
@@ -941,6 +942,10 @@ int EnvSet(Val *env, Val *key, Val *val)
         return 0;
     }
     Val *pair = MakeList(key, MakeList(val, NULL));
+    if (!pair)
+    {
+        return 0;
+    }
     // push key-value pair onto the front of the list
     env->first = MakeList(pair, env->first);
     return 1;
@@ -1562,6 +1567,16 @@ int EnvSetFuncEx(Val *env, const char *name, const char *form, LizpFunc *func)
 int EnvSetFunc(Val *env, const char *name, LizpFunc *func)
 {
     return EnvSetFuncEx(env, name, NULL, func);
+}
+
+// Environment Set Symbol
+int EnvSetSym(Val *env, const char *sym, Val *v)
+{
+    if (!env || !sym)
+    {
+        return 0;
+    }
+    return EnvSet(env, MakeSymStr(sym), v);
 }
 
 static int Match1Arg(char c, Val *arg, Val **err)
