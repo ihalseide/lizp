@@ -1532,288 +1532,171 @@ int EnvSetFunc(Val *env, const char *name, LizpFunc *func)
     return success;
 }
 
+static int Match1Arg(char c, Val *arg, Val **err)
+{
+    switch (c)
+    {
+        case 'v':
+            // any value
+            return 1;
+        case 'l':
+            // list
+            if (IsList(arg))
+            {
+                return 1;
+            }
+            if (err)
+            {
+                *err = MakeSymStr("should be a list");
+            }
+            return 0;
+        case 'L':
+            // non-empty list
+            if (arg && IsList(arg))
+            {
+                return 1;
+            }
+            if (err)
+            {
+                *err = MakeSymStr("should be a non-empty list");
+            }
+            return 0;
+        case 's':
+            // symbol
+            if (IsSym(arg))
+            {
+                return 1;
+            }
+            if (err)
+            {
+                *err = MakeSymStr("should be a symbol");
+            }
+            return 0;
+        case 'n':
+            // symbol for number/integer
+            if (IsSymInt(arg))
+            {
+                return 1;
+            }
+            if (err)
+            {
+                *err = MakeSymStr("should be a symbol for an integer");
+            }
+            return 0;
+        default:
+            // error
+            assert(0 && "should be caught by the caller");
+            return 0;
+    }
+}
+
 // Match Arguments
 // Check if the `args` list matches the given `form`
 // If the `args` do not match, then `err` is set to a new value (which can be
 //   passed to `MakeError`)
-// Examples for the `form` string:
-// - "v" any value
-// - "l" a list
-// - "s" a symbol
-// - "L" a non-empty list
-// - "n" an integer symbol (number)
-// - "(" mark the rest of the arguments as optional. must be last
-// - "&T" variadic, mark the rest of the arguments as optional and all with the same type of T. must be last
-// - "vl" takes any value then a list
-// - "n(n" takes 1 or 2 integers
-// - "sl(s" takes a symbol and a list, and optionally another symbol
-// - "(s" optionally takes one symbol
-// - "&s" takes any amount of symbols
-// - "nn&n" takes at least 2 integers and optionally more integers
-// FIXME: optional arguments do not work yet
+// Meanings for characters in the `form` string:
+// - "v" : any value
+// - "l" : a list
+// - "s" : a symbol
+// - "L" : a non-empty list
+// - "n" : an integer symbol (number)
+// - "(" : mark the rest of the arguments as optional. must be last
+// - "&" : variadic, mark the rest of the arguments as optional and all with the same type of the
+//   very next character. must be last
 int MatchArgs(const char *form, Val *args, Val **err)
 {
-    if (!IsList(args))
-    {
-        // `args` should be a list
-        *err = MakeSymStr("`MatchArgs`: error: argument `args` is not an argument list");
-        return 0;
-    }
-    if (!form || !*form)
-    {
-        // match no arguments
-        if (args)
-        {
-            if (err)
-            {
-                *err = MakeSymStr("takes no arguments");
-            }
-            return 0;
-        }
-        return 1;
-    }
     int i = 0;
     int optional = 0;
-    int variadic = 0;
-    int done = 0;
     Val *p = args;
-    while (!done && form[i])
+    while (form[i] && (optional? (p != NULL) : 1))
     {
         switch (form[i])
         {
-            case 'v':
-                // any Value
-                if (optional && !p)
-                {
-                    done = 1;
-                    break;
-                }
-                if (!optional && !p)
-                {
-                    if (err)
-                    {
-                        const char *missing = " is missing, and it can be any"
-                            " kind of value";
-                        *err = MakeError(
-                               MakeList(MakeSymStr("argument number "),
-                                 MakeList(MakeSymInt(i + 1),
-                                   MakeList(MakeSymStr(missing),
-                                     NULL))));
-                    }
-                    return 0;
-                }
-                if (!variadic)
-                {
-                    i++;
-                }
-                p = p->rest;
-                break;
-            case 'l':
-                // list
-                if (optional && !p)
-                {
-                    done = 1;
-                    break;
-                }
-                if (!optional && !p)
-                {
-                    if (err)
-                    {
-                        const char *missing = " is missing, but it should be a"
-                            " list";
-                        *err = MakeError(
-                               MakeList(MakeSymStr("argument number "),
-                                 MakeList(MakeSymInt(i + 1),
-                                   MakeList(MakeSymStr(missing),
-                                       NULL))));
-                    }
-                    return 0;
-                }
-                if (!IsList(p->first))
-                {
-                    if (err)
-                    {
-                        *err = MakeList(CopyVal(p->first),
-                                MakeList(MakeSymStr("should be a list"),
-                                    NULL));
-                    }
-                    return 0;
-                }
-                if (!variadic)
-                {
-                    i++;
-                }
-                p = p->rest;
-                break;
-            case 's':
-                // symbol
-                if (optional && !p)
-                {
-                    done = 1;
-                    break;
-                }
-                if (!optional && !p)
-                {
-                    if (err)
-                    {
-                        const char *missing = " is missing, but it should be a"
-                            " symbol";
-                        *err = MakeError(
-                               MakeList(MakeSymStr("argument number "),
-                                 MakeList(MakeSymInt(i + 1),
-                                   MakeList(MakeSymStr(missing),
-                                       NULL))));
-                    }
-                    return 0;
-                }
-                if (!IsSym(p->first))
-                {
-                    if (err)
-                    {
-                        *err = MakeList(CopyVal(p->first), MakeList(
-                                    MakeSymStr("should be a symbol"),
-                                    NULL));
-                    }
-                    return 0;
-                }
-                if (!variadic)
-                {
-                    i++;
-                }
-                p = p->rest;
-                break;
-            case 'L':
-                // non-empty list
-                if (optional && !p)
-                {
-                    done = 1;
-                    break;
-                }
-                if (!optional && !p)
-                {
-                    if (err)
-                    {
-                        const char *missing = " is missing, but it should be a"
-                            " non-empty list";
-                        *err = MakeError(
-                               MakeList(MakeSymStr("argument number "),
-                                 MakeList(MakeSymInt(i + 1),
-                                   MakeList(MakeSymStr(missing),
-                                       NULL))));
-                    }
-                    return 0;
-                }
-                if (!p->first || !IsList(p->first))
-                {
-                    if (err)
-                    {
-                        *err = MakeList(CopyVal(p->first), MakeList(
-                                    MakeSymStr("should be a non-empty list"),
-                                    NULL));
-                    }
-                    return 0;
-                }
-                if (!variadic)
-                {
-                    i++;
-                }
-                p = p->rest;
-                break;
-            case 'n':
-                // integer/number symbol
-                if (optional && !p)
-                {
-                    done = 1;
-                    break;
-                }
-                if (!optional && !p)
-                {
-                    if (err)
-                    {
-                        const char *missing = " is missing, but it should be a"
-                            " symbol for an integer";
-                        *err = MakeError(
-                                MakeList(MakeSymStr("argument number "),
-                                    MakeList(MakeSymInt(i + 1),
-                                        MakeList(MakeSymStr(missing),
-                                            NULL))));
-                    }
-                    return 0;
-                }
-                if (!IsSymInt(p->first))
-                {
-                    if (err)
-                    {
-                        *err = MakeList(CopyVal(p->first),
-                                MakeList(MakeSymStr(
-                                        "should be a symbol for an integer"),
-                                    NULL));
-                    }
-                    return 0;
-                }
-                if (!variadic)
-                {
-                    i++;
-                }
-                p = p->rest;
-                break;
-            case '(':
-                // mark the rest of the arguments as optional
-                if (optional)
-                {
-                    // error
-                    if (err)
-                    {
-                        *err = MakeErrorMessage(
-                                "`MatchArgs`: bad `form` argument: optional"
-                                " marker '(' found after a previous optional or"
-                                " variadic marker");
-                    }
-                    return 0;
-                }
-                optional = 1;
-                i++;
-                if (p)
-                {
-                    p = p->rest;
-                }
-                break;
-            case '&':
-                // mark the rest of the arguments variadic (and optional)
-                if (optional)
-                {
-                    // error
-                    if (err)
-                    {
-                        *err = MakeErrorMessage(
-                                "`MatchArgs`: bad `form` argument: variadic"
-                                " marker '&' found after a previous optional or"
-                                " variadic marker");
-                    }
-                    return 0;
-                }
-                variadic = 1;
-                optional = 1;
-                i++;
-                if (p)
-                {
-                    p = p->rest;
-                }
-                break;
-            default:
-                // invalid character
+        case 'v':
+        case 'l':
+        case 's':
+        case 'L':
+        case 'n':
+            // types
+            if (!p)
+            {
                 if (err)
                 {
-                    *err = MakeErrorMessage("invalid form string for `MatchArgs`");
+                    *err = MakeSymStr(
+                        "not enough arguments");
                 }
                 return 0;
+            }
+            if (!Match1Arg(form[i], p->first, err))
+            {
+                return 0;
+            }
+            p = p->rest;
+            i++;
+            break;
+        case '(':
+            // optional marker
+            optional = 1;
+            i++;
+            break;
+        case '&':
+            // variadic marker
+            i++;
+            switch (form[i])
+            {
+            case 'v':
+            case 'l':
+            case 's':
+            case 'L':
+            case 'n':
+                // the rest of the arguments should match the given type
+                while (p)
+                {
+                    if (!Match1Arg(form[i], p->first, err))
+                    {
+                        return 0;
+                    }
+                    p = p->rest;
+                }
+                i++;
+                if (!form[i])
+                {
+                    return 1;
+                }
+                if (err)
+                {
+                    *err = MakeSymStr(
+                        "`MatchArgs` invalid `form` string: '&' requires a only directive after it");
+                }
+                return 1;
+            default:
+                // invalid char
+                if (err)
+                {
+                    *err = MakeSymStr(
+                        "`MatchArgs` invalid `form` string: '&' requires a directive after it");
+                }
+                return 0;
+            }
+        default:
+            // invalid char
+            if (err)
+            {
+                *err = MakeSymStr(
+                    "`MatchArgs` invalid `form` string: requires a directive");
+            }
+            return 0;
         }
     }
-    if (!p)
+    if (p)
     {
-        return 1;
+        if (err)
+        {
+            *err = MakeSymStr("too many arguments");
+        }
+        return 0;
     }
-    return 0;
+    return 1;
 }
 
 // Check if two values do not share structure
@@ -1947,7 +1830,7 @@ Val *Lappend(Val *args)
     Val *err;
     if (!MatchArgs("vl", args, &err))
     {
-        return err;
+        return MakeError(err);
     }
     Val *v = args->first;
     Val *list = args->rest->first;
@@ -1974,7 +1857,7 @@ Val *Lprepend(Val *args)
     Val *err;
     if (!MatchArgs("vl", args, &err))
     {
-        return err;
+        return MakeError(err);
     }
     Val *v = args->first;
     Val *list = args->rest->first;
@@ -1984,17 +1867,16 @@ Val *Lprepend(Val *args)
 // [+ (e:integer)...] sum
 Val *Lplus(Val *args)
 {
+    Val *err;
+    if (!MatchArgs("&n", args, &err))
+    {
+        return MakeError(err);
+    }
     long sum = 0;
     Val *p = args;
     while (p)
     {
         Val *e = p->first;
-        if (!IsSymInt(e))
-        {
-            return MakeError(MakeList(CopyVal(e),
-                        MakeList(MakeSymStr("is not an integer symbol"),
-                            NULL)));
-        }
         long x = atol(e->symbol);
         sum += x;
         p = p->rest;
@@ -2005,17 +1887,16 @@ Val *Lplus(Val *args)
 // [* (e:integer)...] product
 Val *Lmultiply(Val *args)
 {
+    Val *err;
+    if (!MatchArgs("&n", args, &err))
+    {
+        return MakeError(err);
+    }
     long product = 1;
     Val *p = args;
     while (p)
     {
         Val *e = p->first;
-        if (!IsSymInt(e))
-        {
-            return MakeError(MakeList(CopyVal(e),
-                        MakeList(MakeSymStr("is not an integer symbol"),
-                            NULL)));
-        }
         long x = atol(e->symbol);
         product *= x;
         p = p->rest;
@@ -2029,7 +1910,7 @@ Val *Lsubtract(Val *args)
     Val *err;
     if (!MatchArgs("n(n", args, &err))
     {
-        return err;
+        return MakeError(err);
     }
     Val *vx = args->first;
     long x = atol(vx->symbol);
@@ -2048,7 +1929,7 @@ Val *Ldivide(Val *args)
     Val *err;
     if (!MatchArgs("nn", args, &err))
     {
-        return err;
+        return MakeError(err);
     }
     Val *vx = args->first;
     Val *vy = args->rest->first;
@@ -2068,7 +1949,7 @@ Val *Lmod(Val *args)
     Val *err;
     if (!MatchArgs("nn", args, &err))
     {
-        return err;
+        return MakeError(err);
     }
     Val *vx = args->first;
     Val *vy = args->rest->first;
@@ -2088,7 +1969,7 @@ Val *Lequal(Val *args)
     Val *err;
     if (!MatchArgs("vv&v", args, &err))
     {
-        return err;
+        return MakeError(err);
     }
     Val *f = args->first;
     Val *p = args->rest;
@@ -2109,7 +1990,7 @@ Val *Lnot(Val *args)
     Val *err;
     if (!MatchArgs("v", args, &err))
     {
-        return err;
+        return MakeError(err);
     }
     return IsTrue(args->first)? MakeFalse() : MakeTrue();
 }
@@ -2120,7 +2001,7 @@ Val *Lsymbol_q(Val *args)
     Val *err;
     if (!MatchArgs("v", args, &err))
     {
-        return err;
+        return MakeError(err);
     }
     Val *v = args->first;
     return !IsSym(v)? MakeTrue() : MakeFalse();
@@ -2132,7 +2013,7 @@ Val *Linteger_q(Val *args)
     Val *err;
     if (!MatchArgs("v", args, &err))
     {
-        return err;
+        return MakeError(err);
     }
     return IsSymInt(args->first)? MakeTrue() : MakeFalse();
 }
@@ -2143,7 +2024,7 @@ Val *Llist_q(Val *args)
     Val *err;
     if (!MatchArgs("v", args, &err))
     {
-        return err;
+        return MakeError(err);
     }
     return IsList(args->first)? MakeTrue() : MakeFalse();
 }
@@ -2154,7 +2035,7 @@ Val *Lempty_q(Val *args)
     Val *err;
     if (!MatchArgs("v", args, &err))
     {
-        return err;
+        return MakeError(err);
     }
     return (!args->first)? MakeTrue() : MakeFalse();
 }
@@ -2165,7 +2046,7 @@ Val *Lnth(Val *args)
     Val *err;
     if (!MatchArgs("nl", args, &err))
     {
-        return err;
+        return MakeError(err);
     }
     Val *i = args->first;
     Val *list = args->rest->first;
@@ -2200,7 +2081,7 @@ Val *Llength(Val *args)
     Val *err;
     if (!MatchArgs("l", args, &err))
     {
-        return err;
+        return MakeError(err);
     }
     return MakeSymInt(ListLength(args->first));
 }
@@ -2211,7 +2092,7 @@ Val *Llambda_q(Val *args)
     Val *err;
     if (!MatchArgs("v", args, &err))
     {
-        return err;
+        return MakeError(err);
     }
     return IsLambda(args->first)? MakeTrue() : MakeFalse();
 }
@@ -2222,7 +2103,7 @@ Val *Lfunction_q(Val *args)
     Val *err;
     if (!MatchArgs("v", args, &err))
     {
-        return err;
+        return MakeError(err);
     }
     return IsFunc(args->first)? MakeTrue() : MakeFalse();
 }
@@ -2233,7 +2114,7 @@ Val *Lnative_q(Val *args)
     Val *err;
     if (!MatchArgs("v", args, &err))
     {
-        return err;
+        return MakeError(err);
     }
     Val *v = args->first;
     return (IsFunc(v) || IsLambda(v))? MakeTrue() : MakeFalse();
@@ -2245,7 +2126,7 @@ Val *Lincreasing(Val *args)
     Val *err;
     if (!MatchArgs("nn&n", args, &err))
     {
-        return err;
+        return MakeError(err);
     }
     Val *f = args->first;
     long x = atol(f->symbol);
@@ -2270,7 +2151,7 @@ Val *Ldecreasing(Val *args)
     Val *err;
     if (!MatchArgs("nn&n", args, &err))
     {
-        return err;
+        return MakeError(err);
     }
     Val *f = args->first;
     long x = atol(f->symbol);
@@ -2295,7 +2176,7 @@ Val *Lstrictly_increasing(Val *args)
     Val *err;
     if (!MatchArgs("nn&n", args, &err))
     {
-        return err;
+        return MakeError(err);
     }
     Val *f = args->first;
     long x = atol(f->symbol);
@@ -2320,7 +2201,7 @@ Val *Lstrictly_decreasing(Val *args)
     Val *err;
     if (!MatchArgs("nn&n", args, &err))
     {
-        return err;
+        return MakeError(err);
     }
     Val *f = args->first;
     long x = atol(f->symbol);
@@ -2345,7 +2226,7 @@ Val *Lchars(Val *args)
     Val *err;
     if (!MatchArgs("s", args, &err))
     {
-        return err;
+        return MakeError(err);
     }
     Val *sym = args->first;
     char *s = sym->symbol;
@@ -2367,7 +2248,7 @@ Val *Lsymbol(Val *args)
     Val *err;
     if (!MatchArgs("L", args, &err))
     {
-        return err;
+        return MakeError(err);
     }
     Val *list = args->first;
     int len = ListLength(list);
@@ -2397,7 +2278,7 @@ Val *Lmember_q(Val *args)
     Val *err;
     if (!MatchArgs("vl", args, &err))
     {
-        return err;
+        return MakeError(err);
     }
     Val *item = args->first;
     Val *list = args->rest->first;
@@ -2418,7 +2299,7 @@ Val *Lcount(Val *args)
     Val *err;
     if (!MatchArgs("vl", args, &err))
     {
-        return err;
+        return MakeError(err);
     }
     Val *item = args->first;
     Val *list = args->rest->first;
@@ -2440,7 +2321,7 @@ Val *Lposition(Val *args)
     Val *err;
     if (!MatchArgs("vl", args, &err))
     {
-        return err;
+        return MakeError(err);
     }
     Val *item = args->first;
     Val *list = args->rest->first;
@@ -2464,7 +2345,7 @@ Val *Lslice(Val *args)
     Val *err;
     if (!MatchArgs("ln(n", args, &err))
     {
-        return err;
+        return MakeError(err);
     }
     Val *list = args->first;
     Val *start = args->rest->first;
