@@ -3,6 +3,7 @@
 
 typedef struct Val Val;
 typedef Val *LizpFunc(Val *args);
+typedef struct FuncRecord FuncRecord;
 
 // A Value is a List or a Symbol.
 // A symbol has symbol name
@@ -19,6 +20,13 @@ struct Val
         char *symbol;
     };
     Val *rest;
+};
+
+struct FuncRecord
+{
+    const char *name;
+    const char *form;
+    LizpFunc *func;
 };
 
 Val *AllocVal(void);
@@ -60,6 +68,7 @@ int StrNeedsQuotes(const char *s);
 int EnvGet(Val *env, Val *key, Val **out);
 int EnvSet(Val *env, Val *key, Val *val);
 int EnvSetFunc(Val *env, const char *name, LizpFunc * func);
+int EnvSetFuncEx(Val *env, const char *name, const char *form, LizpFunc *f);
 void EnvPop(Val *env);
 void EnvPush(Val *env);
 
@@ -122,7 +131,7 @@ Val *Lslice(Val *args);      // [slice list start (end)] gets a sublist "slice" 
 #include "stb_ds.h"
 
 // Dynamic array of function pointers
-LizpFunc **da_funcs;
+FuncRecord *da_funcs;
 
 #if DEBUG
 // count allocated values
@@ -131,23 +140,29 @@ static int val_count = 0;
 
 // Put function in the dynamic array
 // Meant to be used by `EnvSetFunc` to bind native functions
-size_t PutFunc(LizpFunc *func)
+size_t PutFunc(const char *name, const char *form, LizpFunc *func)
 {
+    FuncRecord new = (FuncRecord)
+    {
+        .name = name,
+        .form = form,
+        .func = func,
+    };
     size_t id = arrlen(da_funcs);
-    arrput(da_funcs, func);
+    arrput(da_funcs, new);
     return id;
 }
 
 // Get function from the dynamic array
 // Meant to be used by `Apply` to look up native functions
-LizpFunc *GetFunc(size_t id)
+FuncRecord *GetFunc(size_t id)
 {
     size_t len = arrlen(da_funcs);
     if (id < 0 || id >= len)
     {
         return NULL;
     }
-    return da_funcs[id];
+    return &(da_funcs[id]);
 }
 
 // Allocate a new value
@@ -833,35 +848,6 @@ Val *MakeErrorMessage(const char *msg)
     return MakeError(MakeSymStr(msg));
 }
 
-// make an error for improper number of arguments
-// if max is negative, there is no max
-Val *MakeArgumentsError(const char *func, int min, int max)
-{
-    if (min == max)
-    {
-        // exact amount of arguments
-        const char *fmt = "`%s` requires %d argument(s)";
-        int sz = snprintf(NULL, 0, fmt, func, min);
-        char *buf = malloc(sz + 1);
-        snprintf(buf, sz + 1, fmt, func, min);
-        return MakeError(MakeSym(buf));
-    }
-    if (max > 0)
-    {
-        const char *fmt = "`%s` requires at least %d argument(s) and at most %d argument(s)";
-        int sz = snprintf(NULL, 0, fmt, func, min, max);
-        char *buf = malloc(sz + 1);
-        snprintf(buf, sz + 1, fmt, func, min, max);
-        return MakeError(MakeSym(buf));
-    }
-    // no maximum
-    const char *fmt = "`%s` requires at least %d argument(s)";
-    int sz = snprintf(NULL, 0, fmt, func, min);
-    char *buf = malloc(sz + 1);
-    snprintf(buf, sz + 1, fmt, func, min);
-    return MakeError(MakeSym(buf));
-}
-
 // Check whether a value is a lambda value (special list)
 int IsLambda(Val *v)
 {
@@ -1029,38 +1015,29 @@ void EnvPop(Val *env)
 static int Macro(Val *first, Val *args, Val *env, Val **out)
 {
     char *s = first->symbol;
+    Val *err;
     if (!strcmp("defined?", s))
     {
         // [defined? v]
-        if (!args || args->rest)
+        if (!MatchArgs("s", args, &err))
         {
-            *out = MakeArgumentsError(s, 1, 1);
+            assert(IsList(err));
+            *out = MakeError(MakeList(CopyVal(first), err));
             return 1;
         }
         Val *sym = args->first;
-        if (!IsSym(sym))
-        {
-            *out = MakeErrorMessage("first argument must be a symbol");
-            return 1;
-        }
         *out = EnvGet(env, sym, NULL)? MakeTrue() : MakeFalse();
         return 1;
     }
     if (!strcmp("get", s))
     {
         // [get key (if-undefined)] for getting value with a default of if-undefined
-        if (!args || (args->rest && args->rest->rest))
+        if (!MatchArgs("s(v", args, &err))
         {
-            *out = MakeArgumentsError(s, 1, 2);
+            *out = MakeError(err);
             return 1;
         }
         Val *key = args->first;
-        if (!IsSym(key))
-        {
-            *out = MakeError(MakeList(CopyVal(key), MakeList(
-                            MakeSymStr("is not a symbol"), NULL)));
-            return 1;
-        }
         Val *val;
         if (EnvGet(env, key, &val))
         {
@@ -1080,18 +1057,14 @@ static int Macro(Val *first, Val *args, Val *env, Val **out)
     if (!strcmp("let", s))
     {
         // [let [(key val)...] (expr)]
-        if (!args || !args->rest || args->rest->rest)
+        if (!MatchArgs("lv", args, &err))
         {
-            *out = MakeArgumentsError(s, 2, 2);
+            *out = MakeError(err);
             return 1;
         }
         Val *bindings = args->first;
         Val *body = args->rest->first;
-        if (!IsList(bindings))
-        {
-            *out = MakeErrorMessage("`let` first argument must be a list");
-            return 1;
-        }
+        // create and check bindings
         EnvPush(env);
         Val *p_binds = bindings;
         while (p_binds && IsList(p_binds))
@@ -1117,16 +1090,18 @@ static int Macro(Val *first, Val *args, Val *env, Val **out)
             EnvSet(env, CopyVal(sym), val);
             p_binds = p_binds->rest;
         }
+        // eval body
         *out = Eval(body, env);
+        // destroy bindings
         EnvPop(env);
         return 1;
     }
     if (!strcmp("if", s))
     {
         // [if condition consequent (alternative)]
-        if (!args || !args->rest || (args->rest->rest && args->rest->rest->rest))
+        if (!MatchArgs("vv(v", args, &err))
         {
-            *out = MakeArgumentsError(s, 2, 3);
+            *out = MakeError(err);
             return 1;
         }
         Val *f = Eval(args->first, env);
@@ -1158,9 +1133,9 @@ static int Macro(Val *first, Val *args, Val *env, Val **out)
     if (!strcmp("quote", s))
     {
         // [quote expr]
-        if (!args || args->rest)
+        if (!MatchArgs("v", args, &err))
         {
-            *out = MakeArgumentsError(s, 1, 1);
+            *out = MakeError(err);
             return 1;
         }
         *out = CopyVal(args->first);
@@ -1193,9 +1168,9 @@ static int Macro(Val *first, Val *args, Val *env, Val **out)
     if (!strcmp("and", s))
     {
         // [and expr1 (expr)...]
-        if (!args)
+        if (!MatchArgs("v&v", args, &err))
         {
-            *out = NULL;
+            *out = MakeError(err);
             return 1;
         }
         Val *p = args;
@@ -1229,9 +1204,9 @@ static int Macro(Val *first, Val *args, Val *env, Val **out)
     if (!strcmp("or", s))
     {
         // [or expr1 (expr)...]
-        if (!args)
+        if (!MatchArgs("v&v", args, &err))
         {
-            *out = NULL;
+            *out = MakeError(err);
             return 1;
         }
         Val *p = args;
@@ -1265,9 +1240,9 @@ static int Macro(Val *first, Val *args, Val *env, Val **out)
     if (!strcmp("cond", s))
     {
         // [cond (condition result)...] (no nested lists)
-        if (!args || !args->rest)
+        if (!MatchArgs("vv&v", args, &err))
         {
-            *out = MakeArgumentsError(s, 2, -1);
+            *out = MakeError(err);
             return 1;
         }
         if (ListLength(args) % 2 != 0)
@@ -1305,9 +1280,9 @@ static int Macro(Val *first, Val *args, Val *env, Val **out)
     if (!strcmp("lambda", s))
     {
         // [lambda [(symbol)...] (expr)]
-        if (!args || !args->rest || args->rest->rest)
+        if (!MatchArgs("l(v", args, &err))
         {
-            *out = MakeArgumentsError(s, 2, 2);
+            *out = MakeError(err);
             return 1;
         }
         Val *params = args->first;
@@ -1357,72 +1332,119 @@ int ListLength(Val *l)
     return len;
 }
 
+// Return values must not share structure with first, args, or env
+static Val *ApplyLambda(Val *first, Val *args)
+{
+    Val *params = first->rest->first;
+    Val *body = first->rest->rest->first;
+    // push env
+    Val *env = MakeList(NULL, NULL);
+    // bind values
+    Val *p_params = params;
+    Val *p_args = args;
+    while (p_params && IsList(p_params) && p_args && IsList(p_args))
+    {
+        Val *param = p_params->first;
+        // parameter beginning with '&' binds the rest of the arguments
+        if ('&' == param->symbol[0])
+        {
+            if (p_params->rest)
+            {
+                // error: not the last parameter
+                FreeValRec(env);
+                return NULL;
+            }
+            EnvSet(env, CopyVal(param), CopyVal(p_args));
+            // p_params and p_args will both be non-null
+            break;
+        }
+        // normal parameter
+        EnvSet(env, CopyVal(param), CopyVal(p_args->first));
+        p_params = p_params->rest;
+        p_args = p_args->rest;
+    }
+    // check a parameters-arguments arity mismatch
+    if ((p_params == NULL) != (p_args == NULL))
+    {
+        // error
+        FreeValRec(env);
+        return NULL;
+    }
+    Val *result = Eval(body, env);
+    assert(IsSeparate(result, env));
+    assert(IsSeparate(result, args));
+    FreeValRec(env);
+    return result;
+}
+
+static Val *ApplyNative(Val *first, Val *args)
+{
+    long id = atol(first->rest->first->symbol);
+    FuncRecord *record = GetFunc(id);
+    if (!record || !record->func)
+    {
+        // error: invalid function id or pointer
+        return MakeError(MakeList(CopyVal(first),
+                                  MakeList(MakeSymStr("is not a native function id"),
+                                           NULL)));
+    }
+    if (record->form)
+    {
+        Val *err;
+        int match = MatchArgs(record->form, args, &err);
+        if (!match && record->name)
+        {
+            return MakeError(MakeList(MakeSymStr("native function"),
+                                      MakeList(MakeSymStr(record->name),
+                                               err)));
+        }
+        if (!match)
+        {
+            return MakeError(MakeList(MakeSymStr("native function #"),
+                                      MakeList(MakeSymInt(id),
+                                               err)));
+        }
+    }
+    Val *result = record->func(args);
+    assert(IsSeparate(result, args));
+    if (IsError(result))
+    {
+        // patch-in more function info
+        Val *info;
+        if (record->func)
+        {
+            info = MakeList(MakeSymStr("native function "),
+                            MakeList(MakeSymStr(record->name),
+                                     result->rest));
+            result->rest = info;
+            return result;
+        }
+        // no name
+        info = MakeList(MakeSymStr("native function #"),
+                        MakeList(MakeSymInt(id),
+                                 result->rest));
+        result->rest = info;
+        return result;
+    }
+    return result;
+}
+
 // Apply functions
 // Return values must not share structure with first, args, or env
-// TODO: handle when first is a lambda
-Val *Apply(Val *first, Val *args, Val *env)
+Val *Apply(Val *first, Val *args)
 {
-    // check lambda function
     if (IsLambda(first))
     {
-        Val *params = first->rest->first;
-        Val *body = first->rest->rest->first;
-        // push env
-        EnvPush(env);
-        // bind values
-        Val *p_params = params;
-        Val *p_args = args;
-        while (p_params && IsList(p_params) && p_args && IsList(p_args))
-        {
-            Val *param = p_params->first;
-            // parameter beginning with '&' binds the rest of the arguments
-            if ('&' == param->symbol[0])
-            {
-                if (p_params->rest)
-                {
-                    // error: not the last parameter
-                    EnvPop(env);
-                    return NULL;
-                }
-                EnvSet(env, CopyVal(param), CopyVal(p_args));
-                // p_params and p_args will both be non-null
-                break;
-            }
-            // normal parameter
-            EnvSet(env, CopyVal(param), CopyVal(p_args->first));
-            p_params = p_params->rest;
-            p_args = p_args->rest;
-        }
-        // check a parameters-arguments arity mismatch
-        if ((p_params == NULL) != (p_args == NULL))
-        {
-            // error
-            EnvPop(env);
-            return NULL;
-        }
-        Val *result = Eval(body, env);
-        EnvPop(env);
-        assert(IsSeparate(result, env));
-        assert(IsSeparate(result, args));
-        return result;
+        return ApplyLambda(first, args);
     }
-    // check native function
     if (IsFunc(first))
     {
-        long id = atol(first->rest->first->symbol);
-        LizpFunc *func = GetFunc(id);
-        if (!func)
-        {
-            // error: invalid function id or pointer
-            return NULL;
-        }
-        Val *result = func(args);
-        assert(IsSeparate(result, args));
-        return result;
+        return ApplyNative(first, args);
     }
     // invalid function
-    return MakeError(MakeList(CopyVal(first), MakeList(
-                    MakeSymStr("is not a function"), NULL)));
+    return MakeError(MakeList(CopyVal(first),
+                              MakeList(MakeSymStr("is not a function"),
+                                       NULL)));
 }
 
 // Evaluate a Val value
@@ -1496,7 +1518,7 @@ Val *Eval(Val *ast, Val *env)
         p_list = p_list->rest;
         p_ast = p_ast->rest;
     }
-    Val *result = Apply(first, list->rest, env);
+    Val *result = Apply(first, list->rest);
     assert(IsSeparate(result, list));
     assert(IsSeparate(result, env));
     assert(IsSeparate(result, ast));
@@ -1504,8 +1526,11 @@ Val *Eval(Val *ast, Val *env)
     return result;
 }
 
+// Environment Set Function Extended.
 // Set a symbol value to be associated with a C function
-int EnvSetFunc(Val *env, const char *name, LizpFunc *func)
+// Also, use the form string to always check the arguments before the function
+// is called (see `MatchArgs`).
+int EnvSetFuncEx(Val *env, const char *name, const char *form, LizpFunc *func)
 {
     if (!env || !name || !func)
     {
@@ -1516,7 +1541,7 @@ int EnvSetFunc(Val *env, const char *name, LizpFunc *func)
     {
         return 0;
     }
-    long handle = PutFunc(func);
+    long handle = PutFunc(name, form, func);
     Val *val = MakeList(MakeSymCopy("native func", 11), MakeList(MakeSymInt(handle), NULL));
     if (!val)
     {
@@ -1530,6 +1555,13 @@ int EnvSetFunc(Val *env, const char *name, LizpFunc *func)
         return 0;
     }
     return success;
+}
+
+// Environment Set Function.
+// Set a symbol value to be associated with a C function
+int EnvSetFunc(Val *env, const char *name, LizpFunc *func)
+{
+    return EnvSetFuncEx(env, name, NULL, func);
 }
 
 static int Match1Arg(char c, Val *arg, Val **err)
@@ -1622,13 +1654,25 @@ int MatchArgs(const char *form, Val *args, Val **err)
             {
                 if (err)
                 {
-                    *err = MakeSymStr(
-                        "not enough arguments");
+                    int n = strcspn(form, "&(");
+                    char *arguments = (n == 1)? "argument" : "arguments";
+                    *err = MakeList(MakeSymStr("not enough arguments: requires at least"),
+                                    MakeList(MakeSymInt(n),
+                                             MakeList(MakeSymStr(arguments),
+                                                      NULL)));
                 }
                 return 0;
             }
             if (!Match1Arg(form[i], p->first, err))
             {
+                if (err)
+                {
+                    // wrap message with more context
+                    *err = MakeList(MakeSymStr("argument"),
+                                    MakeList(MakeSymInt(i + 1),
+                                             MakeList(*err,
+                                                      NULL)));
+                }
                 return 0;
             }
             p = p->rest;
@@ -1636,6 +1680,15 @@ int MatchArgs(const char *form, Val *args, Val **err)
             break;
         case '(':
             // optional marker
+            if (optional)
+            {
+                if (err)
+                {
+                    *err = MakeSymStr(
+                        "`MatchArgs` invalid `form` string: optional marker '(' may only appear once");
+                }
+                return 0;
+            }
             optional = 1;
             i++;
             break;
@@ -1692,7 +1745,12 @@ int MatchArgs(const char *form, Val *args, Val **err)
     {
         if (err)
         {
-            *err = MakeSymStr("too many arguments");
+            int n = strlen(form) - (optional? 1 : 0);
+            char *arguments = (n == 1) ? "argument" : "arguments";
+            *err = MakeList(MakeSymStr("too many arguments, requires at most"),
+                            MakeList(MakeSymInt(n),
+                                     MakeList(MakeSymStr(arguments),
+                                              NULL)));
         }
         return 0;
     }
@@ -1864,7 +1922,7 @@ Val *Lprepend(Val *args)
     return MakeList(CopyVal(v), CopyVal(list));
 }
 
-// [+ (e:integer)...] sum
+// [+ (integer)...] sum
 Val *Lplus(Val *args)
 {
     Val *err;
