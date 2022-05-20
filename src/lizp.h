@@ -26,7 +26,6 @@ Val *CopyVal(Val *p);
 void FreeVal(Val *p);
 void FreeValRec(Val *p);
 
-Val *MakeArgumentsError(const char *func, int min, int max);
 Val *MakeError(Val *rest);
 Val *MakeErrorMessage(const char *msg);
 Val *MakeFalse(void);
@@ -46,14 +45,17 @@ int IsSym(Val *p);
 int IsSymInt(Val *v);
 int IsTrue(Val *v);
 
-int EscapeStr(char *str, int len);
-int StrNeedsQuotes(const char *s);
-long ListLength(Val *l);
+int MatchArgs(const char *form, Val *args, Val **err);
+int ListLength(Val *l);
 
 int ReadVal(const char *start, int length, Val **out);
+int EscapeStr(char *str, int len);
+
 Val *Eval(Val *ast, Val *env);
-int PrintValBuf(Val *p, char *out, int length, int readable);
+
 char *PrintValStr(Val *p, int readable);
+int PrintValBuf(Val *p, char *out, int length, int readable);
+int StrNeedsQuotes(const char *s);
 
 int EnvGet(Val *env, Val *key, Val **out);
 int EnvSet(Val *env, Val *key, Val *val);
@@ -1942,16 +1944,13 @@ Val *Lzip(Val *args)
 // [append val list]
 Val *Lappend(Val *args)
 {
-    if (!args || !args->rest)
+    Val *err;
+    if (!MatchArgs("vl", args, &err))
     {
-        return NULL;
+        return err;
     }
     Val *v = args->first;
     Val *list = args->rest->first;
-    if (!IsList(list))
-    {
-        return NULL;
-    }
     Val *last = MakeList(CopyVal(v), NULL);
     if (!list)
     {
@@ -1972,16 +1971,13 @@ Val *Lappend(Val *args)
 // [prepend val list]
 Val *Lprepend(Val *args)
 {
-    if (!args || !args->rest)
+    Val *err;
+    if (!MatchArgs("vl", args, &err))
     {
-        return NULL;
+        return err;
     }
     Val *v = args->first;
     Val *list = args->rest->first;
-    if (!IsList(list))
-    {
-        return NULL;
-    }
     return MakeList(CopyVal(v), CopyVal(list));
 }
 
@@ -1993,9 +1989,11 @@ Val *Lplus(Val *args)
     while (p)
     {
         Val *e = p->first;
-        if (!IsSym(e))
+        if (!IsSymInt(e))
         {
-            return NULL;
+            return MakeError(MakeList(CopyVal(e),
+                        MakeList(MakeSymStr("is not an integer symbol"),
+                            NULL)));
         }
         long x = atol(e->symbol);
         sum += x;
@@ -2004,7 +2002,7 @@ Val *Lplus(Val *args)
     return MakeSymInt(sum);
 }
 
-// [+ (e:integer)...] product
+// [* (e:integer)...] product
 Val *Lmultiply(Val *args)
 {
     long product = 1;
@@ -2012,9 +2010,11 @@ Val *Lmultiply(Val *args)
     while (p)
     {
         Val *e = p->first;
-        if (!IsSym(e))
+        if (!IsSymInt(e))
         {
-            return NULL;
+            return MakeError(MakeList(CopyVal(e),
+                        MakeList(MakeSymStr("is not an integer symbol"),
+                            NULL)));
         }
         long x = atol(e->symbol);
         product *= x;
@@ -2026,52 +2026,38 @@ Val *Lmultiply(Val *args)
 // [- x:int (y:int)] subtraction
 Val *Lsubtract(Val *args)
 {
-    if (!args)
+    Val *err;
+    if (!MatchArgs("n(n", args, &err))
     {
-        return NULL;
+        return err;
     }
     Val *vx = args->first;
-    if (!IsSym(vx))
-    {
-        return NULL;
-    }
     long x = atol(vx->symbol);
-    if (args->rest)
+    if (!args->rest)
     {
-        Val *vy = args->rest->first;
-        if (!IsSym(vy))
-        {
-            return NULL;
-        }
-        long y = atol(vy->symbol);
-        return MakeSymInt(x - y);
+        return MakeSymInt(-x);
     }
-    return MakeSymInt(-x);
+    Val *vy = args->rest->first;
+    long y = atol(vy->symbol);
+    return MakeSymInt(x - y);
 }
 
 // [/ x:int y:int] division
 Val *Ldivide(Val *args)
 {
-    if (!args || !args->rest)
+    Val *err;
+    if (!MatchArgs("nn", args, &err))
     {
-        return NULL;
+        return err;
     }
     Val *vx = args->first;
-    if (!IsSym(vx))
-    {
-        return NULL;
-    }
-    long x = atol(vx->symbol);
     Val *vy = args->rest->first;
-    if (!IsSym(vy))
-    {
-        return NULL;
-    }
+    long x = atol(vx->symbol);
     long y = atol(vy->symbol);
     if (y == 0)
     {
         // division by zero
-        return NULL;
+        return MakeErrorMessage("division by zero");
     }
     return MakeSymInt(x / y);
 }
@@ -2079,26 +2065,19 @@ Val *Ldivide(Val *args)
 // [% x:int y:int] modulo
 Val *Lmod(Val *args)
 {
-    if (!args || !args->rest)
+    Val *err;
+    if (!MatchArgs("nn", args, &err))
     {
-        return NULL;
+        return err;
     }
     Val *vx = args->first;
-    if (!IsSym(vx))
-    {
-        return NULL;
-    }
-    long x = atol(vx->symbol);
     Val *vy = args->rest->first;
-    if (!IsSym(vy))
-    {
-        return NULL;
-    }
+    long x = atol(vx->symbol);
     long y = atol(vy->symbol);
     if (y == 0)
     {
         // division by zero
-        return NULL;
+        return MakeErrorMessage("division by zero");
     }
     return MakeSymInt(x % y);
 }
@@ -2106,9 +2085,10 @@ Val *Lmod(Val *args)
 // [= x y (expr)...] check equality
 Val *Lequal(Val *args)
 {
-    if (!args || !args->rest)
+    Val *err;
+    if (!MatchArgs("vv&v", args, &err))
     {
-        return NULL;
+        return err;
     }
     Val *f = args->first;
     Val *p = args->rest;
@@ -2116,7 +2096,7 @@ Val *Lequal(Val *args)
     {
         if (!IsEqual(f, p->first))
         {
-            return NULL;
+            return MakeFalse();
         }
         p = p->rest;
     }
@@ -2126,23 +2106,21 @@ Val *Lequal(Val *args)
 // [not expr] boolean not
 Val *Lnot(Val *args)
 {
-    if (!args)
+    Val *err;
+    if (!MatchArgs("v", args, &err))
     {
-        return NULL;
+        return err;
     }
-    if (IsTrue(args->first))
-    {
-        return NULL;
-    }
-    return MakeTrue();
+    return IsTrue(args->first)? MakeFalse() : MakeTrue();
 }
 
 // [symbol? val] check if value is a symbol
 Val *Lsymbol_q(Val *args)
 {
-    if (!args)
+    Val *err;
+    if (!MatchArgs("v", args, &err))
     {
-        return NULL;
+        return err;
     }
     Val *v = args->first;
     return !IsSym(v)? MakeTrue() : MakeFalse();
@@ -2151,9 +2129,10 @@ Val *Lsymbol_q(Val *args)
 // [integer? val] check if value is a integer symbol
 Val *Linteger_q(Val *args)
 {
-    if (!args)
+    Val *err;
+    if (!MatchArgs("v", args, &err))
     {
-        return NULL;
+        return err;
     }
     return IsSymInt(args->first)? MakeTrue() : MakeFalse();
 }
@@ -2161,55 +2140,40 @@ Val *Linteger_q(Val *args)
 // [list? val] check if value is a list
 Val *Llist_q(Val *args)
 {
-    if (!args)
+    Val *err;
+    if (!MatchArgs("v", args, &err))
     {
-        return NULL;
+        return err;
     }
-    if (!IsList(args->first))
-    {
-        return NULL;
-    }
-    return MakeTrue();
+    return IsList(args->first)? MakeTrue() : MakeFalse();
 }
 
 // [empty? val] check if value is a the empty list
 Val *Lempty_q(Val *args)
 {
-    if (!args)
+    Val *err;
+    if (!MatchArgs("v", args, &err))
     {
-        return NULL;
+        return err;
     }
-    if (args->first)
-    {
-        return NULL;
-    }
-    return MakeTrue();
+    return (!args->first)? MakeTrue() : MakeFalse();
 }
 
 // [nth index list] get the nth item in a list
 Val *Lnth(Val *args)
 {
-    if (!args || !args->rest)
+    Val *err;
+    if (!MatchArgs("nl", args, &err))
     {
-        return NULL;
+        return err;
     }
     Val *i = args->first;
-    if (!IsSym(i))
-    {
-        // 1st arg not a symbol
-        return NULL;
-    }
     Val *list = args->rest->first;
-    if (!IsList(list))
-    {
-        // 2nd arg not a list
-        return NULL;
-    }
     long n = atol(i->symbol);
     if (n < 0)
     {
         // index negative
-        return NULL;
+        return MakeErrorMessage("index cannot be negative");
     }
     Val *p = list;
     while (n > 0 && p && IsList(p))
@@ -2221,8 +2185,7 @@ Val *Lnth(Val *args)
     {
         return CopyVal(p->first);
     }
-    // index too big
-    return NULL;
+    return MakeErrorMessage("index too big");
 }
 
 // [list (val)...] create list from arguments (variadic)
@@ -2234,13 +2197,10 @@ Val *Llist(Val *args)
 // [length list]
 Val *Llength(Val *args)
 {
-    if (!args)
+    Val *err;
+    if (!MatchArgs("l", args, &err))
     {
-        return NULL;
-    }
-    if (!IsList(args->first))
-    {
-        return NULL;
+        return err;
     }
     return MakeSymInt(ListLength(args->first));
 }
@@ -2248,31 +2208,32 @@ Val *Llength(Val *args)
 // [lambda? v]
 Val *Llambda_q(Val *args)
 {
-    if (!args)
+    Val *err;
+    if (!MatchArgs("v", args, &err))
     {
-        return NULL;
+        return err;
     }
-    Val *v = args->first;
-    return IsLambda(v)? MakeTrue() : MakeFalse();
+    return IsLambda(args->first)? MakeTrue() : MakeFalse();
 }
 
 // [function? v]
 Val *Lfunction_q(Val *args)
 {
-    if (!args)
+    Val *err;
+    if (!MatchArgs("v", args, &err))
     {
-        return NULL;
+        return err;
     }
-    Val *v = args->first;
-    return IsFunc(v)? MakeTrue() : MakeFalse();
+    return IsFunc(args->first)? MakeTrue() : MakeFalse();
 }
 
 // [native? v]
 Val *Lnative_q(Val *args)
 {
-    if (!args)
+    Val *err;
+    if (!MatchArgs("v", args, &err))
     {
-        return NULL;
+        return err;
     }
     Val *v = args->first;
     return (IsFunc(v) || IsLambda(v))? MakeTrue() : MakeFalse();
@@ -2281,24 +2242,17 @@ Val *Lnative_q(Val *args)
 // [<= x y (expr)...] check number order
 Val *Lincreasing(Val *args)
 {
-    if (!args || !args->rest)
+    Val *err;
+    if (!MatchArgs("nn&n", args, &err))
     {
-        return NULL;
+        return err;
     }
     Val *f = args->first;
-    if (!IsSym(f))
-    {
-        return NULL;
-    }
     long x = atol(f->symbol);
     Val *p = args->rest;
     while (p && IsList(p))
     {
         Val *e = p->first;
-        if (!IsSym(e))
-        {
-            return NULL;
-        }
         long y = atol(e->symbol);
         if (!(x <= y))
         {
@@ -2313,24 +2267,17 @@ Val *Lincreasing(Val *args)
 // [>= x y (expr)...] check number order
 Val *Ldecreasing(Val *args)
 {
-    if (!args || !args->rest)
+    Val *err;
+    if (!MatchArgs("nn&n", args, &err))
     {
-        return NULL;
+        return err;
     }
     Val *f = args->first;
-    if (!IsSym(f))
-    {
-        return NULL;
-    }
     long x = atol(f->symbol);
     Val *p = args->rest;
     while (p && IsList(p))
     {
         Val *e = p->first;
-        if (!IsSym(e))
-        {
-            return NULL;
-        }
         long y = atol(e->symbol);
         if (!(x >= y))
         {
@@ -2345,24 +2292,17 @@ Val *Ldecreasing(Val *args)
 // [< x y (expr)...] check number order
 Val *Lstrictly_increasing(Val *args)
 {
-    if (!args || !args->rest)
+    Val *err;
+    if (!MatchArgs("nn&n", args, &err))
     {
-        return NULL;
+        return err;
     }
     Val *f = args->first;
-    if (!IsSym(f))
-    {
-        return NULL;
-    }
     long x = atol(f->symbol);
     Val *p = args->rest;
     while (p && IsList(p))
     {
         Val *e = p->first;
-        if (!IsSym(e))
-        {
-            return NULL;
-        }
         long y = atol(e->symbol);
         if (!(x < y))
         {
@@ -2377,24 +2317,17 @@ Val *Lstrictly_increasing(Val *args)
 // [> x y (expr)...] check number order
 Val *Lstrictly_decreasing(Val *args)
 {
-    if (!args || !args->rest)
+    Val *err;
+    if (!MatchArgs("nn&n", args, &err))
     {
-        return NULL;
+        return err;
     }
     Val *f = args->first;
-    if (!IsSym(f))
-    {
-        return NULL;
-    }
     long x = atol(f->symbol);
     Val *p = args->rest;
     while (p && IsList(p))
     {
         Val *e = p->first;
-        if (!IsSym(e))
-        {
-            return NULL;
-        }
         long y = atol(e->symbol);
         if (!(x > y))
         {
@@ -2409,15 +2342,12 @@ Val *Lstrictly_decreasing(Val *args)
 // [chars sym] -> list
 Val *Lchars(Val *args)
 {
-    if (!args)
+    Val *err;
+    if (!MatchArgs("s", args, &err))
     {
-        return NULL;
+        return err;
     }
     Val *sym = args->first;
-    if (!IsSym(sym))
-    {
-        return NULL;
-    }
     char *s = sym->symbol;
     Val *result = MakeList(MakeSymCopy(s, 1), NULL);
     s++;
@@ -2434,15 +2364,12 @@ Val *Lchars(Val *args)
 // [symbol list] -> symbol
 Val *Lsymbol(Val *args)
 {
-    if (!args)
+    Val *err;
+    if (!MatchArgs("L", args, &err))
     {
-        return NULL;
+        return err;
     }
     Val *list = args->first;
-    if (!list || !IsList(list))
-    {
-        return NULL;
-    }
     int len = ListLength(list);
     char *sym = malloc(1 + len);
     int i = 0;
@@ -2453,7 +2380,7 @@ Val *Lsymbol(Val *args)
         if (!IsSym(e))
         {
             free(sym);
-            return NULL;
+            return MakeErrorMessage("list must only contain symbols");
         }
         sym[i] = e->symbol[0];
         i++;
@@ -2467,16 +2394,13 @@ Val *Lsymbol(Val *args)
 // [member? item list]
 Val *Lmember_q(Val *args)
 {
-    if (!args || !args->rest)
+    Val *err;
+    if (!MatchArgs("vl", args, &err))
     {
-        return NULL;
+        return err;
     }
     Val *item = args->first;
     Val *list = args->rest->first;
-    if (!IsList(list))
-    {
-        return NULL;
-    }
     while (list && IsList(list))
     {
         if (IsEqual(list->first, item))
@@ -2491,16 +2415,13 @@ Val *Lmember_q(Val *args)
 // [count item list] -> int
 Val *Lcount(Val *args)
 {
-    if (!args || !args->rest)
+    Val *err;
+    if (!MatchArgs("vl", args, &err))
     {
-        return NULL;
+        return err;
     }
     Val *item = args->first;
     Val *list = args->rest->first;
-    if (!IsList(list))
-    {
-        return NULL;
-    }
     long count = 0;
     while (list && IsList(list))
     {
@@ -2516,16 +2437,13 @@ Val *Lcount(Val *args)
 // [position item list] -> list
 Val *Lposition(Val *args)
 {
-    if (!args || !args->rest)
+    Val *err;
+    if (!MatchArgs("vl", args, &err))
     {
-        return NULL;
+        return err;
     }
     Val *item = args->first;
     Val *list = args->rest->first;
-    if (!IsList(list))
-    {
-        return NULL;
-    }
     long i = 0;
     while (list && IsList(list))
     {
@@ -2543,24 +2461,17 @@ Val *Lposition(Val *args)
 // gets a sublist "slice" inclusive of start and end
 Val *Lslice(Val *args)
 {
-    if (!args || !args->rest)
+    Val *err;
+    if (!MatchArgs("ln(n", args, &err))
     {
-        return NULL;
+        return err;
     }
     Val *list = args->first;
-    if (!IsList(list))
-    {
-        return NULL;
-    }
     Val *start = args->rest->first;
-    if (!IsSym(start))
-    {
-        return NULL;
-    }
     long start_i = atol(start->symbol);
     if (start_i < 0)
     {
-        return NULL;
+        return MakeErrorMessage("start index cannot be negative");
     }
     if (!args->rest->rest)
     {
@@ -2572,6 +2483,7 @@ Val *Lslice(Val *args)
         }
         if (!list)
         {
+            // TODO: what causes this error?
             return NULL;
         }
         Val *result = MakeList(CopyVal(list->first), NULL);
@@ -2587,14 +2499,10 @@ Val *Lslice(Val *args)
     }
     // [slice list start end]
     Val *end = args->rest->rest->first;
-    if (!IsSym(end))
-    {
-        return NULL;
-    }
     long end_i = atol(end->symbol);
     if (end_i <= start_i)
     {
-        return NULL;
+        return MakeErrorMessage("start index must be less than the end index");
     }
     while (start_i > 0 && list && IsList(list))
     {
@@ -2603,6 +2511,7 @@ Val *Lslice(Val *args)
     }
     if (!list)
     {
+        // TODO: what error is this?
         return NULL;
     }
     Val *result = MakeList(CopyVal(list->first), NULL);
@@ -2618,5 +2527,6 @@ Val *Lslice(Val *args)
     }
     return result;
 }
+
 #endif /* LIZP_CORE_FUNCTIONS */
 #endif /* LIZP_IMPLEMENTATION */

@@ -539,6 +539,21 @@ static void TestRead7(void)
     assert(strcmp(v->symbol, "\"") == 0);
 }
 
+static void TestRead8(void)
+{
+    Val *ref;
+    char easy[] = "[z 3 14]";
+    ReadVal(easy, sizeof(easy), &ref);
+    // comments
+    Val *v;
+    char b[] = "(run zamboni) [z (zamboni) 3 (minutes) 14 (seconds)]";
+    int l = ReadVal(b, sizeof(b), &v);
+    assert(l == 52);
+    assert(v);
+    assert(IsList(v));
+    assert(IsEqual(v, ref));
+}
+
 static void TestRead(void)
 {
     fprintf(stderr, "%s\n", __func__);
@@ -549,6 +564,7 @@ static void TestRead(void)
     TestRead5();
     TestRead6();
     TestRead7();
+    TestRead8();
 }
 
 static void TestIsTrue(void)
@@ -667,15 +683,115 @@ static void TestEval(void)
     TestEvalLambda();
 }
 
+static void TestSkipChars1(void)
+{
+    char buf[] = "    x";
+    int i = SkipChars(buf, sizeof(buf));
+    assert(i == 4);
+}
+
+static void TestSkipChars2(void)
+{
+    char buf[] = "(comment)x";
+    int i = SkipChars(buf, sizeof(buf));
+    assert(i == 9);
+}
+
+static void TestSkipChars3(void)
+{
+    char buf[] = "   (comment)   x";
+    int i = SkipChars(buf, sizeof(buf));
+    assert(i == 15);
+}
+
+static void TestSkipChars4(void)
+{
+    char buf[] = "   (comment)  (c2) x";
+    int i = SkipChars(buf, sizeof(buf));
+    assert(i == 19);
+}
+
+static void TestSkipChars5(void)
+{
+    char buf[] = "   (comment (nested comment))(c2) x";
+    int i = SkipChars(buf, sizeof(buf));
+    assert(i == 34);
+}
+
+static void TestSkipChars(void)
+{
+    fprintf(stderr, "%s\n", __func__);
+    TestSkipChars1();
+    TestSkipChars2();
+    TestSkipChars3();
+    TestSkipChars4();
+    TestSkipChars5();
+}
+
+static void TestMatchArgs1(void)
+{
+    Val *err;
+    const char *form;
+
+    form = "";
+    assert(MatchArgs(form, NULL, &err));
+    assert(!MatchArgs(form, MakeList(MakeSym("x"), NULL), &err));
+    assert(!MatchArgs(form, MakeList(MakeList(MakeSym("x"), NULL), NULL), &err));
+
+    form = "v";
+    assert(!MatchArgs(form, NULL, &err));
+    assert(MatchArgs(form, MakeList(MakeSym("x"), NULL), &err));
+    assert(MatchArgs(form, MakeList(NULL, NULL), &err));
+
+    form = "s";
+    assert(!MatchArgs(form, NULL, &err));
+    assert(MatchArgs(form, MakeList(MakeSym("x"), NULL), &err));
+    assert(!MatchArgs(form, MakeList(MakeList(MakeSym("x"), NULL), NULL), &err));
+    assert(!MatchArgs(form, MakeList(NULL, NULL), &err));
+
+    form = "l";
+    assert(!MatchArgs(form, NULL, &err));
+    assert(!MatchArgs(form, MakeList(MakeSym("x"), NULL), &err));
+    assert(MatchArgs(form, MakeList(MakeList(MakeSym("x"), NULL), NULL), &err));
+    assert(MatchArgs(form, MakeList(NULL, NULL), &err));
+
+    form = "L";
+    assert(!MatchArgs(form, NULL, &err));
+    assert(!MatchArgs(form, MakeList(MakeSym("x"), NULL), &err));
+    assert(MatchArgs(form, MakeList(MakeList(MakeSym("x"), NULL), NULL), &err));
+    assert(!MatchArgs(form, MakeList(NULL, NULL), &err));
+}
+
+static void TestMatchArgs2(void)
+{
+    Val *err;
+    const char *form;
+
+    form = "(v";
+    assert(MatchArgs(form, NULL, &err));
+    assert(MatchArgs(form, MakeList(MakeSym("x"), NULL), &err));
+    assert(MatchArgs(form, MakeList(NULL, NULL), &err));
+    assert(!MatchArgs(form, MakeList(MakeList(NULL, NULL), MakeList(NULL, NULL)), &err));
+}
+
+static void TestMatchArgs(void)
+{
+    fprintf(stderr, "%s\n", __func__);
+    TestMatchArgs1();
+    TestMatchArgs2();
+}
+
 static void Test(void)
 {
     TestEscapeStr();
     TestVal();
     TestEqual();
     TestPrint();
+    TestSkipChars();
     TestRead();
     TestCopy();
     TestIsTrue();
+    TestMatchArgs();
     TestEval();
 }
 
