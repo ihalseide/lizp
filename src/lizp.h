@@ -34,8 +34,8 @@ Val *CopyVal(Val *p);
 void FreeVal(Val *p);
 void FreeValRec(Val *p);
 
-Val *MakeError(Val *rest);
-Val *MakeErrorMessage(const char *msg);
+Val *MakeSignal(Val *rest);
+Val *MakeSignalMessage(const char *msg);
 Val *MakeFalse(void);
 Val *MakeList(Val *first, Val *rest);
 Val *MakeSym(char *s);
@@ -45,7 +45,7 @@ Val *MakeSymStr(const char *s);
 Val *MakeTrue(void);
 
 int IsEqual(Val *x, Val *y);
-int IsError(Val *v);
+int IsSignal(Val *v);
 int IsFunc(Val *v);
 int IsLambda(Val *v);
 int IsList(Val *p);
@@ -65,6 +65,7 @@ char *PrintValStr(Val *p, int readable);
 int PrintValBuf(Val *p, char *out, int length, int readable);
 int StrNeedsQuotes(const char *s);
 
+Val *EnvGetBinding(Val *env, Val *key);
 int EnvGet(Val *env, Val *key, Val **out);
 int EnvSet(Val *env, Val *key, Val *val);
 int EnvSetFunc(Val *env, const char *name, LizpFunc * func);
@@ -99,16 +100,9 @@ Val *Ldivide(Val *args);     // [/ x:int y:int] division
 Val *Lmod(Val *args);        // [% x:int y:int] modulo
 Val *Lequal(Val *args);      // [= x y (expr)...] check equality
 Val *Lnot(Val *args);        // [not expr] boolean not
-Val *Lsymbol_q(Val *args);   // [symbol? val] check if value is a symbol
-Val *Linteger_q(Val *args);  // [integer? val] check if value is a integer symbol
-Val *Llist_q(Val *args);     // [list? val] check if value is a list
-Val *Lempty_q(Val *args);    // [empty? val] check if value is a the empty list
 Val *Lnth(Val *args);        // [nth index list] get the nth item in a list
 Val *Llist(Val *args);       // [list (val)...] create list from arguments (variadic)
 Val *Llength(Val *args);     // [length list]
-Val *Llambda_q(Val *args);   // [lambda? v]
-Val *Lfunction_q(Val *args); // [function? v]
-Val *Lnative_q(Val *args);   // [native? v]
 Val *Lincreasing(Val *args); // [<= x y (expr)...] check number order
 Val *Ldecreasing(Val *args); // [>= x y (expr)...] check number order
 Val *Lstrictly_increasing(Val *args);   // [< x y (expr)...] check number order
@@ -119,6 +113,13 @@ Val *Lmember_q(Val *args);   // [member? item list]
 Val *Lcount(Val *args);      // [count item list] -> int
 Val *Lposition(Val *args);   // [position item list] -> list
 Val *Lslice(Val *args);      // [slice list start (end)] gets a sublist "slice" inclusive of start and end
+Val *Llambda_q(Val *args);   // [lambda? v]
+Val *Lfunction_q(Val *args); // [function? v]
+Val *Lnative_q(Val *args);   // [native? v]
+Val *Lsymbol_q(Val *args);   // [symbol? val] check if value is a symbol
+Val *Linteger_q(Val *args);  // [integer? val] check if value is a integer symbol
+Val *Llist_q(Val *args);     // [list? val] check if value is a list
+Val *Lempty_q(Val *args);    // [empty? val] check if value is a empty list
 
 #endif /* LIZP_CORE_FUNCTIONS */
 #endif /* _lizp_h_ */
@@ -833,10 +834,10 @@ Val *MakeFalse(void)
     return MakeSymCopy("false", 5);
 }
 
-// make a list of the form [error rest...]
-Val *MakeError(Val *rest)
+// make a list of the form [signal rest...]
+Val *MakeSignal(Val *rest)
 {
-    Val *e = MakeSymStr("error");
+    Val *e = MakeSymStr("signal");
     if (IsList(rest))
     {
         return MakeList(e, rest);
@@ -844,9 +845,9 @@ Val *MakeError(Val *rest)
     return MakeList(e, MakeList(rest, NULL));
 }
 
-Val *MakeErrorMessage(const char *msg)
+Val *MakeSignalMessage(const char *msg)
 {
-    return MakeError(MakeSymStr(msg));
+    return MakeSignal(MakeSymStr(msg));
 }
 
 // Check whether a value is a lambda value (special list)
@@ -921,15 +922,15 @@ int IsFunc(Val *v)
     return 1;
 }
 
-// check if the value matches the form [error ...]
-int IsError(Val *v)
+// check if the value matches the form [signal ...]
+int IsSignal(Val *v)
 {
     if (!v || !IsList(v))
     {
         return 0;
     }
     Val *first = v->first;
-    return IsSym(first) && !strcmp("error", first->symbol);
+    return IsSym(first) && !strcmp("signal", first->symbol);
 }
 
 // Set value in environment
@@ -951,12 +952,12 @@ int EnvSet(Val *env, Val *key, Val *val)
     return 1;
 }
 
-// Get value in environment, does not return a copy
-int EnvGet(Val *env, Val *key, Val **out)
+// Get binding in environment
+Val *EnvGetBinding(Val *env, Val *key)
 {
     if (!env)
     {
-        return 0;
+        return NULL;
     }
     Val *scope = env;
     while (scope && IsList(scope))
@@ -968,23 +969,34 @@ int EnvGet(Val *env, Val *key, Val **out)
             if (pair && IsList(pair) && IsEqual(pair->first, key))
             {
                 // found
-                if (!pair->rest)
-                {
-                    // env is improperly set up
-                    return 0;
-                }
-                if (out)
-                {
-                    *out = pair->rest->first;
-                }
-                return 1;
+                return pair;
             }
             p = p->rest;
         }
         // outer scope
         scope = scope->rest;
     }
-    return 0;
+    return NULL;
+}
+
+// Get value in environment, does not return a copy
+int EnvGet(Val *env, Val *key, Val **out)
+{
+    if (!env)
+    {
+        return 0;
+    }
+    Val *bind = EnvGetBinding(env, key);
+    if (!bind || !bind->rest)
+    {
+        return 0;
+    }
+    if (out)
+    {
+        // value
+        *out = bind->rest->first;
+    }
+    return 1;
 }
 
 // push a new context onto the environment
@@ -1013,6 +1025,135 @@ void EnvPop(Val *env)
     FreeVal(pair);
 }
 
+// Get the length of a list.
+// Returns 0 for a non-list value.
+int ListLength(Val *l)
+{
+    int len = 0;
+    while (l && IsList(l))
+    {
+        len++;
+        l = l->rest;
+    }
+    return len;
+}
+
+// Return values must not share structure with first, args, or env
+static Val *ApplyLambda(Val *first, Val *args, Val *env)
+{
+    Val *params = first->rest->first;
+    Val *body = first->rest->rest->first;
+    // push env
+    EnvPush(env);
+    // bind values
+    Val *p_params = params;
+    Val *p_args = args;
+    while (p_params && IsList(p_params) && p_args && IsList(p_args))
+    {
+        Val *param = p_params->first;
+        // parameter beginning with '&' binds the rest of the arguments
+        if ('&' == param->symbol[0])
+        {
+            if (p_params->rest)
+            {
+                // error: not the last parameter
+                EnvPop(env);
+                return NULL;
+            }
+            EnvSet(env, CopyVal(param), CopyVal(p_args));
+            // p_params and p_args will both be non-null
+            break;
+        }
+        // normal parameter
+        EnvSet(env, CopyVal(param), CopyVal(p_args->first));
+        p_params = p_params->rest;
+        p_args = p_args->rest;
+    }
+    // check a parameters-arguments arity mismatch
+    if ((p_params == NULL) != (p_args == NULL))
+    {
+        // error
+        EnvPop(env);
+        return NULL;
+    }
+    Val *result = Eval(body, env);
+    assert(IsSeparate(result, env));
+    assert(IsSeparate(result, args));
+    EnvPop(env);
+    return result;
+}
+
+static Val *ApplyNative(Val *first, Val *args)
+{
+    long id = atol(first->rest->first->symbol);
+    FuncRecord *record = GetFunc(id);
+    if (!record || !record->func)
+    {
+        // error: invalid function id or pointer
+        return MakeSignal(MakeList(CopyVal(first),
+                                  MakeList(MakeSymStr("is not a native function id"),
+                                           NULL)));
+    }
+    if (record->form)
+    {
+        // type checking
+        Val *err;
+        int match = MatchArgs(record->form, args, &err);
+        if (!match && record->name)
+        {
+            return MakeSignal(MakeList(MakeSymStr("native function"),
+                                      MakeList(MakeSymStr(record->name),
+                                               err)));
+        }
+        if (!match)
+        {
+            return MakeSignal(MakeList(MakeSymStr("native function #"),
+                                      MakeList(MakeSymInt(id),
+                                               err)));
+        }
+    }
+    Val *result = record->func(args);
+    assert(IsSeparate(result, args));
+    if (IsSignal(result) && !IsSignal(args))
+    {
+        // patch-in more function info
+        Val *info;
+        if (record->func)
+        {
+            info = MakeList(MakeSymStr("native function "),
+                            MakeList(MakeSymStr(record->name),
+                                     result->rest));
+            result->rest = info;
+            return result;
+        }
+        // no name
+        info = MakeList(MakeSymStr("native function #"),
+                        MakeList(MakeSymInt(id),
+                                 result->rest));
+        result->rest = info;
+        return result;
+    }
+    return result;
+}
+
+// Apply functions
+// Return values must not share structure with first, args, or env
+Val *Apply(Val *first, Val *args, Val *env)
+{
+    if (IsLambda(first))
+    {
+        return ApplyLambda(first, args, env);
+    }
+    if (IsFunc(first))
+    {
+        return ApplyNative(first, args);
+    }
+    // invalid function
+    return MakeSignal(MakeList(CopyVal(first),
+                              MakeList(MakeSymStr("is not a function"),
+                                       NULL)));
+}
+
 // Evaluate a macro
 // Returns whether `first` is a symbol for a macro. If it is a macro,
 // the macro code is executed, otherwise this function does nothing.
@@ -1021,13 +1162,60 @@ static int Macro(Val *first, Val *args, Val *env, Val **out)
 {
     char *s = first->symbol;
     Val *err;
-    if (!strcmp("defined?", s))
+    if (!strcmp("handle", s))
     {
-        // [defined? v]
+        // [handle expr1 expr2] apply expr2 if evaluating expr1 has a signal
+        if (!MatchArgs("vv", args, &err))
+        {
+            *out = MakeSignal(err);
+            return 1;
+        }
+        Val *val1 = Eval(args->first, env);
+        if (!IsSignal(val1))
+        {
+            *out = val1;
+            return 1;
+        }
+        // unwrap signal so it doesn't raise again
+        Val *args1 = MakeList(val1->rest, NULL);
+        FreeValRec(val1->first);
+        Val *handler = Eval(args->rest->first, env);
+        // Call the 1-argument handler
+        *out = Apply(handler, args1, env);
+        FreeValRec(handler);
+        FreeValRec(args1);
+        return 1;
+    }
+    if (!strcmp("bind!", s))
+    {
+        // [bind! symbol val] bind a symbol to a value
+        if (!MatchArgs("sv", args, &err))
+        {
+            *out = MakeSignal(err);
+            return 1;
+        }
+        Val *newVal = Eval(args->rest->first, env);
+        Val *binding = EnvGetBinding(env, args->first);
+        if (binding)
+        {
+            // symbol already bound
+            FreeValRec(binding->rest->first);
+            binding->rest->first = CopyVal(newVal);
+            *out = newVal;
+            return 1;
+        }
+        // symbol not already bound
+        EnvSet(env, CopyVal(args->first), CopyVal(newVal));
+        *out = newVal;
+        return 1;
+    }
+    if (!strcmp("bound?", s))
+    {
+        // [bound? v]
         if (!MatchArgs("s", args, &err))
         {
             assert(IsList(err));
-            *out = MakeError(MakeList(CopyVal(first), err));
+            *out = MakeSignal(MakeList(CopyVal(first), err));
             return 1;
         }
         Val *sym = args->first;
@@ -1039,7 +1227,7 @@ static int Macro(Val *first, Val *args, Val *env, Val **out)
         // [get key (if-undefined)] for getting value with a default of if-undefined
         if (!MatchArgs("s(v", args, &err))
         {
-            *out = MakeError(err);
+            *out = MakeSignal(err);
             return 1;
         }
         Val *key = args->first;
@@ -1056,7 +1244,7 @@ static int Macro(Val *first, Val *args, Val *env, Val **out)
             return 1;
         }
         // default is error
-        *out = MakeErrorMessage("undefined symbol");
+        *out = MakeSignalMessage("unbound symbol");
         return 1;
     }
     if (!strcmp("let", s))
@@ -1064,7 +1252,7 @@ static int Macro(Val *first, Val *args, Val *env, Val **out)
         // [let [(key val)...] (expr)]
         if (!MatchArgs("lv", args, &err))
         {
-            *out = MakeError(err);
+            *out = MakeSignal(err);
             return 1;
         }
         Val *bindings = args->first;
@@ -1079,13 +1267,13 @@ static int Macro(Val *first, Val *args, Val *env, Val **out)
             {
                 // invalid symbol or uneven amount of args
                 EnvPop(env);
-                *out = MakeErrorMessage("`let` bindings list must consist of alternating symbols and expressions");
+                *out = MakeSignalMessage("`let` bindings list must consist of alternating symbols and expressions");
                 return 1;
             }
             p_binds = p_binds->rest;
             Val *expr = p_binds->first;
             Val *val = Eval(expr, env);
-            if (IsError(val))
+            if (IsSignal(val))
             {
                 // eval error
                 *out = val;
@@ -1106,11 +1294,11 @@ static int Macro(Val *first, Val *args, Val *env, Val **out)
         // [if condition consequent (alternative)]
         if (!MatchArgs("vv(v", args, &err))
         {
-            *out = MakeError(err);
+            *out = MakeSignal(err);
             return 1;
         }
         Val *f = Eval(args->first, env);
-        if (IsError(f))
+        if (IsSignal(f))
         {
             // eval error
             *out = f;
@@ -1140,7 +1328,7 @@ static int Macro(Val *first, Val *args, Val *env, Val **out)
         // [quote expr]
         if (!MatchArgs("v", args, &err))
         {
-            *out = MakeError(err);
+            *out = MakeSignal(err);
             return 1;
         }
         *out = CopyVal(args->first);
@@ -1154,7 +1342,7 @@ static int Macro(Val *first, Val *args, Val *env, Val **out)
         while (p && IsList(p))
         {
             e = Eval(p->first, env);
-            if (IsError(e))
+            if (IsSignal(e))
             {
                 // eval error
                 *out = e;
@@ -1175,14 +1363,14 @@ static int Macro(Val *first, Val *args, Val *env, Val **out)
         // [and expr1 (expr)...]
         if (!MatchArgs("v&v", args, &err))
         {
-            *out = MakeError(err);
+            *out = MakeSignal(err);
             return 1;
         }
         Val *p = args;
         while (p && IsList(p))
         {
             Val *e = Eval(p->first, env);
-            if (IsError(e))
+            if (IsSignal(e))
             {
                 *out = e;
                 return 1;
@@ -1211,14 +1399,14 @@ static int Macro(Val *first, Val *args, Val *env, Val **out)
         // [or expr1 (expr)...]
         if (!MatchArgs("v&v", args, &err))
         {
-            *out = MakeError(err);
+            *out = MakeSignal(err);
             return 1;
         }
         Val *p = args;
         while (p && IsList(p))
         {
             Val *e = Eval(p->first, env);
-            if (IsError(e))
+            if (IsSignal(e))
             {
                 *out = e;
                 return 1;
@@ -1247,12 +1435,12 @@ static int Macro(Val *first, Val *args, Val *env, Val **out)
         // [cond (condition result)...] (no nested lists)
         if (!MatchArgs("vv&v", args, &err))
         {
-            *out = MakeError(err);
+            *out = MakeSignal(err);
             return 1;
         }
         if (ListLength(args) % 2 != 0)
         {
-            *out = MakeErrorMessage("`cond` requires an even amount of"
+            *out = MakeSignalMessage("`cond` requires an even amount of"
                                     " alternating condition expressions and"
                                     " consequence expressions");
             return 1;
@@ -1261,7 +1449,7 @@ static int Macro(Val *first, Val *args, Val *env, Val **out)
         while (p && IsList(p))
         {
             Val *e = Eval(p->first, env);
-            if (IsError(e))
+            if (IsSignal(e))
             {
                 *out = e;
                 return 1;
@@ -1287,13 +1475,13 @@ static int Macro(Val *first, Val *args, Val *env, Val **out)
         // [lambda [(symbol)...] (expr)]
         if (!MatchArgs("l(v", args, &err))
         {
-            *out = MakeError(err);
+            *out = MakeSignal(err);
             return 1;
         }
         Val *params = args->first;
         if (!IsList(params))
         {
-            *out = MakeErrorMessage("`lambda` first argument must be a list of"
+            *out = MakeSignalMessage("`lambda` first argument must be a list of"
                                     " symbols");
             return 1;
         }
@@ -1304,7 +1492,7 @@ static int Macro(Val *first, Val *args, Val *env, Val **out)
             Val *e = p->first;
             if (!IsSym(e))
             {
-                *out = MakeError(MakeList(CopyVal(e), MakeList(
+                *out = MakeSignal(MakeList(CopyVal(e), MakeList(
                                 MakeSymStr("is not a symbol"), NULL)));
                 return 1;
             }
@@ -1322,134 +1510,6 @@ static int Macro(Val *first, Val *args, Val *env, Val **out)
     }
     // not a macro
     return 0;
-}
-
-// Get the length of a list.
-// Returns 0 for a non-list value.
-int ListLength(Val *l)
-{
-    int len = 0;
-    while (l && IsList(l))
-    {
-        len++;
-        l = l->rest;
-    }
-    return len;
-}
-
-// Return values must not share structure with first, args, or env
-static Val *ApplyLambda(Val *first, Val *args)
-{
-    Val *params = first->rest->first;
-    Val *body = first->rest->rest->first;
-    // push env
-    Val *env = MakeList(NULL, NULL);
-    // bind values
-    Val *p_params = params;
-    Val *p_args = args;
-    while (p_params && IsList(p_params) && p_args && IsList(p_args))
-    {
-        Val *param = p_params->first;
-        // parameter beginning with '&' binds the rest of the arguments
-        if ('&' == param->symbol[0])
-        {
-            if (p_params->rest)
-            {
-                // error: not the last parameter
-                FreeValRec(env);
-                return NULL;
-            }
-            EnvSet(env, CopyVal(param), CopyVal(p_args));
-            // p_params and p_args will both be non-null
-            break;
-        }
-        // normal parameter
-        EnvSet(env, CopyVal(param), CopyVal(p_args->first));
-        p_params = p_params->rest;
-        p_args = p_args->rest;
-    }
-    // check a parameters-arguments arity mismatch
-    if ((p_params == NULL) != (p_args == NULL))
-    {
-        // error
-        FreeValRec(env);
-        return NULL;
-    }
-    Val *result = Eval(body, env);
-    assert(IsSeparate(result, env));
-    assert(IsSeparate(result, args));
-    FreeValRec(env);
-    return result;
-}
-
-static Val *ApplyNative(Val *first, Val *args)
-{
-    long id = atol(first->rest->first->symbol);
-    FuncRecord *record = GetFunc(id);
-    if (!record || !record->func)
-    {
-        // error: invalid function id or pointer
-        return MakeError(MakeList(CopyVal(first),
-                                  MakeList(MakeSymStr("is not a native function id"),
-                                           NULL)));
-    }
-    if (record->form)
-    {
-        Val *err;
-        int match = MatchArgs(record->form, args, &err);
-        if (!match && record->name)
-        {
-            return MakeError(MakeList(MakeSymStr("native function"),
-                                      MakeList(MakeSymStr(record->name),
-                                               err)));
-        }
-        if (!match)
-        {
-            return MakeError(MakeList(MakeSymStr("native function #"),
-                                      MakeList(MakeSymInt(id),
-                                               err)));
-        }
-    }
-    Val *result = record->func(args);
-    assert(IsSeparate(result, args));
-    if (IsError(result))
-    {
-        // patch-in more function info
-        Val *info;
-        if (record->func)
-        {
-            info = MakeList(MakeSymStr("native function "),
-                            MakeList(MakeSymStr(record->name),
-                                     result->rest));
-            result->rest = info;
-            return result;
-        }
-        // no name
-        info = MakeList(MakeSymStr("native function #"),
-                        MakeList(MakeSymInt(id),
-                                 result->rest));
-        result->rest = info;
-        return result;
-    }
-    return result;
-}
-
-// Apply functions
-// Return values must not share structure with first, args, or env
-Val *Apply(Val *first, Val *args)
-{
-    if (IsLambda(first))
-    {
-        return ApplyLambda(first, args);
-    }
-    if (IsFunc(first))
-    {
-        return ApplyNative(first, args);
-    }
-    // invalid function
-    return MakeError(MakeList(CopyVal(first),
-                              MakeList(MakeSymStr("is not a function"),
-                                       NULL)));
 }
 
 // Evaluate a Val value
@@ -1488,7 +1548,7 @@ Val *Eval(Val *ast, Val *env)
     Val *first = Eval(ast->first, env);
     assert(IsSeparate(first, ast->first));
     assert(IsSeparate(first, env));
-    if (IsError(first))
+    if (IsSignal(first))
     {
         return first;
     }
@@ -1514,7 +1574,7 @@ Val *Eval(Val *ast, Val *env)
         Val *e = Eval(p_ast->first, env);
         assert(IsSeparate(e, ast));
         assert(IsSeparate(e, env));
-        if (IsError(e))
+        if (IsSignal(e))
         {
             FreeValRec(list);
             return e;
@@ -1523,7 +1583,7 @@ Val *Eval(Val *ast, Val *env)
         p_list = p_list->rest;
         p_ast = p_ast->rest;
     }
-    Val *result = Apply(first, list->rest);
+    Val *result = Apply(first, list->rest, env);
     assert(IsSeparate(result, list));
     assert(IsSeparate(result, env));
     assert(IsSeparate(result, ast));
@@ -1640,7 +1700,7 @@ static int Match1Arg(char c, Val *arg, Val **err)
 // Match Arguments
 // Check if the `args` list matches the given `form`
 // If the `args` do not match, then `err` is set to a new value (which can be
-//   passed to `MakeError`)
+//   passed to `MakeSignal`)
 // Meanings for characters in the `form` string:
 // - "v" : any value
 // - "l" : a list
@@ -1903,7 +1963,7 @@ Val *Lappend(Val *args)
     Val *err;
     if (!MatchArgs("vl", args, &err))
     {
-        return MakeError(err);
+        return MakeSignal(err);
     }
     Val *v = args->first;
     Val *list = args->rest->first;
@@ -1930,7 +1990,7 @@ Val *Lprepend(Val *args)
     Val *err;
     if (!MatchArgs("vl", args, &err))
     {
-        return MakeError(err);
+        return MakeSignal(err);
     }
     Val *v = args->first;
     Val *list = args->rest->first;
@@ -1943,7 +2003,7 @@ Val *Lplus(Val *args)
     Val *err;
     if (!MatchArgs("&n", args, &err))
     {
-        return MakeError(err);
+        return MakeSignal(err);
     }
     long sum = 0;
     Val *p = args;
@@ -1963,7 +2023,7 @@ Val *Lmultiply(Val *args)
     Val *err;
     if (!MatchArgs("&n", args, &err))
     {
-        return MakeError(err);
+        return MakeSignal(err);
     }
     long product = 1;
     Val *p = args;
@@ -1983,7 +2043,7 @@ Val *Lsubtract(Val *args)
     Val *err;
     if (!MatchArgs("n(n", args, &err))
     {
-        return MakeError(err);
+        return MakeSignal(err);
     }
     Val *vx = args->first;
     long x = atol(vx->symbol);
@@ -2002,7 +2062,7 @@ Val *Ldivide(Val *args)
     Val *err;
     if (!MatchArgs("nn", args, &err))
     {
-        return MakeError(err);
+        return MakeSignal(err);
     }
     Val *vx = args->first;
     Val *vy = args->rest->first;
@@ -2011,7 +2071,7 @@ Val *Ldivide(Val *args)
     if (y == 0)
     {
         // division by zero
-        return MakeErrorMessage("division by zero");
+        return MakeSignalMessage("division by zero");
     }
     return MakeSymInt(x / y);
 }
@@ -2022,7 +2082,7 @@ Val *Lmod(Val *args)
     Val *err;
     if (!MatchArgs("nn", args, &err))
     {
-        return MakeError(err);
+        return MakeSignal(err);
     }
     Val *vx = args->first;
     Val *vy = args->rest->first;
@@ -2031,7 +2091,7 @@ Val *Lmod(Val *args)
     if (y == 0)
     {
         // division by zero
-        return MakeErrorMessage("division by zero");
+        return MakeSignalMessage("division by zero");
     }
     return MakeSymInt(x % y);
 }
@@ -2042,7 +2102,7 @@ Val *Lequal(Val *args)
     Val *err;
     if (!MatchArgs("vv&v", args, &err))
     {
-        return MakeError(err);
+        return MakeSignal(err);
     }
     Val *f = args->first;
     Val *p = args->rest;
@@ -2063,7 +2123,7 @@ Val *Lnot(Val *args)
     Val *err;
     if (!MatchArgs("v", args, &err))
     {
-        return MakeError(err);
+        return MakeSignal(err);
     }
     return IsTrue(args->first)? MakeFalse() : MakeTrue();
 }
@@ -2074,10 +2134,10 @@ Val *Lsymbol_q(Val *args)
     Val *err;
     if (!MatchArgs("v", args, &err))
     {
-        return MakeError(err);
+        return MakeSignal(err);
     }
     Val *v = args->first;
-    return !IsSym(v)? MakeTrue() : MakeFalse();
+    return IsSym(v)? MakeTrue() : MakeFalse();
 }
 
 // [integer? val] check if value is a integer symbol
@@ -2086,7 +2146,7 @@ Val *Linteger_q(Val *args)
     Val *err;
     if (!MatchArgs("v", args, &err))
     {
-        return MakeError(err);
+        return MakeSignal(err);
     }
     return IsSymInt(args->first)? MakeTrue() : MakeFalse();
 }
@@ -2097,7 +2157,7 @@ Val *Llist_q(Val *args)
     Val *err;
     if (!MatchArgs("v", args, &err))
     {
-        return MakeError(err);
+        return MakeSignal(err);
     }
     return IsList(args->first)? MakeTrue() : MakeFalse();
 }
@@ -2108,7 +2168,7 @@ Val *Lempty_q(Val *args)
     Val *err;
     if (!MatchArgs("v", args, &err))
     {
-        return MakeError(err);
+        return MakeSignal(err);
     }
     return (!args->first)? MakeTrue() : MakeFalse();
 }
@@ -2119,7 +2179,7 @@ Val *Lnth(Val *args)
     Val *err;
     if (!MatchArgs("nl", args, &err))
     {
-        return MakeError(err);
+        return MakeSignal(err);
     }
     Val *i = args->first;
     Val *list = args->rest->first;
@@ -2127,7 +2187,7 @@ Val *Lnth(Val *args)
     if (n < 0)
     {
         // index negative
-        return MakeErrorMessage("index cannot be negative");
+        return MakeSignalMessage("index cannot be negative");
     }
     Val *p = list;
     while (n > 0 && p && IsList(p))
@@ -2139,7 +2199,7 @@ Val *Lnth(Val *args)
     {
         return CopyVal(p->first);
     }
-    return MakeErrorMessage("index too big");
+    return MakeSignalMessage("index too big");
 }
 
 // [list (val)...] create list from arguments (variadic)
@@ -2154,7 +2214,7 @@ Val *Llength(Val *args)
     Val *err;
     if (!MatchArgs("l", args, &err))
     {
-        return MakeError(err);
+        return MakeSignal(err);
     }
     return MakeSymInt(ListLength(args->first));
 }
@@ -2165,7 +2225,7 @@ Val *Llambda_q(Val *args)
     Val *err;
     if (!MatchArgs("v", args, &err))
     {
-        return MakeError(err);
+        return MakeSignal(err);
     }
     return IsLambda(args->first)? MakeTrue() : MakeFalse();
 }
@@ -2176,7 +2236,7 @@ Val *Lfunction_q(Val *args)
     Val *err;
     if (!MatchArgs("v", args, &err))
     {
-        return MakeError(err);
+        return MakeSignal(err);
     }
     return IsFunc(args->first)? MakeTrue() : MakeFalse();
 }
@@ -2187,7 +2247,7 @@ Val *Lnative_q(Val *args)
     Val *err;
     if (!MatchArgs("v", args, &err))
     {
-        return MakeError(err);
+        return MakeSignal(err);
     }
     Val *v = args->first;
     return (IsFunc(v) || IsLambda(v))? MakeTrue() : MakeFalse();
@@ -2199,7 +2259,7 @@ Val *Lincreasing(Val *args)
     Val *err;
     if (!MatchArgs("nn&n", args, &err))
     {
-        return MakeError(err);
+        return MakeSignal(err);
     }
     Val *f = args->first;
     long x = atol(f->symbol);
@@ -2224,7 +2284,7 @@ Val *Ldecreasing(Val *args)
     Val *err;
     if (!MatchArgs("nn&n", args, &err))
     {
-        return MakeError(err);
+        return MakeSignal(err);
     }
     Val *f = args->first;
     long x = atol(f->symbol);
@@ -2249,7 +2309,7 @@ Val *Lstrictly_increasing(Val *args)
     Val *err;
     if (!MatchArgs("nn&n", args, &err))
     {
-        return MakeError(err);
+        return MakeSignal(err);
     }
     Val *f = args->first;
     long x = atol(f->symbol);
@@ -2274,7 +2334,7 @@ Val *Lstrictly_decreasing(Val *args)
     Val *err;
     if (!MatchArgs("nn&n", args, &err))
     {
-        return MakeError(err);
+        return MakeSignal(err);
     }
     Val *f = args->first;
     long x = atol(f->symbol);
@@ -2299,7 +2359,7 @@ Val *Lchars(Val *args)
     Val *err;
     if (!MatchArgs("s", args, &err))
     {
-        return MakeError(err);
+        return MakeSignal(err);
     }
     Val *sym = args->first;
     char *s = sym->symbol;
@@ -2321,7 +2381,7 @@ Val *Lsymbol(Val *args)
     Val *err;
     if (!MatchArgs("L", args, &err))
     {
-        return MakeError(err);
+        return MakeSignal(err);
     }
     Val *list = args->first;
     int len = ListLength(list);
@@ -2334,7 +2394,7 @@ Val *Lsymbol(Val *args)
         if (!IsSym(e))
         {
             free(sym);
-            return MakeErrorMessage("list must only contain symbols");
+            return MakeSignalMessage("list must only contain symbols");
         }
         sym[i] = e->symbol[0];
         i++;
@@ -2351,7 +2411,7 @@ Val *Lmember_q(Val *args)
     Val *err;
     if (!MatchArgs("vl", args, &err))
     {
-        return MakeError(err);
+        return MakeSignal(err);
     }
     Val *item = args->first;
     Val *list = args->rest->first;
@@ -2372,7 +2432,7 @@ Val *Lcount(Val *args)
     Val *err;
     if (!MatchArgs("vl", args, &err))
     {
-        return MakeError(err);
+        return MakeSignal(err);
     }
     Val *item = args->first;
     Val *list = args->rest->first;
@@ -2394,7 +2454,7 @@ Val *Lposition(Val *args)
     Val *err;
     if (!MatchArgs("vl", args, &err))
     {
-        return MakeError(err);
+        return MakeSignal(err);
     }
     Val *item = args->first;
     Val *list = args->rest->first;
@@ -2418,14 +2478,14 @@ Val *Lslice(Val *args)
     Val *err;
     if (!MatchArgs("ln(n", args, &err))
     {
-        return MakeError(err);
+        return MakeSignal(err);
     }
     Val *list = args->first;
     Val *start = args->rest->first;
     long start_i = atol(start->symbol);
     if (start_i < 0)
     {
-        return MakeErrorMessage("start index cannot be negative");
+        return MakeSignalMessage("start index cannot be negative");
     }
     if (!args->rest->rest)
     {
@@ -2456,7 +2516,7 @@ Val *Lslice(Val *args)
     long end_i = atol(end->symbol);
     if (end_i <= start_i)
     {
-        return MakeErrorMessage("start index must be less than the end index");
+        return MakeSignalMessage("start index must be less than the end index");
     }
     while (start_i > 0 && list && IsList(list))
     {
