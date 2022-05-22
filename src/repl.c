@@ -19,6 +19,32 @@ void PrintValFile(FILE *f, Val *v, int readable)
     free(s);
 }
 
+// Rad value from input
+// Returns success status
+int ReadValIn(Val **out)
+{
+    if (!out)
+    {
+        return 0;
+    }
+    char buffer[1000];
+    if (!fgets(buffer, sizeof(buffer), stdin))
+    {
+        return 0;
+    }
+    int len = strlen(buffer);
+    if (len <= 0)
+    {
+        return 0;
+    }
+    int readlen = ReadVal(buffer, len, out);
+    if (!readlen)
+    {
+        return 0;
+    }
+    return 1;
+}
+
 // [print (v)...]
 Val *Lprint(Val *args)
 {
@@ -28,6 +54,22 @@ Val *Lprint(Val *args)
     {
         PrintValFile(stdout, p->first, readable);
         p = p->rest;
+    }
+    return NULL;
+}
+
+// [read]
+Val *Lread(Val *args)
+{
+    Val *err;
+    if (!MatchArgs("", args, &err))
+    {
+        return MakeSignal(err);
+    }
+    Val *v;
+    if (ReadValIn(&v))
+    {
+        return v;
     }
     return NULL;
 }
@@ -122,6 +164,7 @@ int main (int argc, char **argv)
     Val *env = MakeList(NULL, NULL);
     LizpRegisterCoreFuncs(env);
     EnvSetFunc(env, "print", Lprint);
+    EnvSetFunc(env, "read", Lread);
     EnvSetSym(env, "#f", MakeFalse());
     EnvSetSym(env, "#t", MakeTrue());
     // load each file given on the command line
