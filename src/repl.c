@@ -3,9 +3,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
 #define LIZP_IMPLEMENTATION
 #define LIZP_CORE_FUNCTIONS
 #include "lizp.h"
+
 #define STB_DS_IMPLEMENTATION
 #include "stb_ds.h"
 
