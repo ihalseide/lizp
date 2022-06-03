@@ -1,6 +1,10 @@
 #ifndef _lizp_h_
 #define _lizp_h_
 
+#ifndef DEBUG
+#define assert()
+#endif /* DEBUG */
+
 // Lizp core functions requires evaluation
 #ifdef LIZP_CORE_FUNCTIONS
 #define LIZP_EVAL
@@ -76,6 +80,7 @@ int IsLambda(Val *v);
 int MatchArgs(const char *form, Val *args, Val **err);
 
 Val *Eval(Val *ast, Val *env);
+Val *EvalEach(Val *list, Val *env);
 int EnvGet(Val *env, Val *key, Val **out);
 int EnvSet(Val *env, Val *key, Val *val);
 int EnvSetFunc(Val *env, const char *name, LizpFunc * func);
@@ -1057,16 +1062,7 @@ int MatchArgs(const char *form, Val *args, Val **err)
 // Check whether a value is considered as true
 int IsTrue(Val *v)
 {
-    // "false" and [] are set to be the only false values
-    if (!v)
-    {
-        return 0;
-    }
-    if (IsSym(v) && !strcmp(v->symbol, "false"))
-    {
-        return 0;
-    }
-    return 1;
+    return v != NULL;
 }
 
 Val *MakeTrue(void)
@@ -1076,7 +1072,7 @@ Val *MakeTrue(void)
 
 Val *MakeFalse(void)
 {
-    return MakeSymCopy("false", 5);
+    return NULL;
 }
 
 // make a list of the form [error rest...]
@@ -1685,6 +1681,36 @@ Val *Apply(Val *first, Val *args)
                                        NULL)));
 }
 
+// Evaluate each item in a list
+Val *EvalEach(Val *list, Val *env)
+{
+    if (!list || !IsList(list))
+    {
+        return NULL;
+    }
+    Val *result = MakeList(NULL, NULL);
+    Val *p_result = result;
+    while (list && IsList(list))
+    {
+        Val *e = Eval(list->first, env);
+        assert(IsSeparate(e, list));
+        assert(IsSeparate(e, env));
+        if (IsError(e))
+        {
+            FreeValRec(result);
+            return e;
+        }
+        p_result->first = e;
+        if (list->rest)
+        {
+            p_result->rest = MakeList(NULL, NULL);
+        }
+        p_result = p_result->rest;
+        list = list->rest;
+    }
+    return result;
+}
+
 // Evaluate a Val value
 // - ast = Abstract Syntax Tree to evaluate
 // - env = environment of symbol-value pairs for bindings
@@ -1739,28 +1765,18 @@ Val *Eval(Val *ast, Val *env)
     }
     // not a macro
     // eval rest of elements for apply
-    Val *list = MakeList(first, NULL);
-    Val *p_list = list;
-    Val *p_ast = ast->rest;
-    while (p_ast && IsList(p_ast))
+    Val *args = EvalEach(ast->rest, env);
+    if (IsError(args))
     {
-        Val *e = Eval(p_ast->first, env);
-        assert(IsSeparate(e, ast));
-        assert(IsSeparate(e, env));
-        if (IsError(e))
-        {
-            FreeValRec(list);
-            return e;
-        }
-        p_list->rest = MakeList(e, NULL);
-        p_list = p_list->rest;
-        p_ast = p_ast->rest;
+        FreeValRec(first);
+        return args;
     }
-    Val *result = Apply(first, list->rest);
-    assert(IsSeparate(result, list));
+    Val *result = Apply(first, args);
+    assert(IsSeparate(result, args));
     assert(IsSeparate(result, env));
     assert(IsSeparate(result, ast));
-    FreeValRec(list);
+    FreeValRec(first);
+    FreeValRec(args);
     return result;
 }
 
