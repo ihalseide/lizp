@@ -1,25 +1,34 @@
 #ifndef _lizp_h_
 #define _lizp_h_
 
+// Lizp core functions requires evaluation
+#ifdef LIZP_CORE_FUNCTIONS
+#define LIZP_EVAL
+
 typedef struct Val Val;
+typedef enum ValKind ValKind;
 typedef Val *LizpFunc(Val *args);
 typedef struct FuncRecord FuncRecord;
 
-// A Value is a List or a Symbol.
-// A symbol has symbol name
-// A list has a first and a rest
+enum ValKind
+{
+    VK_SYMBOL,
+    VK_LIST,
+};
+
 struct Val
 {
-    unsigned int is_sym : 1;
-#if DEBUG
-    unsigned int id;
-#endif
+    ValKind kind;
     union
     {
-        Val *first;
+        void *any;
         char *symbol;
+        struct
+        {
+            Val *first;
+            Val *rest;
+        };
     };
-    Val *rest;
 };
 
 struct FuncRecord
@@ -34,37 +43,39 @@ Val *CopyVal(Val *p);
 void FreeVal(Val *p);
 void FreeValRec(Val *p);
 
-Val *MakeError(Val *rest);
-Val *MakeErrorMessage(const char *msg);
-Val *MakeFalse(void);
 Val *MakeList(Val *first, Val *rest);
 Val *MakeSym(char *s);
 Val *MakeSymCopy(const char *name, int len);
 Val *MakeSymInt(long n);
 Val *MakeSymStr(const char *s);
-Val *MakeTrue(void);
 
 int IsEqual(Val *x, Val *y);
 int IsError(Val *v);
-int IsFunc(Val *v);
-int IsLambda(Val *v);
-int IsList(Val *p);
-int IsSym(Val *p);
-int IsSymInt(Val *v);
-int IsTrue(Val *v);
-
-int MatchArgs(const char *form, Val *args, Val **err);
+int IsInt(Val *v);
+int IsList(Val *v);
+int IsSym(Val *v);
 int ListLength(Val *l);
+ValKind KindOf(Val *v);
 
 int ReadVal(const char *start, int length, Val **out);
-int EscapeStr(char *str, int len);
+int PrintValBuf(Val *p, char *out, int length, int readable);
+char *PrintValStr(Val *p, int readable);
+
+#endif /* LIZP_CORE_FUNCTIONS */
+#ifdef LIZP_EVAL
+
+Val *MakeTrue(void);
+Val *MakeError(Val *rest);
+Val *MakeErrorMessage(const char *msg);
+Val *MakeFalse(void);
+
+int IsTrue(Val *v);
+int IsFunc(Val *v);
+int IsLambda(Val *v);
+
+int MatchArgs(const char *form, Val *args, Val **err);
 
 Val *Eval(Val *ast, Val *env);
-
-char *PrintValStr(Val *p, int readable);
-int PrintValBuf(Val *p, char *out, int length, int readable);
-int StrNeedsQuotes(const char *s);
-
 int EnvGet(Val *env, Val *key, Val **out);
 int EnvSet(Val *env, Val *key, Val *val);
 int EnvSetFunc(Val *env, const char *name, LizpFunc * func);
@@ -73,9 +84,7 @@ int EnvSetSym(Val *env, const char *symbol, Val *val);
 void EnvPop(Val *env);
 void EnvPush(Val *env);
 
-// These are exposed for testing and debugging purposes
-int IsSeparate(Val *a, Val *b);
-int SkipChars(const char *str, int len);
+#endif /* LIZP_EVAL */
 
 #ifdef LIZP_CORE_FUNCTIONS
 // For optional core Lizp functions that would be useful for most lizp scripts
@@ -124,6 +133,7 @@ Val *Lslice(Val *args);      // [slice list start (end)] gets a sublist "slice" 
 #endif /* _lizp_h_ */
 
 #ifdef LIZP_IMPLEMENTATION
+
 #include <assert.h>
 #include <ctype.h>
 #include <stdlib.h>
@@ -133,11 +143,6 @@ Val *Lslice(Val *args);      // [slice list start (end)] gets a sublist "slice" 
 
 // Dynamic array of function pointers
 FuncRecord *da_funcs;
-
-#if DEBUG
-// count allocated values
-static int val_count = 0;
-#endif
 
 // Put function in the dynamic array
 // Meant to be used by `EnvSetFunc` to bind native functions
@@ -170,24 +175,12 @@ FuncRecord *GetFunc(size_t id)
 Val *AllocVal(void)
 {
     Val *p = malloc(sizeof(Val));
-#if DEBUG
-    static int last_id = 0;
-    if (p)
-    {
-        p->id = last_id;
-        last_id++;
-        val_count++;
-    }
-#endif
     return p;
 }
 
-// Free value 
+// Free value
 void FreeVal(Val *p)
 {
-#if DEBUG
-    val_count--;
-#endif
     if (IsSym(p) && p->symbol)
     {
         free(p->symbol);
@@ -257,21 +250,31 @@ int IsEqual(Val *x, Val *y)
     return 0;
 }
 
+// Get a value's kind a.k.a type
+ValKind KindOf(Val *v)
+{
+    if (!v)
+    {
+        return VK_LIST;
+    }
+    return v->kind;
+}
+
 // Check if a value is a list
 // NULL is also considered an empty list
 int IsList(Val *p)
 {
-    return !p || (p && !p->is_sym);
+    return KindOf(p) == VK_LIST;
 }
 
 // Check if a value is a symbol
 int IsSym(Val *p)
 {
-    return p && p->is_sym;
+    return KindOf(p) == VK_SYMBOL;
 }
 
 //  check if a value is a integer symbol
-int IsSymInt(Val *v)
+int IsInt(Val *v)
 {
     if (!IsSym(v))
     {
@@ -291,7 +294,7 @@ Val *MakeSym(char *s)
     Val *p = AllocVal();
     if (p)
     {
-        p->is_sym = 1;
+        p->kind = VK_SYMBOL;
         p->symbol = s;
     }
     return p;
@@ -338,14 +341,14 @@ Val *MakeSymInt(long n)
 // NOTE: rest must be NULL or a list Val.
 Val *MakeList(Val *first, Val *rest)
 {
-    if (rest && !IsList(rest))
+    if (!IsList(rest))
     {
         return NULL;
     }
     Val *p = AllocVal();
     if (p)
     {
-        p->is_sym = 0;
+        p->kind = VK_LIST;
         p->first = first;
         p->rest = rest;
     }
@@ -459,7 +462,7 @@ static int ReadSym(const char *str, int len, Val **out)
             {
                 i++;
                 const int j = i;
-                int done = 0, good = 0; 
+                int done = 0, good = 0;
                 while (!done && i < len)
                 {
                     switch (str[i])
@@ -487,7 +490,7 @@ static int ReadSym(const char *str, int len, Val **out)
                 }
                 if (good && out)
                 {
-                    // Make escaped symbol string 
+                    // Make escaped symbol string
                     int len = i - j - 1;
                     if (len == 0)
                     {
@@ -514,7 +517,7 @@ static int ReadSym(const char *str, int len, Val **out)
             // Symbol
             {
                 const int j = i;
-                int done = 0; 
+                int done = 0;
                 while (!done && i < len)
                 {
                     switch (str[i])
@@ -806,6 +809,249 @@ char *PrintValStr(Val *v, int readable)
         new[len1] = '\0';
     }
     return new;
+}
+
+// Get the length of a list.
+// Returns 0 for a non-list value.
+int ListLength(Val *l)
+{
+    int len = 0;
+    while (l && IsList(l))
+    {
+        len++;
+        l = l->rest;
+    }
+    return len;
+}
+
+// Check if two values do not share structure
+int IsSeparate(Val *a, Val *b)
+{
+    if (!a || !b)
+    {
+        return 1;
+    }
+    if (a == b)
+    {
+        return 0;
+    }
+    if (IsSym(a) && IsSym(b))
+    {
+        return a->symbol != b->symbol;
+    }
+    if (IsList(a) && IsList(b))
+    {
+        return IsSeparate(a->first, b->first)
+            && IsSeparate(a->first, b->rest)
+            && IsSeparate(a->rest, b->first)
+            && IsSeparate(a->rest, b->rest);
+    }
+    // symbol and list
+    // make sure `a` is list and `b` is symbol
+    if (IsSym(a))
+    {
+        // swap a and b
+        Val *t = b;
+        b = a;
+        a = t;
+    }
+    return IsSeparate(a->first, b)
+        && IsSeparate(a->rest, b);
+}
+
+#ifdef LIZP_EVAL
+
+static int Match1Arg(char c, Val *arg, Val **err)
+{
+    switch (c)
+    {
+        case 'v':
+            // any value
+            return 1;
+        case 'l':
+            // list
+            if (IsList(arg))
+            {
+                return 1;
+            }
+            if (err)
+            {
+                *err = MakeSymStr("should be a list");
+            }
+            return 0;
+        case 'L':
+            // non-empty list
+            if (arg && IsList(arg))
+            {
+                return 1;
+            }
+            if (err)
+            {
+                *err = MakeSymStr("should be a non-empty list");
+            }
+            return 0;
+        case 's':
+            // symbol
+            if (IsSym(arg))
+            {
+                return 1;
+            }
+            if (err)
+            {
+                *err = MakeSymStr("should be a symbol");
+            }
+            return 0;
+        case 'n':
+            // symbol for number/integer
+            if (IsInt(arg))
+            {
+                return 1;
+            }
+            if (err)
+            {
+                *err = MakeSymStr("should be a symbol for an integer");
+            }
+            return 0;
+        default:
+            // error
+            assert(0 && "should be caught by the caller");
+            return 0;
+    }
+}
+
+// Match Arguments
+// Check if the `args` list matches the given `form`
+// If the `args` do not match, then `err` is set to a new value (which can be
+//   passed to `MakeError`)
+// Meanings for characters in the `form` string:
+// - "v" : any value
+// - "l" : a list
+// - "s" : a symbol
+// - "L" : a non-empty list
+// - "n" : an integer symbol (number)
+// - "(" : mark the rest of the arguments as optional. must be last
+// - "&" : variadic, mark the rest of the arguments as optional and all with the same type of the
+//   very next character. must be last
+int MatchArgs(const char *form, Val *args, Val **err)
+{
+    int i = 0;
+    int optional = 0;
+    Val *p = args;
+    while (form[i] && (optional? (p != NULL) : 1))
+    {
+        switch (form[i])
+        {
+        case 'v':
+        case 'l':
+        case 's':
+        case 'L':
+        case 'n':
+            // types
+            if (!p)
+            {
+                if (err)
+                {
+                    int n = strcspn(form, "&(");
+                    char *arguments = (n == 1)? "argument" : "arguments";
+                    *err = MakeList(MakeSymStr("not enough arguments: requires at least"),
+                                    MakeList(MakeSymInt(n),
+                                             MakeList(MakeSymStr(arguments),
+                                                      NULL)));
+                }
+                return 0;
+            }
+            if (!Match1Arg(form[i], p->first, err))
+            {
+                if (err)
+                {
+                    // wrap message with more context
+                    *err = MakeList(MakeSymStr("argument"),
+                                    MakeList(MakeSymInt(i + 1),
+                                             MakeList(*err,
+                                                      NULL)));
+                }
+                return 0;
+            }
+            p = p->rest;
+            i++;
+            break;
+        case '(':
+            // optional marker
+            if (optional)
+            {
+                if (err)
+                {
+                    *err = MakeSymStr(
+                        "`MatchArgs` invalid `form` string: optional marker '(' may only appear once");
+                }
+                return 0;
+            }
+            optional = 1;
+            i++;
+            break;
+        case '&':
+            // variadic marker
+            i++;
+            switch (form[i])
+            {
+            case 'v':
+            case 'l':
+            case 's':
+            case 'L':
+            case 'n':
+                // the rest of the arguments should match the given type
+                while (p)
+                {
+                    if (!Match1Arg(form[i], p->first, err))
+                    {
+                        return 0;
+                    }
+                    p = p->rest;
+                }
+                i++;
+                if (!form[i])
+                {
+                    return 1;
+                }
+                if (err)
+                {
+                    *err = MakeSymStr(
+                        "`MatchArgs` invalid `form` string: '&' requires a only directive after it");
+                }
+                return 1;
+            default:
+                // invalid char
+                if (err)
+                {
+                    *err = MakeSymStr(
+                        "`MatchArgs` invalid `form` string: '&' requires a directive after it");
+                }
+                return 0;
+            }
+        default:
+            // invalid char
+            if (err)
+            {
+                *err = MakeSymStr(
+                    "`MatchArgs` invalid `form` string: requires a directive");
+            }
+            return 0;
+        }
+    }
+    if (p)
+    {
+        if (err)
+        {
+            int n = strlen(form) - (optional? 1 : 0);
+            char *arguments = (n == 1) ? "argument" : "arguments";
+            *err = MakeList(MakeSymStr("too many arguments, requires at most"),
+                            MakeList(MakeSymInt(n),
+                                     MakeList(MakeSymStr(arguments),
+                                              NULL)));
+        }
+        return 0;
+    }
+    return 1;
 }
 
 // Check whether a value is considered as true
@@ -1324,19 +1570,6 @@ static int Macro(Val *first, Val *args, Val *env, Val **out)
     return 0;
 }
 
-// Get the length of a list.
-// Returns 0 for a non-list value.
-int ListLength(Val *l)
-{
-    int len = 0;
-    while (l && IsList(l))
-    {
-        len++;
-        l = l->rest;
-    }
-    return len;
-}
-
 // Return values must not share structure with first, args, or env
 static Val *ApplyLambda(Val *first, Val *args)
 {
@@ -1579,233 +1812,7 @@ int EnvSetSym(Val *env, const char *sym, Val *v)
     return EnvSet(env, MakeSymStr(sym), v);
 }
 
-static int Match1Arg(char c, Val *arg, Val **err)
-{
-    switch (c)
-    {
-        case 'v':
-            // any value
-            return 1;
-        case 'l':
-            // list
-            if (IsList(arg))
-            {
-                return 1;
-            }
-            if (err)
-            {
-                *err = MakeSymStr("should be a list");
-            }
-            return 0;
-        case 'L':
-            // non-empty list
-            if (arg && IsList(arg))
-            {
-                return 1;
-            }
-            if (err)
-            {
-                *err = MakeSymStr("should be a non-empty list");
-            }
-            return 0;
-        case 's':
-            // symbol
-            if (IsSym(arg))
-            {
-                return 1;
-            }
-            if (err)
-            {
-                *err = MakeSymStr("should be a symbol");
-            }
-            return 0;
-        case 'n':
-            // symbol for number/integer
-            if (IsSymInt(arg))
-            {
-                return 1;
-            }
-            if (err)
-            {
-                *err = MakeSymStr("should be a symbol for an integer");
-            }
-            return 0;
-        default:
-            // error
-            assert(0 && "should be caught by the caller");
-            return 0;
-    }
-}
-
-// Match Arguments
-// Check if the `args` list matches the given `form`
-// If the `args` do not match, then `err` is set to a new value (which can be
-//   passed to `MakeError`)
-// Meanings for characters in the `form` string:
-// - "v" : any value
-// - "l" : a list
-// - "s" : a symbol
-// - "L" : a non-empty list
-// - "n" : an integer symbol (number)
-// - "(" : mark the rest of the arguments as optional. must be last
-// - "&" : variadic, mark the rest of the arguments as optional and all with the same type of the
-//   very next character. must be last
-int MatchArgs(const char *form, Val *args, Val **err)
-{
-    int i = 0;
-    int optional = 0;
-    Val *p = args;
-    while (form[i] && (optional? (p != NULL) : 1))
-    {
-        switch (form[i])
-        {
-        case 'v':
-        case 'l':
-        case 's':
-        case 'L':
-        case 'n':
-            // types
-            if (!p)
-            {
-                if (err)
-                {
-                    int n = strcspn(form, "&(");
-                    char *arguments = (n == 1)? "argument" : "arguments";
-                    *err = MakeList(MakeSymStr("not enough arguments: requires at least"),
-                                    MakeList(MakeSymInt(n),
-                                             MakeList(MakeSymStr(arguments),
-                                                      NULL)));
-                }
-                return 0;
-            }
-            if (!Match1Arg(form[i], p->first, err))
-            {
-                if (err)
-                {
-                    // wrap message with more context
-                    *err = MakeList(MakeSymStr("argument"),
-                                    MakeList(MakeSymInt(i + 1),
-                                             MakeList(*err,
-                                                      NULL)));
-                }
-                return 0;
-            }
-            p = p->rest;
-            i++;
-            break;
-        case '(':
-            // optional marker
-            if (optional)
-            {
-                if (err)
-                {
-                    *err = MakeSymStr(
-                        "`MatchArgs` invalid `form` string: optional marker '(' may only appear once");
-                }
-                return 0;
-            }
-            optional = 1;
-            i++;
-            break;
-        case '&':
-            // variadic marker
-            i++;
-            switch (form[i])
-            {
-            case 'v':
-            case 'l':
-            case 's':
-            case 'L':
-            case 'n':
-                // the rest of the arguments should match the given type
-                while (p)
-                {
-                    if (!Match1Arg(form[i], p->first, err))
-                    {
-                        return 0;
-                    }
-                    p = p->rest;
-                }
-                i++;
-                if (!form[i])
-                {
-                    return 1;
-                }
-                if (err)
-                {
-                    *err = MakeSymStr(
-                        "`MatchArgs` invalid `form` string: '&' requires a only directive after it");
-                }
-                return 1;
-            default:
-                // invalid char
-                if (err)
-                {
-                    *err = MakeSymStr(
-                        "`MatchArgs` invalid `form` string: '&' requires a directive after it");
-                }
-                return 0;
-            }
-        default:
-            // invalid char
-            if (err)
-            {
-                *err = MakeSymStr(
-                    "`MatchArgs` invalid `form` string: requires a directive");
-            }
-            return 0;
-        }
-    }
-    if (p)
-    {
-        if (err)
-        {
-            int n = strlen(form) - (optional? 1 : 0);
-            char *arguments = (n == 1) ? "argument" : "arguments";
-            *err = MakeList(MakeSymStr("too many arguments, requires at most"),
-                            MakeList(MakeSymInt(n),
-                                     MakeList(MakeSymStr(arguments),
-                                              NULL)));
-        }
-        return 0;
-    }
-    return 1;
-}
-
-// Check if two values do not share structure
-int IsSeparate(Val *a, Val *b)
-{
-    if (!a || !b)
-    {
-        return 1;
-    }
-    if (a == b)
-    {
-        return 0;
-    }
-    if (IsSym(a) && IsSym(b))
-    {
-        return a->symbol != b->symbol;
-    }
-    if (IsList(a) && IsList(b))
-    {
-        return IsSeparate(a->first, b->first)
-            && IsSeparate(a->first, b->rest)
-            && IsSeparate(a->rest, b->first)
-            && IsSeparate(a->rest, b->rest);
-    }
-    // symbol and list
-    // make sure `a` is list and `b` is symbol
-    if (IsSym(a))
-    {
-        // swap a and b
-        Val *t = b;
-        b = a;
-        a = t;
-    }
-    return IsSeparate(a->first, b)
-        && IsSeparate(a->rest, b);
-}
+#endif /* LIZP_EVAL */
 
 #ifdef LIZP_CORE_FUNCTIONS
 void LizpRegisterCoreFuncs(Val *env)
@@ -2088,7 +2095,7 @@ Val *Linteger_q(Val *args)
     {
         return MakeError(err);
     }
-    return IsSymInt(args->first)? MakeTrue() : MakeFalse();
+    return IsInt(args->first)? MakeTrue() : MakeFalse();
 }
 
 // [list? val] check if value is a list
