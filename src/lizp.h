@@ -1,13 +1,14 @@
 #ifndef _lizp_h_
 #define _lizp_h_
 
-#ifndef DEBUG
-#define assert()
-#endif /* DEBUG */
-
 // Lizp core functions requires evaluation
 #ifdef LIZP_CORE_FUNCTIONS
 #define LIZP_EVAL
+#endif
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 typedef struct Val Val;
 typedef enum ValKind ValKind;
@@ -20,12 +21,12 @@ enum ValKind
     VK_LIST,
 };
 
+// Val: (tagged union)
 struct Val
 {
     ValKind kind;
     union
     {
-        void *any;
         char *symbol;
         struct
         {
@@ -33,13 +34,6 @@ struct Val
             Val *rest;
         };
     };
-};
-
-struct FuncRecord
-{
-    const char *name;
-    const char *form;
-    LizpFunc *func;
 };
 
 Val *AllocVal(void);
@@ -59,14 +53,23 @@ int IsInt(Val *v);
 int IsList(Val *v);
 int IsSym(Val *v);
 int ListLength(Val *l);
+long AsInt(Val *v);
 ValKind KindOf(Val *v);
 
 int ReadVal(const char *start, int length, Val **out);
 int PrintValBuf(Val *p, char *out, int length, int readable);
 char *PrintValStr(Val *p, int readable);
 
-#endif /* LIZP_CORE_FUNCTIONS */
+int MatchArgs(const char *form, Val *args, Val **err);
+
 #ifdef LIZP_EVAL
+
+struct FuncRecord
+{
+    const char *name;
+    const char *form;
+    LizpFunc *func;
+};
 
 Val *MakeTrue(void);
 Val *MakeError(Val *rest);
@@ -76,8 +79,6 @@ Val *MakeFalse(void);
 int IsTrue(Val *v);
 int IsFunc(Val *v);
 int IsLambda(Val *v);
-
-int MatchArgs(const char *form, Val *args, Val **err);
 
 Val *Eval(Val *ast, Val *env);
 Val *EvalEach(Val *list, Val *env);
@@ -139,7 +140,6 @@ Val *Lslice(Val *args);      // [slice list start (end)] gets a sublist "slice" 
 
 #ifdef LIZP_IMPLEMENTATION
 
-#include <assert.h>
 #include <ctype.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -149,31 +149,196 @@ Val *Lslice(Val *args);      // [slice list start (end)] gets a sublist "slice" 
 // Dynamic array of function pointers
 FuncRecord *da_funcs;
 
-// Put function in the dynamic array
-// Meant to be used by `EnvSetFunc` to bind native functions
-size_t PutFunc(const char *name, const char *form, LizpFunc *func)
+static int Match1Arg(char c, Val *arg, Val **err)
 {
-    FuncRecord new = (FuncRecord)
+    switch (c)
     {
-        .name = name,
-        .form = form,
-        .func = func,
-    };
-    size_t id = arrlen(da_funcs);
-    arrput(da_funcs, new);
-    return id;
+        case 'v':
+            // any value
+            return 1;
+        case 'l':
+            // list
+            if (IsList(arg))
+            {
+                return 1;
+            }
+            if (err)
+            {
+                *err = MakeSymStr("should be a list");
+            }
+            return 0;
+        case 'L':
+            // non-empty list
+            if (arg && IsList(arg))
+            {
+                return 1;
+            }
+            if (err)
+            {
+                *err = MakeSymStr("should be a non-empty list");
+            }
+            return 0;
+        case 's':
+            // symbol
+            if (IsSym(arg))
+            {
+                return 1;
+            }
+            if (err)
+            {
+                *err = MakeSymStr("should be a symbol");
+            }
+            return 0;
+        case 'n':
+            // symbol for number/integer
+            if (IsInt(arg))
+            {
+                return 1;
+            }
+            if (err)
+            {
+                *err = MakeSymStr("should be a symbol for an integer");
+            }
+            return 0;
+        default:
+            // error
+            return 0;
+    }
 }
 
-// Get function from the dynamic array
-// Meant to be used by `Apply` to look up native functions
-FuncRecord *GetFunc(size_t id)
+// Match Arguments
+// Check if the `args` list matches the given `form`
+// If the `args` do not match, then `err` is set to a new value (which can be
+//   passed to `MakeError`)
+// Meanings for characters in the `form` string:
+// - "v" : any value
+// - "l" : a list
+// - "s" : a symbol
+// - "L" : a non-empty list
+// - "n" : an integer symbol (number)
+// - "(" : mark the rest of the arguments as optional. must be last
+// - "&" : variadic, mark the rest of the arguments as optional and all with the same type of the
+//   very next character. must be last
+int MatchArgs(const char *form, Val *args, Val **err)
 {
-    size_t len = arrlen(da_funcs);
-    if (id < 0 || id >= len)
+    int i = 0;
+    int optional = 0;
+    Val *p = args;
+    while (form[i] && (optional? (p != NULL) : 1))
     {
-        return NULL;
+        switch (form[i])
+        {
+        case 'v':
+        case 'l':
+        case 's':
+        case 'L':
+        case 'n':
+            // types
+            if (!p)
+            {
+                if (err)
+                {
+                    int n = strcspn(form, "&(");
+                    char *arguments = (n == 1)? "argument" : "arguments";
+                    *err = MakeList(MakeSymStr("not enough arguments: requires at least"),
+                                    MakeList(MakeSymInt(n),
+                                             MakeList(MakeSymStr(arguments),
+                                                      NULL)));
+                }
+                return 0;
+            }
+            if (!Match1Arg(form[i], p->first, err))
+            {
+                if (err)
+                {
+                    // wrap message with more context
+                    *err = MakeList(MakeSymStr("argument"),
+                                    MakeList(MakeSymInt(i + 1),
+                                             MakeList(*err,
+                                                      NULL)));
+                }
+                return 0;
+            }
+            p = p->rest;
+            i++;
+            break;
+        case '(':
+            // optional marker
+            if (optional)
+            {
+                if (err)
+                {
+                    *err = MakeSymStr(
+                        "`MatchArgs` invalid `form` string: optional marker '(' may only appear once");
+                }
+                return 0;
+            }
+            optional = 1;
+            i++;
+            break;
+        case '&':
+            // variadic marker
+            i++;
+            switch (form[i])
+            {
+            case 'v':
+            case 'l':
+            case 's':
+            case 'L':
+            case 'n':
+                // the rest of the arguments should match the given type
+                while (p)
+                {
+                    if (!Match1Arg(form[i], p->first, err))
+                    {
+                        return 0;
+                    }
+                    p = p->rest;
+                }
+                i++;
+                if (!form[i])
+                {
+                    return 1;
+                }
+                if (err)
+                {
+                    *err = MakeSymStr(
+                        "`MatchArgs` invalid `form` string: '&' requires a only directive after it");
+                }
+                return 1;
+            default:
+                // invalid char
+                if (err)
+                {
+                    *err = MakeSymStr(
+                        "`MatchArgs` invalid `form` string: '&' requires a directive after it");
+                }
+                return 0;
+            }
+        default:
+            // invalid char
+            if (err)
+            {
+                *err = MakeSymStr(
+                    "`MatchArgs` invalid `form` string: requires a directive");
+            }
+            return 0;
+        }
     }
-    return &(da_funcs[id]);
+    if (p)
+    {
+        if (err)
+        {
+            int n = strlen(form) - (optional? 1 : 0);
+            char *arguments = (n == 1) ? "argument" : "arguments";
+            *err = MakeList(MakeSymStr("too many arguments, requires at most"),
+                            MakeList(MakeSymInt(n),
+                                     MakeList(MakeSymStr(arguments),
+                                              NULL)));
+        }
+        return 0;
+    }
+    return 1;
 }
 
 // Allocate a new value
@@ -208,7 +373,6 @@ void FreeValRec(Val *v)
         return;
     }
     // List
-    assert(IsList(v));
     Val *p = v;
     Val *n;
     while (p && IsList(p))
@@ -281,10 +445,7 @@ int IsSym(Val *p)
 //  check if a value is a integer symbol
 int IsInt(Val *v)
 {
-    if (!IsSym(v))
-    {
-        return 0;
-    }
+    if (!IsSym(v)) { return 0; }
     char *end;
     int base = 10;
     strtol(v->symbol, &end, base);
@@ -295,7 +456,6 @@ int IsInt(Val *v)
 // NOTE: does not make a copy of the `s` string
 Val *MakeSym(char *s)
 {
-    assert(s);
     Val *p = AllocVal();
     if (p)
     {
@@ -448,15 +608,40 @@ int EscapeStr(char *str, int len)
     return j;
 }
 
+// Skip space and nested comments within `str`
+// Returns the next index into `str`
+int SkipChars(const char *str, int len)
+{
+    int i = 0;
+    int level = 0; // nesting level
+    while (i < len)
+    {
+        char c = str[i];
+        if (!c) { break; }
+        if (c == '(')
+        {
+            i++;
+            level++;
+            continue;
+        }
+        if (level && c == ')')
+        {
+            i++;
+            level--;
+            continue;
+        }
+        if (!level && !isspace(c)) { break; }
+        i++;
+    }
+    return i;
+}
+
 // Read symbol from input stream
 static int ReadSym(const char *str, int len, Val **out)
 {
     int i = 0;
     // leading space
-    while (i < len && isspace(str[i]))
-    {
-        i++;
-    }
+    i += SkipChars(str, len);
     switch (str[i])
     {
         case '\0':
@@ -502,7 +687,6 @@ static int ReadSym(const char *str, int len, Val **out)
                         *out = NULL;
                         return i;
                     }
-                    assert(len > 0);
                     char *str1 = malloc(len + 1);
                     memcpy(str1, str + j, len);
                     str1[len] = 0;
@@ -552,40 +736,6 @@ static int ReadSym(const char *str, int len, Val **out)
                 return i;
             }
     }
-}
-
-// Skip space and nested comments within `str`
-// Returns the next index into `str`
-int SkipChars(const char *str, int len)
-{
-    int i = 0;
-    int level = 0; // nesting level
-    while (i < len)
-    {
-        char c = str[i];
-        if (!c)
-        {
-            break;
-        }
-        if (c == '(')
-        {
-            i++;
-            level++;
-            continue;
-        }
-        if (level && c == ')')
-        {
-            i++;
-            level--;
-            continue;
-        }
-        if (!level && !isspace(c))
-        {
-            break;
-        }
-        i++;
-    }
-    return i;
 }
 
 // Read value from input stream
@@ -791,10 +941,6 @@ int PrintValBuf(Val *v, char *out, int length, int readable)
             i++;
         }
     }
-    else
-    {
-        assert(0 && "invalid Val type");
-    }
     return i;
 }
 
@@ -810,7 +956,6 @@ char *PrintValStr(Val *v, int readable)
     if (new)
     {
         int len2 = PrintValBuf(v, new, len1, readable);
-        assert(len1 == len2);
         new[len1] = '\0';
     }
     return new;
@@ -827,6 +972,44 @@ int ListLength(Val *l)
         l = l->rest;
     }
     return len;
+}
+
+long AsInt(Val *v)
+{
+    if (!IsInt(v)) { return 0; }
+    return atol(v->symbol);
+}
+
+// Get value right after a symbol in a list
+int GetAfterSymbol(Val *list, const char *symname, Val **out)
+{
+    if (!IsList(list)) { return 0; }
+    while (list)
+    {
+        Val *e = list->first;
+        if (IsSym(e) && !strcmp(e->symbol, symname))
+        {
+            // found a spot
+            list = list->rest;
+            if (!list) { return 0; }
+            *out = list->first;
+            return 1;
+        }
+        list = list->rest;
+    }
+    return 0;
+}
+
+// Get the Nth item in a list (0-based index)
+Val *NthItem(Val *list, int n)
+{
+    if (n < 0) { return NULL; }
+    if (!IsList(list)) { return NULL; }
+    for (; n > 0; n--)
+    {
+        list = list->rest;
+    }
+    return list? list->first : list;
 }
 
 // Check if two values do not share structure
@@ -866,198 +1049,33 @@ int IsSeparate(Val *a, Val *b)
 
 #ifdef LIZP_EVAL
 
-static int Match1Arg(char c, Val *arg, Val **err)
+// Put function in the dynamic array
+// Meant to be used by `EnvSetFunc` to bind native functions
+size_t PutFunc(const char *name, const char *form, LizpFunc *func)
 {
-    switch (c)
+    FuncRecord new = (FuncRecord)
     {
-        case 'v':
-            // any value
-            return 1;
-        case 'l':
-            // list
-            if (IsList(arg))
-            {
-                return 1;
-            }
-            if (err)
-            {
-                *err = MakeSymStr("should be a list");
-            }
-            return 0;
-        case 'L':
-            // non-empty list
-            if (arg && IsList(arg))
-            {
-                return 1;
-            }
-            if (err)
-            {
-                *err = MakeSymStr("should be a non-empty list");
-            }
-            return 0;
-        case 's':
-            // symbol
-            if (IsSym(arg))
-            {
-                return 1;
-            }
-            if (err)
-            {
-                *err = MakeSymStr("should be a symbol");
-            }
-            return 0;
-        case 'n':
-            // symbol for number/integer
-            if (IsInt(arg))
-            {
-                return 1;
-            }
-            if (err)
-            {
-                *err = MakeSymStr("should be a symbol for an integer");
-            }
-            return 0;
-        default:
-            // error
-            assert(0 && "should be caught by the caller");
-            return 0;
-    }
+        .name = name,
+        .form = form,
+        .func = func,
+    };
+    size_t id = arrlen(da_funcs);
+    arrput(da_funcs, new);
+    return id;
 }
 
-// Match Arguments
-// Check if the `args` list matches the given `form`
-// If the `args` do not match, then `err` is set to a new value (which can be
-//   passed to `MakeError`)
-// Meanings for characters in the `form` string:
-// - "v" : any value
-// - "l" : a list
-// - "s" : a symbol
-// - "L" : a non-empty list
-// - "n" : an integer symbol (number)
-// - "(" : mark the rest of the arguments as optional. must be last
-// - "&" : variadic, mark the rest of the arguments as optional and all with the same type of the
-//   very next character. must be last
-int MatchArgs(const char *form, Val *args, Val **err)
+// Get function from the dynamic array
+// Meant to be used by `Apply` to look up native functions
+FuncRecord *GetFunc(size_t id)
 {
-    int i = 0;
-    int optional = 0;
-    Val *p = args;
-    while (form[i] && (optional? (p != NULL) : 1))
+    size_t len = arrlen(da_funcs);
+    if (id < 0 || id >= len)
     {
-        switch (form[i])
-        {
-        case 'v':
-        case 'l':
-        case 's':
-        case 'L':
-        case 'n':
-            // types
-            if (!p)
-            {
-                if (err)
-                {
-                    int n = strcspn(form, "&(");
-                    char *arguments = (n == 1)? "argument" : "arguments";
-                    *err = MakeList(MakeSymStr("not enough arguments: requires at least"),
-                                    MakeList(MakeSymInt(n),
-                                             MakeList(MakeSymStr(arguments),
-                                                      NULL)));
-                }
-                return 0;
-            }
-            if (!Match1Arg(form[i], p->first, err))
-            {
-                if (err)
-                {
-                    // wrap message with more context
-                    *err = MakeList(MakeSymStr("argument"),
-                                    MakeList(MakeSymInt(i + 1),
-                                             MakeList(*err,
-                                                      NULL)));
-                }
-                return 0;
-            }
-            p = p->rest;
-            i++;
-            break;
-        case '(':
-            // optional marker
-            if (optional)
-            {
-                if (err)
-                {
-                    *err = MakeSymStr(
-                        "`MatchArgs` invalid `form` string: optional marker '(' may only appear once");
-                }
-                return 0;
-            }
-            optional = 1;
-            i++;
-            break;
-        case '&':
-            // variadic marker
-            i++;
-            switch (form[i])
-            {
-            case 'v':
-            case 'l':
-            case 's':
-            case 'L':
-            case 'n':
-                // the rest of the arguments should match the given type
-                while (p)
-                {
-                    if (!Match1Arg(form[i], p->first, err))
-                    {
-                        return 0;
-                    }
-                    p = p->rest;
-                }
-                i++;
-                if (!form[i])
-                {
-                    return 1;
-                }
-                if (err)
-                {
-                    *err = MakeSymStr(
-                        "`MatchArgs` invalid `form` string: '&' requires a only directive after it");
-                }
-                return 1;
-            default:
-                // invalid char
-                if (err)
-                {
-                    *err = MakeSymStr(
-                        "`MatchArgs` invalid `form` string: '&' requires a directive after it");
-                }
-                return 0;
-            }
-        default:
-            // invalid char
-            if (err)
-            {
-                *err = MakeSymStr(
-                    "`MatchArgs` invalid `form` string: requires a directive");
-            }
-            return 0;
-        }
+        return NULL;
     }
-    if (p)
-    {
-        if (err)
-        {
-            int n = strlen(form) - (optional? 1 : 0);
-            char *arguments = (n == 1) ? "argument" : "arguments";
-            *err = MakeList(MakeSymStr("too many arguments, requires at most"),
-                            MakeList(MakeSymInt(n),
-                                     MakeList(MakeSymStr(arguments),
-                                              NULL)));
-        }
-        return 0;
-    }
-    return 1;
+    return &(da_funcs[id]);
 }
+
 
 // Check whether a value is considered as true
 int IsTrue(Val *v)
@@ -1268,7 +1286,6 @@ static int Macro(Val *first, Val *args, Val *env, Val **out)
         // [defined? v]
         if (!MatchArgs("s", args, &err))
         {
-            assert(IsList(err));
             *out = MakeError(MakeList(CopyVal(first), err));
             return 1;
         }
@@ -1511,13 +1528,11 @@ static int Macro(Val *first, Val *args, Val *env, Val **out)
             if (IsTrue(e))
             {
                 FreeValRec(e);
-                assert(p->rest);
                 *out = Eval(p->rest->first, env);
                 return 1;
             }
             FreeValRec(e);
             p = p->rest;
-            assert(p);
             p = p->rest;
         }
         // no condition matched
@@ -1605,8 +1620,6 @@ static Val *ApplyLambda(Val *first, Val *args)
         return NULL;
     }
     Val *result = Eval(body, env);
-    assert(IsSeparate(result, env));
-    assert(IsSeparate(result, args));
     FreeValRec(env);
     return result;
 }
@@ -1640,7 +1653,6 @@ static Val *ApplyNative(Val *first, Val *args)
         }
     }
     Val *result = record->func(args);
-    assert(IsSeparate(result, args));
     if (IsError(result))
     {
         // patch-in more function info
@@ -1693,8 +1705,6 @@ Val *EvalEach(Val *list, Val *env)
     while (list && IsList(list))
     {
         Val *e = Eval(list->first, env);
-        assert(IsSeparate(e, list));
-        assert(IsSeparate(e, env));
         if (IsError(e))
         {
             FreeValRec(result);
@@ -1741,12 +1751,8 @@ Val *Eval(Val *ast, Val *env)
         return CopyVal(ast);
     }
     // eval lists...
-    assert(ast);
-    assert(IsList(ast));
     // eval first element
     Val *first = Eval(ast->first, env);
-    assert(IsSeparate(first, ast->first));
-    assert(IsSeparate(first, env));
     if (IsError(first))
     {
         return first;
@@ -1757,9 +1763,6 @@ Val *Eval(Val *ast, Val *env)
         Val *result;
         if (Macro(first, ast->rest, env, &result))
         {
-            assert(IsSeparate(result, first));
-            assert(IsSeparate(result, env));
-            assert(IsSeparate(result, ast->rest));
             return result;
         }
     }
@@ -1772,9 +1775,6 @@ Val *Eval(Val *ast, Val *env)
         return args;
     }
     Val *result = Apply(first, args);
-    assert(IsSeparate(result, args));
-    assert(IsSeparate(result, env));
-    assert(IsSeparate(result, ast));
     FreeValRec(first);
     FreeValRec(args);
     return result;
@@ -1868,56 +1868,56 @@ void LizpRegisterCoreFuncs(Val *env)
 Val *Lreverse(Val *args)
 {
     // TODO: implement
-    assert(0 && "not implemented yet");
+    return NULL;
 }
 
 // [concat list.1 (list.N)...]
 Val *Lconcat(Val *args)
 {
     // TODO: implement
-    assert(0 && "not implemented yet");
+    return NULL;
 }
 
 // [join separator (list)...]
 Val *Ljoin(Val *args)
 {
     // TODO: implement
-    assert(0 && "not implemented yet");
+    return NULL;
 }
 
 // [without item list]
 Val *Lwithout(Val *args)
 {
     // TODO: implement
-    assert(0 && "not implemented yet");
+    return NULL;
 }
 
 // [replace item1 item2 list]
 Val *Lreplace(Val *args)
 {
     // TODO: implement
-    assert(0 && "not implemented yet");
+    return NULL;
 }
 
 // [replaceN item1 item2 list n]
 Val *Lreplace1(Val *args)
 {
     // TODO: implement
-    assert(0 && "not implemented yet");
+    return NULL;
 }
 
 // [replaceI index item list]
 Val *LreplaceI(Val *args)
 {
     // TODO: implement
-    assert(0 && "not implemented yet");
+    return NULL;
 }
 
 // [zip list.1 (list.N)...]
 Val *Lzip(Val *args)
 {
     // TODO: implement
-    assert(0 && "not implemented yet");
+    return NULL;
 }
 
 // [append val list]
@@ -2507,3 +2507,7 @@ Val *Lslice(Val *args)
 
 #endif /* LIZP_CORE_FUNCTIONS */
 #endif /* LIZP_IMPLEMENTATION */
+
+#ifdef __cplusplus
+} /* extern "C" */
+#endif
