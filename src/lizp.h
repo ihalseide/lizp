@@ -1,8 +1,51 @@
-/* LIZP
- *
- * Programming language and linked list data serialization.
- * Uses the C99 Standard and should also work with C++.
- */
+/*
+LIZP
+
+    Programming language and linked list data serialization.
+
+    This is written in the way of the C99 standard and should also work
+    with C++.
+
+    The license for this is at the end of the file.
+
+Usage
+
+    You only need to include this header file in your project. You can
+
+        #include "lizp.h"
+
+    in any file that needs it. Then in one place, you need to type:
+
+        #define LIZP_IMPLEMENTATION
+        #include "lizp.h"
+
+    If you want to use lizp as a scripting language and need to enable
+    evaluation, then you should define:
+
+        #define LIZP_EVAL
+
+    And if you want to include some useful macros and functions, then
+    you should define:
+
+        #define LIZP_CORE_FUNCTIONS
+
+    Since the lizp core functions implies that you are doing evaluation,
+    this also automatically defines LIZP_EVAL, so you don't need to
+    define it too.
+
+Data types
+
+    The only real data type is the "Value" known as Val_t, which can can
+    either by a symbol or a list. Symbols are arbitrary null-terminated
+    strings, and lists are linked lists of 0 or more values. The empty
+    list is a NULL pointer.
+
+    Symbols can additionally be interpretted as more data types if you wish,
+    but you would have to provide the parsing functions to convert a string
+    into the desired data type. In this header file, the AsInt() function
+    is an example of this.
+
+*/
 
 #ifndef _lizp_h_
 #define _lizp_h_
@@ -2647,3 +2690,27 @@ Val_t *Llambda(Val_t *args, Val_t *env)
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
+
+/*
+MIT License
+
+Copyright (c) 2022 Izak Nathanael Halseide
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+*/
