@@ -170,10 +170,6 @@ Val *Llet(Val *args, Val *env);     // [let [sym1 expr1 sym2 expr2 ...] body-exp
 #include <string.h>
 #include "stb_ds.h"
 
-// Dynamic array of function pointers
-FuncRecord *da_funcs;
-MacroRecord *da_macros;
-
 static int Match1Arg(char c, Val *arg, Val **err)
 {
     switch (c)
@@ -1066,6 +1062,13 @@ int IsSeparate(Val *a, Val *b)
 }
 
 #ifdef LIZP_EVAL
+
+
+// Dynamic array of function pointers for native Lizp Functions
+FuncRecord *da_funcs;
+
+// Dynamic array of function pointers for native Lizp Macros
+MacroRecord *da_macros;
 
 // Put function in the dynamic array
 // Meant to be used by `EnvSetFunc` to bind native functions
