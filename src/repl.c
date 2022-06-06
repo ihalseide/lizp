@@ -14,7 +14,7 @@
 #define BUF_SZ (2*1024)
 
 // Print value to a file
-void PrintValFile(FILE *f, Val *v, int readable)
+void PrintValFile(FILE *f, Val_t *v, int readable)
 {
     char *s = PrintValStr(v, readable);
     fprintf(f, "%s", s);
@@ -22,10 +22,10 @@ void PrintValFile(FILE *f, Val *v, int readable)
 }
 
 // [print (v)...]
-Val *Lprint(Val *args)
+Val_t *Lprint(Val_t *args)
 {
     int readable = 0;
-    Val *p = args;
+    Val_t *p = args;
     while (p)
     {
         PrintValFile(stdout, p->first, readable);
@@ -35,7 +35,7 @@ Val *Lprint(Val *args)
 }
 
 // do one read-eval-print cycle on the string
-void rep(const char *str, int len, Val *env)
+void rep(const char *str, int len, Val_t *env)
 {
     if (!str || !*str || len <= 0)
     {
@@ -45,7 +45,7 @@ void rep(const char *str, int len, Val *env)
     // debug print
     //printf("\n<str len=%d>%.*s</str>", len, len, str);
 
-    Val *expr;
+    Val_t *expr;
     int readlen = ReadVal(str, len, &expr);
     if (!readlen)
     {
@@ -57,7 +57,7 @@ void rep(const char *str, int len, Val *env)
     //PrintValFile(stdout, expr, 1);
 
     // Eval
-    Val *val = Eval(expr, env);
+    Val_t *val = Eval(expr, env);
 
     // Print
     putchar('\n');
@@ -68,7 +68,7 @@ void rep(const char *str, int len, Val *env)
 }
 
 // read, eval, print loop
-void REPL(Val *env)
+void REPL(Val_t *env)
 {
     char buffer[BUF_SZ];
     while (1)
@@ -89,7 +89,7 @@ void REPL(Val *env)
     printf("end of input\n");
 }
 
-void LoadFile(const char *fname, Val *env)
+void LoadFile(const char *fname, Val_t *env)
 {
     // read file contents wrapped in a "do" block
     FILE *f = fopen(fname, "rb");
@@ -121,7 +121,7 @@ void LoadFile(const char *fname, Val *env)
 int main (int argc, char **argv)
 {
     // init environment
-    Val *env = MakeList(NULL, NULL);
+    Val_t *env = MakeList(NULL, NULL);
     LizpRegisterCoreFuncs(env);
     EnvSetFunc(env, "print", Lprint);
     EnvSetSym(env, "#f", MakeFalse());
