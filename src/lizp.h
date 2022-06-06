@@ -1,7 +1,7 @@
 #ifndef _lizp_h_
 #define _lizp_h_
 
-// Lizp core functions requires evaluation
+// Using Lizp core functions requires evaluation
 #ifdef LIZP_CORE_FUNCTIONS
 #define LIZP_EVAL
 #endif
@@ -42,15 +42,16 @@ void FreeValRec(Val *p);
 Val *MakeList(Val *first, Val *rest);
 Val *MakeSym(char *s);
 Val *MakeSymCopy(const char *name, int len);
-Val *MakeSymInt(long n);
+Val *MakeInt(long n);
 Val *MakeSymStr(const char *s);
 
 ValKind KindOf(Val *v);
-int IsEqual(Val *x, Val *y);
-int IsError(Val *v);
 int IsInt(Val *v);
 int IsList(Val *v);
 int IsSym(Val *v);
+
+int GetAfterSymbol(Val *list, const char *symbol, Val **out);
+int IsEqual(Val *x, Val *y);
 int ListLength(Val *l);
 long AsInt(Val *v);
 
@@ -86,9 +87,10 @@ Val *MakeError(Val *rest);
 Val *MakeErrorMessage(const char *msg);
 Val *MakeFalse(void);
 
-int IsTrue(Val *v);
+int IsError(Val *v);
 int IsFunc(Val *v);
 int IsLambda(Val *v);
+int IsTrue(Val *v);
 
 Val *Eval(Val *ast, Val *env);
 Val *EvalEach(Val *list, Val *env);
@@ -120,7 +122,7 @@ Val *Lappend(Val *args);     // [append val list]
 Val *Lprepend(Val *args);    // [prepend val list]
 Val *Lprint(Val *args);      // [print (v)...]
 Val *Lplus(Val *args);       // [+ (e:integer)...] sum
-Val *Lmultiply(Val *args);   // [+ (e:integer)...] product
+Val *Lmultiply(Val *args);   // [* (e:integer)...] product
 Val *Lsubtract(Val *args);   // [- x:int (y:int)] subtraction
 Val *Ldivide(Val *args);     // [/ x:int y:int] division
 Val *Lmod(Val *args);        // [% x:int y:int] modulo
@@ -264,7 +266,7 @@ int MatchArgs(const char *form, Val *args, Val **err)
                     int n = strcspn(form, "&(");
                     char *arguments = (n == 1)? "argument" : "arguments";
                     *err = MakeList(MakeSymStr("not enough arguments: requires at least"),
-                                    MakeList(MakeSymInt(n),
+                                    MakeList(MakeInt(n),
                                              MakeList(MakeSymStr(arguments),
                                                       NULL)));
                 }
@@ -276,7 +278,7 @@ int MatchArgs(const char *form, Val *args, Val **err)
                 {
                     // wrap message with more context
                     *err = MakeList(MakeSymStr("argument"),
-                                    MakeList(MakeSymInt(i + 1),
+                                    MakeList(MakeInt(i + 1),
                                              MakeList(*err,
                                                       NULL)));
                 }
@@ -355,7 +357,7 @@ int MatchArgs(const char *form, Val *args, Val **err)
             int n = strlen(form) - (optional? 1 : 0);
             char *arguments = (n == 1) ? "argument" : "arguments";
             *err = MakeList(MakeSymStr("too many arguments, requires at most"),
-                            MakeList(MakeSymInt(n),
+                            MakeList(MakeInt(n),
                                      MakeList(MakeSymStr(arguments),
                                               NULL)));
         }
@@ -514,7 +516,7 @@ Val *MakeSymStr(const char *str)
 }
 
 // Make a symbol for an integer
-Val *MakeSymInt(long n)
+Val *MakeInt(long n)
 {
     const char *fmt = "%ld";
     const int sz = snprintf(NULL, 0, fmt, n);
@@ -1414,7 +1416,7 @@ static Val *ApplyNative(Val *first, Val *args)
         if (!match)
         {
             return MakeError(MakeList(MakeSymStr("native function #"),
-                                      MakeList(MakeSymInt(id),
+                                      MakeList(MakeInt(id),
                                                err)));
         }
     }
@@ -1433,7 +1435,7 @@ static Val *ApplyNative(Val *first, Val *args)
         }
         // no name
         info = MakeList(MakeSymStr("native function #"),
-                        MakeList(MakeSymInt(id),
+                        MakeList(MakeInt(id),
                                  result->rest));
         result->rest = info;
         return result;
@@ -1483,7 +1485,7 @@ static Val *ApplyMacro(Val *macro, Val *args, Val *env)
         if (!match)
         {
             return MakeError(MakeList(MakeSymStr("native macro #"),
-                                      MakeList(MakeSymInt(id),
+                                      MakeList(MakeInt(id),
                                                err)));
         }
     }
@@ -1502,7 +1504,7 @@ static Val *ApplyMacro(Val *macro, Val *args, Val *env)
         }
         // no name
         info = MakeList(MakeSymStr("native macro #"),
-                        MakeList(MakeSymInt(id),
+                        MakeList(MakeInt(id),
                                  result->rest));
         result->rest = info;
         return result;
@@ -1609,7 +1611,7 @@ int EnvSetFuncEx(Val *env, const char *name, const char *form, LizpFunc *func)
         return 0;
     }
     long handle = PutFunc(name, form, func);
-    Val *val = MakeList(MakeSymCopy("native func", 11), MakeList(MakeSymInt(handle), NULL));
+    Val *val = MakeList(MakeSymCopy("native func", 11), MakeList(MakeInt(handle), NULL));
     if (!val)
     {
         FreeValRec(key);
@@ -1640,7 +1642,7 @@ int EnvSetMacroEx(Val *env, const char *name, const char *form, LizpMacro *m)
     Val *key = MakeSymStr(name);
     if (!key) { return 0; }
     long handle = PutMacro(name, form, m);
-    Val *val = MakeList(MakeSymCopy("native macro", 12), MakeList(MakeSymInt(handle), NULL));
+    Val *val = MakeList(MakeSymCopy("native macro", 12), MakeList(MakeInt(handle), NULL));
     if (!val)
     {
         FreeValRec(key);
@@ -1681,13 +1683,13 @@ void LizpRegisterCoreFuncs(Val *env)
 {
     // macros
     EnvSetMacroEx(env, "quote", "v", Lquote);
-    EnvSetMacroEx(env, "if", "vv(v", Lif);
-    EnvSetMacroEx(env, "cond", "vv(v", Lcond);
-    EnvSetMacroEx(env, "do", "(v", Ldo);
+    EnvSetMacroEx(env, "if", "vv&v", Lif);
+    EnvSetMacroEx(env, "cond", "vv&v", Lcond);
+    EnvSetMacroEx(env, "do", "&v", Ldo);
     EnvSetMacroEx(env, "^", "l(v", Llambda);
-    EnvSetMacroEx(env, "and", "vv(v", Land);
-    EnvSetMacroEx(env, "or", "vv(v", Lor);
-    EnvSetMacroEx(env, "let", "L(v", Llet);
+    EnvSetMacroEx(env, "and", "v&v", Land);
+    EnvSetMacroEx(env, "or", "v&v", Lor);
+    EnvSetMacroEx(env, "let", "L&v", Llet);
     // functions
     EnvSetFunc(env, "+", Lplus);
     EnvSetFunc(env, "*", Lmultiply);
@@ -1718,6 +1720,7 @@ void LizpRegisterCoreFuncs(Val *env)
     EnvSetFunc(env, "nth", Lnth);
     EnvSetFunc(env, "prepend", Lprepend);
     EnvSetFunc(env, "append", Lappend);
+    EnvSetFunc(env, "without", Lwithout);
 }
 
 // [reverse list]
@@ -1742,10 +1745,40 @@ Val *Ljoin(Val *args)
 }
 
 // [without item list]
+// Create a list without the given item
 Val *Lwithout(Val *args)
 {
-    // TODO: implement
-    return NULL;
+    Val *err;
+    if (!MatchArgs("vl", args, &err))
+    {
+        return MakeError(err);
+    }
+    Val *item = NthItem(args, 0);
+    Val *list = NthItem(args, 1);
+    if (!list) { return NULL; }
+    Val *result = NULL;
+    Val *p = result;
+    while (list)
+    {
+        Val *e = list->first;
+        if (IsEqual(e, item))
+        {
+            list = list->rest;
+            continue;
+        }
+        if (result)
+        {
+            p->rest = MakeList(CopyVal(e), NULL);
+            p = p->rest;
+            list = list->rest;
+            continue;
+        }
+        // This is the first time adding an item
+        result = MakeList(CopyVal(e), NULL);
+        p = result;
+        list = list->rest;
+    }
+    return result;
 }
 
 // [replace item1 item2 list]
@@ -1829,14 +1862,13 @@ Val *Lplus(Val *args)
     while (p)
     {
         Val *e = p->first;
-        long x = atol(e->symbol);
-        sum += x;
+        sum += AsInt(e);
         p = p->rest;
     }
-    return MakeSymInt(sum);
+    return MakeInt(sum);
 }
 
-// [* (e:integer)...] product
+// [* (integer)...] product
 Val *Lmultiply(Val *args)
 {
     Val *err;
@@ -1849,11 +1881,10 @@ Val *Lmultiply(Val *args)
     while (p)
     {
         Val *e = p->first;
-        long x = atol(e->symbol);
-        product *= x;
+        product *= AsInt(e);
         p = p->rest;
     }
-    return MakeSymInt(product);
+    return MakeInt(product);
 }
 
 // [- x:int (y:int)] subtraction
@@ -1868,11 +1899,11 @@ Val *Lsubtract(Val *args)
     long x = atol(vx->symbol);
     if (!args->rest)
     {
-        return MakeSymInt(-x);
+        return MakeInt(-x);
     }
     Val *vy = args->rest->first;
     long y = atol(vy->symbol);
-    return MakeSymInt(x - y);
+    return MakeInt(x - y);
 }
 
 // [/ x:int y:int] division
@@ -1883,16 +1914,14 @@ Val *Ldivide(Val *args)
     {
         return MakeError(err);
     }
-    Val *vx = args->first;
-    Val *vy = args->rest->first;
-    long x = atol(vx->symbol);
-    long y = atol(vy->symbol);
+    long x = AsInt(NthItem(args, 0));
+    long y = AsInt(NthItem(args, 1));
     if (y == 0)
     {
         // division by zero
         return MakeErrorMessage("division by zero");
     }
-    return MakeSymInt(x / y);
+    return MakeInt(x / y);
 }
 
 // [% x:int y:int] modulo
@@ -1903,16 +1932,14 @@ Val *Lmod(Val *args)
     {
         return MakeError(err);
     }
-    Val *vx = args->first;
-    Val *vy = args->rest->first;
-    long x = atol(vx->symbol);
-    long y = atol(vy->symbol);
+    long x = AsInt(NthItem(args, 0));
+    long y = AsInt(NthItem(args, 1));
     if (y == 0)
     {
         // division by zero
         return MakeErrorMessage("division by zero");
     }
-    return MakeSymInt(x % y);
+    return MakeInt(x % y);
 }
 
 // [= x y (expr)...] check equality
@@ -2035,7 +2062,7 @@ Val *Llength(Val *args)
     {
         return MakeError(err);
     }
-    return MakeSymInt(ListLength(args->first));
+    return MakeInt(ListLength(args->first));
 }
 
 // [lambda? v]
@@ -2264,7 +2291,7 @@ Val *Lcount(Val *args)
         }
         list = list->rest;
     }
-    return MakeSymInt(count);
+    return MakeInt(count);
 }
 
 // [position item list] -> list
@@ -2282,7 +2309,7 @@ Val *Lposition(Val *args)
     {
         if (IsEqual(item, list->first))
         {
-            return MakeSymInt(i);
+            return MakeInt(i);
         }
         i++;
         list = list->rest;
