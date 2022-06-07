@@ -1310,7 +1310,9 @@ int EnvSet(Val_t *env, Val_t *key, Val_t *val)
     return 1;
 }
 
+// Environment Get.
 // Get value in environment, does not return a copy
+// Return value: whether the symbol is present
 int EnvGet(Val_t *env, Val_t *key, Val_t **out)
 {
     if (!env) { return 0; }
@@ -1323,12 +1325,6 @@ int EnvGet(Val_t *env, Val_t *key, Val_t **out)
             Val_t *pair = p->first;
             if (pair && IsList(pair) && IsEqual(pair->first, key))
             {
-                // found
-                if (!pair->rest)
-                {
-                    // env is improperly set up
-                    return 0;
-                }
                 if (out) { *out = pair->rest->first; }
                 return 1;
             }
@@ -1361,12 +1357,12 @@ void EnvPop(Val_t *env)
 }
 
 // Return values must not share structure with first, args, or env
-static Val_t *ApplyLambda(Val_t *first, Val_t *args)
+static Val_t *ApplyLambda(Val_t *first, Val_t *args, Val_t *env)
 {
     Val_t *params = first->rest->first;
     Val_t *body = first->rest->rest->first;
     // push env
-    Val_t *env = MakeList(NULL, NULL);
+    EnvPush(env);
     // bind values
     Val_t *p_params = params;
     Val_t *p_args = args;
@@ -1379,7 +1375,7 @@ static Val_t *ApplyLambda(Val_t *first, Val_t *args)
             if (p_params->rest)
             {
                 // error: not the last parameter
-                FreeValRec(env);
+                EnvPop(env);
                 return NULL;
             }
             EnvSet(env, CopyVal(param), CopyVal(p_args));
@@ -1395,11 +1391,11 @@ static Val_t *ApplyLambda(Val_t *first, Val_t *args)
     if ((p_params == NULL) != (p_args == NULL))
     {
         // error
-        FreeValRec(env);
+        EnvPop(env);
         return NULL;
     }
     Val_t *result = Eval(body, env);
-    FreeValRec(env);
+    EnvPop(env);
     return result;
 }
 
@@ -1457,9 +1453,9 @@ static Val_t *ApplyNative(Val_t *first, Val_t *args)
 
 // Apply functions
 // Return values must not share structure with first, args, or env
-Val_t *Apply(Val_t *first, Val_t *args)
+static Val_t *Apply(Val_t *first, Val_t *args, Val_t *env)
 {
-    if (IsLambda(first)) { return ApplyLambda(first, args); }
+    if (IsLambda(first)) { return ApplyLambda(first, args, env); }
     if (IsFunc(first)) { return ApplyNative(first, args); }
     // invalid function
     return MakeError(MakeList(CopyVal(first),
@@ -1580,7 +1576,7 @@ Val_t *Eval(Val_t *ast, Val_t *env)
         FreeValRec(first);
         return args;
     }
-    Val_t *result = Apply(first, args);
+    Val_t *result = Apply(first, args, env);
     FreeValRec(first);
     FreeValRec(args);
     return result;
@@ -2251,6 +2247,7 @@ Val_t *Lslice(Val_t *args)
 }
 
 // (macro) [let [key val...] expr]
+// create bindings
 Val_t *Llet(Val_t *args, Val_t *env)
 {
     Val_t *err;
@@ -2267,7 +2264,8 @@ Val_t *Llet(Val_t *args, Val_t *env)
         {
             // invalid symbol or uneven amount of args
             EnvPop(env);
-            return MakeErrorMessage("`let` bindings list must consist of alternating symbols and expressions");
+            return MakeErrorMessage(
+                    "`let` bindings list must consist of alternating symbols and expressions");
         }
         p_binds = p_binds->rest;
         Val_t *expr = p_binds->first;
