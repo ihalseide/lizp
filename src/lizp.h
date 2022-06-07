@@ -650,38 +650,56 @@ int StrNeedsQuotes(const char *s)
 }
 
 // Escape a string.
+//   (or is this called "un-escaping"?)
+// Converts escape sequences into the corresponding real ASCII
+// values.
 // Modifies the string in-place
 int EscapeStr(char *str, int len)
 {
-    if (!str || len <= 0)
+    if (!str || len <= 0) { return 0; }
+    int r = 0; // read index
+    int w = 0; // write index
+    while (r < len && str[r])
     {
-        return 0;
-    }
-    int i = 0;
-    int j = 0;
-    while (i < len)
-    {
-        char c = str[i];
+        char c = str[r];
         if (c == '\\')
         {
-            i++;
-            c = str[i];
+            r++;
+            c = str[r];
             switch (c)
             {
+                case 'a':
+                    c = '\a';
+                    break;
+                case 'b':
+                    c = '\b';
+                    break;
+                case 'e': // escape
+                    c = '\x1b';
+                    break;
                 case 'n':
                     c = '\n';
+                    break;
+                case 'r':
+                    c = '\r';
                     break;
                 case 't':
                     c = '\t';
                     break;
+                default:
+                    // default result character is itself
+                    // - '
+                    // - \
+                    // - "
+                    break;
             }
         }
-        str[j] = c;
-        i++;
-        j++;
+        str[w] = c;
+        r++;
+        w++;
     }
-    str[j] = '\0';
-    return j;
+    str[w] = '\0';
+    return w;
 }
 
 // Skip space and nested comments within `str`
