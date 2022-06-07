@@ -14,21 +14,21 @@
 #define BUF_SZ (2*1024)
 
 // Print value to a file
-void PrintValFile(FILE *f, Val_t *v, int readable)
+void valWriteToFile(FILE *f, Val_t *v, int readable)
 {
-    char *s = PrintValStr(v, readable);
+    char *s = valWriteToNewString(v, readable);
     fprintf(f, "%s", s);
     free(s);
 }
 
 // [print (v)...]
-Val_t *Lprint(Val_t *args)
+Val_t *print_func(Val_t *args)
 {
     int readable = 0;
     Val_t *p = args;
     while (p)
     {
-        PrintValFile(stdout, p->first, readable);
+        valWriteToFile(stdout, p->first, readable);
         p = p->rest;
     }
     return NULL;
@@ -46,29 +46,29 @@ void rep(const char *str, int len, Val_t *env)
     //printf("\n<str len=%d>%.*s</str>", len, len, str);
 
     Val_t *expr;
-    int n = ReadVals(str, len, &expr);
+    int n = valReadAllFromBuffer(str, len, &expr);
     if (!n) { return; }
 
     // wrap multiple expressions in an implicit "do" form
     if (n > 1)
     {
-        Val_t *doo = MakeSymCopy("do", 2);
-        expr = MakeList(doo, expr);
+        Val_t *doo = valCreateSymbolCopy("do", 2);
+        expr = valCreateList(doo, expr);
     }
 
     // debug print
     //putchar('\n');
-    //PrintValFile(stdout, expr, 1);
+    //valWriteToFile(stdout, expr, 1);
 
     // Eval
-    Val_t *val = Eval(expr, env);
+    Val_t *val = evaluate(expr, env);
 
     // Print
     putchar('\n');
-    PrintValFile(stdout, val, 1);
+    valWriteToFile(stdout, val, 1);
 
-    FreeValRec(expr);
-    FreeValRec(val);
+    valFreeRec(expr);
+    valFree(val);
 }
 
 // read, eval, print loop
@@ -93,7 +93,7 @@ void REPL(Val_t *env)
     printf("end of input\n");
 }
 
-void LoadFile(const char *fname, Val_t *env)
+void loadFile(const char *fname, Val_t *env)
 {
     // read file contents wrapped in a "do" block
     FILE *f = fopen(fname, "rb");
@@ -125,16 +125,16 @@ void LoadFile(const char *fname, Val_t *env)
 int main (int argc, char **argv)
 {
     // init environment
-    Val_t *env = MakeList(NULL, NULL);
-    LizpRegisterCoreFuncs(env);
-    EnvSetFunc(env, "print", Lprint);
-    EnvSetSym(env, "#f", MakeFalse());
-    EnvSetSym(env, "#t", MakeTrue());
+    Val_t *env = valCreateList(NULL, NULL);
+    lizpRegisterCore(env);
+    EnvSetFunc(env, "print", print_func);
+    EnvSetSym(env, "#f", valCreateFalse());
+    EnvSetSym(env, "#t", valCreateTrue());
     // load each file given on the command line
     for (int i = 1; i < argc; i++)
     {
         printf("loading %s\n", argv[i]);
-        LoadFile(argv[i], env);
+        loadFile(argv[i], env);
     }
     // read-eval-print loop
     printf("\nLIZP read-eval-print loop:");

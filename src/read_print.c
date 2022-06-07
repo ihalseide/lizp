@@ -7,7 +7,7 @@
 // Return value:
 // - 0 upon success
 // - non-zero upon failure
-int LoadFile(const char *filename, char **text_out, int *len_out)
+int loadFile(const char *filename, char **text_out, int *len_out)
 {
     FILE *fp = fopen(filename, "r");
     if (!fp) { return 1; }
@@ -44,7 +44,7 @@ int main(int argc, char **argv)
     char *fname = argv[1];
     char *text;
     int length;
-    if (LoadFile(fname, &text, &length))
+    if (loadFile(fname, &text, &length))
     {
         perror("fopen");
         return 1;
@@ -52,11 +52,11 @@ int main(int argc, char **argv)
 
     // convert to data structure
     Val_t *val;
-    int n = ReadVals(text, length, &val);
+    int n = valReadAllFromBuffer(text, length, &val);
     free(text);
 
     // print back out
-    text = PrintValStr(val, 1);
+    text = valWriteToNewString(val, 1);
     printf("%s\n", text);
     free(text);
 
