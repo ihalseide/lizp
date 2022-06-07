@@ -1115,16 +1115,16 @@ int IsSeparate(Val_t *a, Val_t *b)
 #ifdef LIZP_EVAL
 
 // Dynamic array of function pointers for native Lizp Functions
-FuncRecord *da_funcs;
+FuncRecord_t *da_funcs;
 
 // Dynamic array of function pointers for native Lizp Macros
-MacroRecord *da_macros;
+MacroRecord_t *da_macros;
 
 // Put function in the dynamic array
 // Meant to be used by `EnvSetFunc` to bind native functions
 static size_t PutFunc(const char *name, const char *form, LizpFunc_t *func)
 {
-    FuncRecord r = (FuncRecord)
+    FuncRecord_t r = (FuncRecord_t)
     {
         .name = name,
         .form = form,
@@ -1137,7 +1137,7 @@ static size_t PutFunc(const char *name, const char *form, LizpFunc_t *func)
 
 // Get function from the dynamic array
 // Meant to be used by Apply() to look up native functions
-static FuncRecord *GetFunc(size_t id)
+static FuncRecord_t *GetFunc(size_t id)
 {
     size_t len = arrlen(da_funcs);
     if (id < 0 || id >= len) { return NULL; }
@@ -1148,7 +1148,7 @@ static FuncRecord *GetFunc(size_t id)
 // Meant to be used by `EnvSetMacro` to bind native macros
 static size_t PutMacro(const char *name, const char *form, LizpMacro_t *macro)
 {
-    MacroRecord r = (MacroRecord)
+    MacroRecord_t r = (MacroRecord_t)
     {
         .name = name,
         .form = form,
@@ -1161,7 +1161,7 @@ static size_t PutMacro(const char *name, const char *form, LizpMacro_t *macro)
 
 // Get macro from the dynamic array
 // Meant to be used by Eval() to look up native macros
-static MacroRecord *GetMacro(size_t id)
+static MacroRecord_t *GetMacro(size_t id)
 {
     size_t len = arrlen(da_macros);
     if (id < 0 || id >= len) { return NULL; }
@@ -1369,7 +1369,7 @@ static Val_t *ApplyLambda(Val_t *first, Val_t *args)
 static Val_t *ApplyNative(Val_t *first, Val_t *args)
 {
     long id = atol(first->rest->first->symbol);
-    FuncRecord *record = GetFunc(id);
+    FuncRecord_t *record = GetFunc(id);
     if (!record || !record->func)
     {
         // error: invalid function id or pointer
@@ -1432,7 +1432,7 @@ Val_t *Apply(Val_t *first, Val_t *args)
 static Val_t *ApplyMacro(Val_t *macro, Val_t *args, Val_t *env)
 {
     long id = atol(macro->rest->first->symbol);
-    MacroRecord *record = GetMacro(id);
+    MacroRecord_t *record = GetMacro(id);
     if (!record || !record->macro)
     {
         // error: invalid function id or pointer
