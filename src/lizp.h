@@ -529,15 +529,14 @@ int IsInt(Val_t *v)
 }
 
 // Make symbol
-// NOTE: does not make a copy of the `s` string
+// NOTE: "s" MUST be a free-able string
+// NOTE: does not make a copy of the "s" string
 Val_t *MakeSym(char *s)
 {
     Val_t *p = AllocVal();
-    if (p)
-    {
-        p->kind = VK_SYMBOL;
-        p->symbol = s;
-    }
+    if (!p) { return p; }
+    p->kind = VK_SYMBOL;
+    p->symbol = s;
     return p;
 }
 
@@ -546,24 +545,21 @@ Val_t *MakeSym(char *s)
 // - empty string -> null []
 Val_t *MakeSymCopy(const char *buf, int len)
 {
-    if (!buf || len <= 0)
-    {
-        return NULL;
-    }
-    char *new = malloc(len + 1);
-    memcpy(new, buf, len);
-    new[len] = 0;
-    return MakeSym(new);
+    if (!buf || len <= 0) { return NULL; }
+    char *s = malloc(len + 1);
+    memcpy(s, buf, len);
+    s[len] = 0;
+    return MakeSym(s);
 }
 
 // Make symbol by copying the null-terminated `str`
 Val_t *MakeSymStr(const char *str)
 {
     int len = strlen(str);
-    char *new = malloc(len + 1);
-    memcpy(new, str, len);
-    new[len] = 0;
-    return MakeSym(new);
+    char *s = malloc(len + 1);
+    memcpy(s, str, len);
+    s[len] = 0;
+    return MakeSym(s);
 }
 
 // Make a symbol for an integer
@@ -582,32 +578,22 @@ Val_t *MakeInt(long n)
 // NOTE: rest must be NULL or a list Val_t.
 Val_t *MakeList(Val_t *first, Val_t *rest)
 {
-    if (!IsList(rest))
-    {
-        return NULL;
-    }
+    if (!IsList(rest)) { return NULL; }
     Val_t *p = AllocVal();
-    if (p)
-    {
-        p->kind = VK_LIST;
-        p->first = first;
-        p->rest = rest;
-    }
+    if (!p) { return p; }
+    p->kind = VK_LIST;
+    p->first = first;
+    p->rest = rest;
     return p;
 }
 
 // New copy, with no structure-sharing
 Val_t *CopyVal(Val_t *p)
 {
-    if (!p)
-    {
-        return p;
-    }
-    if (!IsList(p))
-    {
-        return MakeSymStr(p->symbol);
-    }
-    // List
+    if (!p) { return p; }
+    if (IsSym(p)) { return MakeSymStr(p->symbol); }
+    if (!IsList(p)) {return NULL; }
+    // Copy list
     Val_t *copy = MakeList(CopyVal(p->first), NULL);
     Val_t *pcopy = copy;
     p = p->rest;
@@ -757,10 +743,7 @@ static int ReadSym(const char *str, int len, Val_t **out)
                             break;
                         case '\\':
                             i++;
-                            if (str[i] == '"')
-                            {
-                                i++;
-                            }
+                            if (str[i] == '"') { i++; }
                             break;
                         case '"':
                             done = 1;
@@ -839,10 +822,7 @@ static int ReadSym(const char *str, int len, Val_t **out)
 // returns the number of chars read
 int ReadVal(const char *str, int len, Val_t **out)
 {
-    if (!out || !str || len <= 0)
-    {
-        return 0;
-    }
+    if (!out || !str || len <= 0) { return 0; }
     int i = 0;
     i += SkipChars(str + i, len - i);
     switch (str[i])
@@ -989,6 +969,9 @@ int PrintValBuf(Val_t *v, char *out, int length, int readable)
                 int esc = 0;
                 switch (c)
                 {
+                    case '\r':
+                        c = 'r';
+                        esc = 1;
                     case '\n':
                         c = 'n';
                         esc = 1;
@@ -1040,12 +1023,12 @@ char *PrintValStr(Val_t *v, int readable)
 {
     int len1 = PrintValBuf(v, NULL, 0, readable);
     if (len1 <= 0) { return NULL; }
-    char *new = malloc(len1 + 1);
-    if (!new) { return NULL; }
-    int len2 = PrintValBuf(v, new, len1, readable);
+    char *s = malloc(len1 + 1);
+    if (!s) { return NULL; }
+    int len2 = PrintValBuf(v, s, len1, readable);
     if (len1 != len2) { return NULL; } // should not happen unless there is a bug in PrintValBuf()
-    new[len2] = '\0';
-    return new;
+    s[len2] = '\0';
+    return s;
 }
 
 // Get the length of a list.
@@ -1181,10 +1164,7 @@ static size_t PutMacro(const char *name, const char *form, LizpMacro_t *macro)
 static MacroRecord *GetMacro(size_t id)
 {
     size_t len = arrlen(da_macros);
-    if (id < 0 || id >= len)
-    {
-        return NULL;
-    }
+    if (id < 0 || id >= len) { return NULL; }
     return &(da_macros[id]);
 }
 
@@ -1208,10 +1188,7 @@ Val_t *MakeFalse(void)
 Val_t *MakeError(Val_t *rest)
 {
     Val_t *e = MakeSymStr("error");
-    if (IsList(rest))
-    {
-        return MakeList(e, rest);
-    }
+    if (IsList(rest)) { return MakeList(e, rest); }
     return MakeList(e, MakeList(rest, NULL));
 }
 
@@ -1223,41 +1200,20 @@ Val_t *MakeErrorMessage(const char *msg)
 // Check whether a value is a lambda value (special list)
 int IsLambda(Val_t *v)
 {
-    if (!v || !IsList(v))
-    {
-        return 0;
-    }
+    if (!v || !IsList(v)) { return 0; }
     Val_t *l = v->first;
-    if (!l || !IsSym(l))
-    {
-        return 0;
-    }
-    if (strcmp(l->symbol, "lambda"))
-    {
-        return 0;
-    }
-    if (!v->rest)
-    {
-        return 0;
-    }
+    if (!l || !IsSym(l)) { return 0; }
+    if (strcmp(l->symbol, "lambda")) { return 0; }
+    if (!v->rest) { return 0; }
     Val_t *params = v->rest->first;
-    if (!IsList(params))
-    {
-        return 0;
-    }
+    if (!IsList(params)) { return 0; }
     Val_t *pp = params;
     while (pp && IsList(pp))
     {
-        if (!IsSym(pp->first))
-        {
-            return 0;
-        }
+        if (!IsSym(pp->first)) { return 0; }
         pp = pp->rest;
     }
-    if (!v->rest->rest)
-    {
-        return 0;
-    }
+    if (!v->rest->rest) { return 0; }
     return 1;
 }
 
@@ -1266,29 +1222,15 @@ int IsLambda(Val_t *v)
 // [func number]
 int IsFunc(Val_t *v)
 {
-    if (!v || !IsList(v))
-    {
-        return 0;
-    }
+    if (!v || !IsList(v)) { return 0; }
     Val_t *sym = v->first;
-    if (!sym || !IsSym(sym) || strcmp(sym->symbol, "native func"))
-    {
-        return 0;
-    }
-    if (!v->rest)
-    {
-        return 0;
-    }
+    if (!sym) { return 0; }
+    if (!IsSym(sym)) { return 0; }
+    if (strcmp(sym->symbol, "native func")) { return 0; }
+    if (!v->rest) { return 0; }
     Val_t *id = v->rest->first;
-    if (!IsInt(id))
-    {
-        return 0;
-    }
-    if (v->rest->rest)
-    {
-        // too many items
-        return 0;
-    }
+    if (!IsInt(id)) { return 0; }
+    if (v->rest->rest) { return 0; } // too many items
     return 1;
 }
 
@@ -1297,39 +1239,22 @@ int IsFunc(Val_t *v)
 // [macro number]
 int IsMacro(Val_t *v)
 {
-    if (!v || !IsList(v))
-    {
-        return 0;
-    }
+    if (!v || !IsList(v)) { return 0; }
     Val_t *sym = v->first;
-    if (!sym || !IsSym(sym) || strcmp(sym->symbol, "native macro"))
-    {
-        return 0;
-    }
-    if (!v->rest)
-    {
-        return 0;
-    }
+    if (!sym ) { return 0; }
+    if (!IsSym(sym)) { return 0; }
+    if (strcmp(sym->symbol, "native macro")) { return 0; }
+    if (!v->rest) { return 0; }
     Val_t *id = v->rest->first;
-    if (!IsInt(id))
-    {
-        return 0;
-    }
-    if (v->rest->rest)
-    {
-        // too many items
-        return 0;
-    }
+    if (!IsInt(id)) { return 0; }
+    if (v->rest->rest) { return 0; } // too many items 
     return 1;
 }
 
 // check if the value matches the form [error ...]
 int IsError(Val_t *v)
 {
-    if (!v || !IsList(v))
-    {
-        return 0;
-    }
+    if (!v || !IsList(v)) { return 0; }
     Val_t *first = v->first;
     return IsSym(first) && !strcmp("error", first->symbol);
 }
@@ -1339,15 +1264,9 @@ int IsError(Val_t *v)
 // Returns non-zero upon success
 int EnvSet(Val_t *env, Val_t *key, Val_t *val)
 {
-    if (!env || !IsList(env))
-    {
-        return 0;
-    }
+    if (!env || !IsList(env)) { return 0; }
     Val_t *pair = MakeList(key, MakeList(val, NULL));
-    if (!pair)
-    {
-        return 0;
-    }
+    if (!pair) { return 0; }
     // push key-value pair onto the front of the list
     env->first = MakeList(pair, env->first);
     return 1;
@@ -1356,10 +1275,7 @@ int EnvSet(Val_t *env, Val_t *key, Val_t *val)
 // Get value in environment, does not return a copy
 int EnvGet(Val_t *env, Val_t *key, Val_t **out)
 {
-    if (!env)
-    {
-        return 0;
-    }
+    if (!env) { return 0; }
     Val_t *scope = env;
     while (scope && IsList(scope))
     {
@@ -1375,10 +1291,7 @@ int EnvGet(Val_t *env, Val_t *key, Val_t **out)
                     // env is improperly set up
                     return 0;
                 }
-                if (out)
-                {
-                    *out = pair->rest->first;
-                }
+                if (out) { *out = pair->rest->first; }
                 return 1;
             }
             p = p->rest;
@@ -1392,10 +1305,7 @@ int EnvGet(Val_t *env, Val_t *key, Val_t **out)
 // push a new context onto the environment
 void EnvPush(Val_t *env)
 {
-    if (!env)
-    {
-        return;
-    }
+    if (!env) { return; }
     env->rest = MakeList(env->first, env->rest);
     env->first = NULL;
 }
@@ -1403,10 +1313,7 @@ void EnvPush(Val_t *env)
 // pop off the latest context from the environment
 void EnvPop(Val_t *env)
 {
-    if (!env)
-    {
-        return;
-    }
+    if (!env) { return; }
     FreeValRec(env->first);
     Val_t *pair = env->rest;
     env->first = pair->first;
@@ -1514,14 +1421,8 @@ static Val_t *ApplyNative(Val_t *first, Val_t *args)
 // Return values must not share structure with first, args, or env
 Val_t *Apply(Val_t *first, Val_t *args)
 {
-    if (IsLambda(first))
-    {
-        return ApplyLambda(first, args);
-    }
-    if (IsFunc(first))
-    {
-        return ApplyNative(first, args);
-    }
+    if (IsLambda(first)) { return ApplyLambda(first, args); }
+    if (IsFunc(first)) { return ApplyNative(first, args); }
     // invalid function
     return MakeError(MakeList(CopyVal(first),
                               MakeList(MakeSymStr("is not a function"),
@@ -1612,16 +1513,9 @@ Val_t *EvalEach(Val_t *list, Val_t *env)
 //       structure with the ast or the env
 Val_t *Eval(Val_t *ast, Val_t *env)
 {
-    if (!ast)
-    {
-        // empty list
-        return ast;
-    }
-    if (IsInt(ast))
-    {
-        // integers are self-evaluating
-        return CopyVal(ast);
-    }
+    if (!ast) { return ast; } // empty list
+    if (IsInt(ast)) { return CopyVal(ast); } // integers are self-evaluating
+    if (IsLambda(ast)) { return CopyVal(ast); } // lambda values are self-evaluating
     if (IsSym(ast))
     {
         // lookup symbol value
@@ -1637,19 +1531,11 @@ Val_t *Eval(Val_t *ast, Val_t *env)
                      MakeList(MakeSymStr("is undefined"),
                               NULL)));
     }
-    if (IsLambda(ast))
-    {
-        // lambda values are self-evaluating
-        return CopyVal(ast);
-    }
     // Eval list application...
     Val_t *first = Eval(ast->first, env);
     if (IsError(first)) { return first; }
-    if (IsMacro(first)) 
-    { 
-        return ApplyMacro(first, ast->rest, env); 
-    }
-    // Eval rest of elements for function application
+    if (IsMacro(first)) { return ApplyMacro(first, ast->rest, env); }
+    // Eval rest of elements for normal function application
     Val_t *args = EvalEach(ast->rest, env);
     if (IsError(args))
     {
@@ -1729,10 +1615,7 @@ int EnvSetMacro(Val_t *env, const char *name, LizpMacro_t *m)
 // Environment Set Symbol
 int EnvSetSym(Val_t *env, const char *sym, Val_t *v)
 {
-    if (!env || !sym)
-    {
-        return 0;
-    }
+    if (!env || !sym) { return 0; }
     return EnvSet(env, MakeSymStr(sym), v);
 }
 
@@ -1810,10 +1693,7 @@ Val_t *Ljoin(Val_t *args)
 Val_t *Lwithout(Val_t *args)
 {
     Val_t *err;
-    if (!MatchArgs("vl", args, &err))
-    {
-        return MakeError(err);
-    }
+    if (!MatchArgs("vl", args, &err)) { return MakeError(err); }
     Val_t *item = NthItem(args, 0);
     Val_t *list = NthItem(args, 1);
     if (!list) { return NULL; }
@@ -1874,10 +1754,7 @@ Val_t *Lzip(Val_t *args)
 Val_t *Lappend(Val_t *args)
 {
     Val_t *err;
-    if (!MatchArgs("vl", args, &err))
-    {
-        return MakeError(err);
-    }
+    if (!MatchArgs("vl", args, &err)) { return MakeError(err); }
     Val_t *v = args->first;
     Val_t *list = args->rest->first;
     Val_t *last = MakeList(CopyVal(v), NULL);
@@ -1887,24 +1764,21 @@ Val_t *Lappend(Val_t *args)
         return last;
     }
     // Create a new list and put "last" at the end
-    Val_t *new = CopyVal(list);
-    Val_t *p = new;
+    Val_t *copy = CopyVal(list);
+    Val_t *p = copy;
     while (p->rest)
     {
         p = p->rest;
     }
     p->rest = last;
-    return new;
+    return copy;
 }
 
 // [prepend val list]
 Val_t *Lprepend(Val_t *args)
 {
     Val_t *err;
-    if (!MatchArgs("vl", args, &err))
-    {
-        return MakeError(err);
-    }
+    if (!MatchArgs("vl", args, &err)) { return MakeError(err); }
     Val_t *v = args->first;
     Val_t *list = args->rest->first;
     return MakeList(CopyVal(v), CopyVal(list));
@@ -1914,10 +1788,7 @@ Val_t *Lprepend(Val_t *args)
 Val_t *Lplus(Val_t *args)
 {
     Val_t *err;
-    if (!MatchArgs("&n", args, &err))
-    {
-        return MakeError(err);
-    }
+    if (!MatchArgs("&n", args, &err)) { return MakeError(err); }
     long sum = 0;
     Val_t *p = args;
     while (p)
@@ -1933,10 +1804,7 @@ Val_t *Lplus(Val_t *args)
 Val_t *Lmultiply(Val_t *args)
 {
     Val_t *err;
-    if (!MatchArgs("&n", args, &err))
-    {
-        return MakeError(err);
-    }
+    if (!MatchArgs("&n", args, &err)) { return MakeError(err); }
     long product = 1;
     Val_t *p = args;
     while (p)
@@ -1952,16 +1820,10 @@ Val_t *Lmultiply(Val_t *args)
 Val_t *Lsubtract(Val_t *args)
 {
     Val_t *err;
-    if (!MatchArgs("n(n", args, &err))
-    {
-        return MakeError(err);
-    }
+    if (!MatchArgs("n(n", args, &err)) { return MakeError(err); }
     Val_t *vx = args->first;
     long x = atol(vx->symbol);
-    if (!args->rest)
-    {
-        return MakeInt(-x);
-    }
+    if (!args->rest) { return MakeInt(-x); }
     Val_t *vy = args->rest->first;
     long y = atol(vy->symbol);
     return MakeInt(x - y);
@@ -1971,10 +1833,7 @@ Val_t *Lsubtract(Val_t *args)
 Val_t *Ldivide(Val_t *args)
 {
     Val_t *err;
-    if (!MatchArgs("nn", args, &err))
-    {
-        return MakeError(err);
-    }
+    if (!MatchArgs("nn", args, &err)) { return MakeError(err); }
     long x = AsInt(NthItem(args, 0));
     long y = AsInt(NthItem(args, 1));
     if (y == 0)
@@ -1989,10 +1848,7 @@ Val_t *Ldivide(Val_t *args)
 Val_t *Lmod(Val_t *args)
 {
     Val_t *err;
-    if (!MatchArgs("nn", args, &err))
-    {
-        return MakeError(err);
-    }
+    if (!MatchArgs("nn", args, &err)) { return MakeError(err); }
     long x = AsInt(NthItem(args, 0));
     long y = AsInt(NthItem(args, 1));
     if (y == 0)
@@ -2007,18 +1863,12 @@ Val_t *Lmod(Val_t *args)
 Val_t *Lequal(Val_t *args)
 {
     Val_t *err;
-    if (!MatchArgs("vv&v", args, &err))
-    {
-        return MakeError(err);
-    }
+    if (!MatchArgs("vv&v", args, &err)) { return MakeError(err); }
     Val_t *f = args->first;
     Val_t *p = args->rest;
     while (p && IsList(p))
     {
-        if (!IsEqual(f, p->first))
-        {
-            return MakeFalse();
-        }
+        if (!IsEqual(f, p->first)) { return MakeFalse(); }
         p = p->rest;
     }
     return MakeTrue();
@@ -2028,10 +1878,7 @@ Val_t *Lequal(Val_t *args)
 Val_t *Lnot(Val_t *args)
 {
     Val_t *err;
-    if (!MatchArgs("v", args, &err))
-    {
-        return MakeError(err);
-    }
+    if (!MatchArgs("v", args, &err)) { return MakeError(err); }
     return IsTrue(args->first)? MakeFalse() : MakeTrue();
 }
 
@@ -2039,10 +1886,7 @@ Val_t *Lnot(Val_t *args)
 Val_t *Lsymbol_q(Val_t *args)
 {
     Val_t *err;
-    if (!MatchArgs("v", args, &err))
-    {
-        return MakeError(err);
-    }
+    if (!MatchArgs("v", args, &err)) { return MakeError(err); }
     Val_t *v = args->first;
     return !IsSym(v)? MakeTrue() : MakeFalse();
 }
@@ -2051,10 +1895,7 @@ Val_t *Lsymbol_q(Val_t *args)
 Val_t *Linteger_q(Val_t *args)
 {
     Val_t *err;
-    if (!MatchArgs("v", args, &err))
-    {
-        return MakeError(err);
-    }
+    if (!MatchArgs("v", args, &err)) { return MakeError(err); }
     return IsInt(args->first)? MakeTrue() : MakeFalse();
 }
 
@@ -2062,10 +1903,7 @@ Val_t *Linteger_q(Val_t *args)
 Val_t *Llist_q(Val_t *args)
 {
     Val_t *err;
-    if (!MatchArgs("v", args, &err))
-    {
-        return MakeError(err);
-    }
+    if (!MatchArgs("v", args, &err)) { return MakeError(err); }
     return IsList(args->first)? MakeTrue() : MakeFalse();
 }
 
@@ -2073,10 +1911,7 @@ Val_t *Llist_q(Val_t *args)
 Val_t *Lempty_q(Val_t *args)
 {
     Val_t *err;
-    if (!MatchArgs("v", args, &err))
-    {
-        return MakeError(err);
-    }
+    if (!MatchArgs("v", args, &err)) { return MakeError(err); }
     return (!args->first)? MakeTrue() : MakeFalse();
 }
 
@@ -2084,10 +1919,7 @@ Val_t *Lempty_q(Val_t *args)
 Val_t *Lnth(Val_t *args)
 {
     Val_t *err;
-    if (!MatchArgs("nl", args, &err))
-    {
-        return MakeError(err);
-    }
+    if (!MatchArgs("nl", args, &err)) { return MakeError(err); }
     Val_t *i = args->first;
     Val_t *list = args->rest->first;
     long n = atol(i->symbol);
@@ -2102,10 +1934,7 @@ Val_t *Lnth(Val_t *args)
         p = p->rest;
         n--;
     }
-    if (p)
-    {
-        return CopyVal(p->first);
-    }
+    if (p) { return CopyVal(p->first); }
     return MakeErrorMessage("index too big");
 }
 
@@ -2119,10 +1948,7 @@ Val_t *Llist(Val_t *args)
 Val_t *Llength(Val_t *args)
 {
     Val_t *err;
-    if (!MatchArgs("l", args, &err))
-    {
-        return MakeError(err);
-    }
+    if (!MatchArgs("l", args, &err)) { return MakeError(err); }
     return MakeInt(ListLength(args->first));
 }
 
@@ -2130,10 +1956,7 @@ Val_t *Llength(Val_t *args)
 Val_t *Llambda_q(Val_t *args)
 {
     Val_t *err;
-    if (!MatchArgs("v", args, &err))
-    {
-        return MakeError(err);
-    }
+    if (!MatchArgs("v", args, &err)) { return MakeError(err); }
     return IsLambda(args->first)? MakeTrue() : MakeFalse();
 }
 
@@ -2141,10 +1964,7 @@ Val_t *Llambda_q(Val_t *args)
 Val_t *Lfunction_q(Val_t *args)
 {
     Val_t *err;
-    if (!MatchArgs("v", args, &err))
-    {
-        return MakeError(err);
-    }
+    if (!MatchArgs("v", args, &err)) { return MakeError(err); }
     return IsFunc(args->first)? MakeTrue() : MakeFalse();
 }
 
@@ -2152,10 +1972,7 @@ Val_t *Lfunction_q(Val_t *args)
 Val_t *Lnative_q(Val_t *args)
 {
     Val_t *err;
-    if (!MatchArgs("v", args, &err))
-    {
-        return MakeError(err);
-    }
+    if (!MatchArgs("v", args, &err)) { return MakeError(err); }
     Val_t *v = args->first;
     return (IsFunc(v) || IsLambda(v))? MakeTrue() : MakeFalse();
 }
@@ -2164,10 +1981,7 @@ Val_t *Lnative_q(Val_t *args)
 Val_t *Lincreasing(Val_t *args)
 {
     Val_t *err;
-    if (!MatchArgs("nn&n", args, &err))
-    {
-        return MakeError(err);
-    }
+    if (!MatchArgs("nn&n", args, &err)) { return MakeError(err); }
     Val_t *f = args->first;
     long x = atol(f->symbol);
     Val_t *p = args->rest;
@@ -2175,10 +1989,7 @@ Val_t *Lincreasing(Val_t *args)
     {
         Val_t *e = p->first;
         long y = atol(e->symbol);
-        if (!(x <= y))
-        {
-            return MakeFalse();
-        }
+        if (!(x <= y)) { return MakeFalse(); }
         x = y;
         p = p->rest;
     }
@@ -2189,10 +2000,7 @@ Val_t *Lincreasing(Val_t *args)
 Val_t *Ldecreasing(Val_t *args)
 {
     Val_t *err;
-    if (!MatchArgs("nn&n", args, &err))
-    {
-        return MakeError(err);
-    }
+    if (!MatchArgs("nn&n", args, &err)) { return MakeError(err); }
     Val_t *f = args->first;
     long x = atol(f->symbol);
     Val_t *p = args->rest;
@@ -2200,10 +2008,7 @@ Val_t *Ldecreasing(Val_t *args)
     {
         Val_t *e = p->first;
         long y = atol(e->symbol);
-        if (!(x >= y))
-        {
-            return MakeFalse();
-        }
+        if (!(x >= y)) { return MakeFalse(); }
         x = y;
         p = p->rest;
     }
@@ -2214,10 +2019,7 @@ Val_t *Ldecreasing(Val_t *args)
 Val_t *Lstrictly_increasing(Val_t *args)
 {
     Val_t *err;
-    if (!MatchArgs("nn&n", args, &err))
-    {
-        return MakeError(err);
-    }
+    if (!MatchArgs("nn&n", args, &err)) { return MakeError(err); }
     Val_t *f = args->first;
     long x = atol(f->symbol);
     Val_t *p = args->rest;
@@ -2225,10 +2027,7 @@ Val_t *Lstrictly_increasing(Val_t *args)
     {
         Val_t *e = p->first;
         long y = atol(e->symbol);
-        if (!(x < y))
-        {
-            return MakeFalse();
-        }
+        if (!(x < y)) { return MakeFalse(); }
         x = y;
         p = p->rest;
     }
@@ -2239,10 +2038,7 @@ Val_t *Lstrictly_increasing(Val_t *args)
 Val_t *Lstrictly_decreasing(Val_t *args)
 {
     Val_t *err;
-    if (!MatchArgs("nn&n", args, &err))
-    {
-        return MakeError(err);
-    }
+    if (!MatchArgs("nn&n", args, &err)) { return MakeError(err); }
     Val_t *f = args->first;
     long x = atol(f->symbol);
     Val_t *p = args->rest;
@@ -2250,10 +2046,7 @@ Val_t *Lstrictly_decreasing(Val_t *args)
     {
         Val_t *e = p->first;
         long y = atol(e->symbol);
-        if (!(x > y))
-        {
-            return MakeFalse();
-        }
+        if (!(x > y)) { return MakeFalse(); }
         x = y;
         p = p->rest;
     }
@@ -2264,10 +2057,7 @@ Val_t *Lstrictly_decreasing(Val_t *args)
 Val_t *Lchars(Val_t *args)
 {
     Val_t *err;
-    if (!MatchArgs("s", args, &err))
-    {
-        return MakeError(err);
-    }
+    if (!MatchArgs("s", args, &err)) { return MakeError(err); }
     Val_t *sym = args->first;
     char *s = sym->symbol;
     Val_t *result = MakeList(MakeSymCopy(s, 1), NULL);
@@ -2286,10 +2076,7 @@ Val_t *Lchars(Val_t *args)
 Val_t *Lsymbol(Val_t *args)
 {
     Val_t *err;
-    if (!MatchArgs("L", args, &err))
-    {
-        return MakeError(err);
-    }
+    if (!MatchArgs("L", args, &err)) { return MakeError(err); }
     Val_t *list = args->first;
     int len = ListLength(list);
     char *sym = malloc(1 + len);
@@ -2316,18 +2103,12 @@ Val_t *Lsymbol(Val_t *args)
 Val_t *Lmember_q(Val_t *args)
 {
     Val_t *err;
-    if (!MatchArgs("vl", args, &err))
-    {
-        return MakeError(err);
-    }
+    if (!MatchArgs("vl", args, &err)) { return MakeError(err); }
     Val_t *item = args->first;
     Val_t *list = args->rest->first;
     while (list && IsList(list))
     {
-        if (IsEqual(list->first, item))
-        {
-            return MakeTrue();
-        }
+        if (IsEqual(list->first, item)) { return MakeTrue(); }
         list = list->rest;
     }
     return MakeFalse();
@@ -2337,19 +2118,13 @@ Val_t *Lmember_q(Val_t *args)
 Val_t *Lcount(Val_t *args)
 {
     Val_t *err;
-    if (!MatchArgs("vl", args, &err))
-    {
-        return MakeError(err);
-    }
+    if (!MatchArgs("vl", args, &err)) { return MakeError(err); }
     Val_t *item = args->first;
     Val_t *list = args->rest->first;
     long count = 0;
     while (list && IsList(list))
     {
-        if (IsEqual(list->first, item))
-        {
-            count++;
-        }
+        if (IsEqual(list->first, item)) { count++; }
         list = list->rest;
     }
     return MakeInt(count);
@@ -2359,19 +2134,13 @@ Val_t *Lcount(Val_t *args)
 Val_t *Lposition(Val_t *args)
 {
     Val_t *err;
-    if (!MatchArgs("vl", args, &err))
-    {
-        return MakeError(err);
-    }
+    if (!MatchArgs("vl", args, &err)) { return MakeError(err); }
     Val_t *item = args->first;
     Val_t *list = args->rest->first;
     long i = 0;
     while (list && IsList(list))
     {
-        if (IsEqual(item, list->first))
-        {
-            return MakeInt(i);
-        }
+        if (IsEqual(item, list->first)) { return MakeInt(i); }
         i++;
         list = list->rest;
     }
@@ -2383,17 +2152,11 @@ Val_t *Lposition(Val_t *args)
 Val_t *Lslice(Val_t *args)
 {
     Val_t *err;
-    if (!MatchArgs("ln(n", args, &err))
-    {
-        return MakeError(err);
-    }
+    if (!MatchArgs("ln(n", args, &err)) { return MakeError(err); }
     Val_t *list = args->first;
     Val_t *start = args->rest->first;
     long start_i = atol(start->symbol);
-    if (start_i < 0)
-    {
-        return MakeErrorMessage("start index cannot be negative");
-    }
+    if (start_i < 0) { return MakeErrorMessage("start index cannot be negative"); }
     if (!args->rest->rest)
     {
         // [slice list start]
@@ -2453,10 +2216,7 @@ Val_t *Lslice(Val_t *args)
 Val_t *Llet(Val_t *args, Val_t *env)
 {
     Val_t *err;
-    if (!MatchArgs("Lv", args, &err))
-    {
-        return MakeError(err);
-    }
+    if (!MatchArgs("Lv", args, &err)) { return MakeError(err); }
     Val_t *bindings = args->first;
     Val_t *body = args->rest->first;
     // create and check bindings
@@ -2494,16 +2254,9 @@ Val_t *Llet(Val_t *args, Val_t *env)
 Val_t *Lif(Val_t *args, Val_t *env)
 {
     Val_t *err;
-    if (!MatchArgs("vv(v", args, &err))
-    {
-        return MakeError(err);
-    }
+    if (!MatchArgs("vv(v", args, &err)) { return MakeError(err); }
     Val_t *f = Eval(args->first, env);
-    if (IsError(f))
-    {
-        // eval error
-        return f;
-    }
+    if (IsError(f)) { return f; } // eval error
     int t = IsTrue(f);
     FreeValRec(f);
     if (t)
@@ -2512,11 +2265,7 @@ Val_t *Lif(Val_t *args, Val_t *env)
         return Eval(consequent, env);
     }
     Val_t *alt_list = args->rest->rest;
-    if (!alt_list)
-    {
-        // no alternative
-        return NULL;
-    }
+    if (!alt_list) { return NULL; } // no alternative
     Val_t *alternative = alt_list->first;
     return Eval(alternative, env);
 }
@@ -2525,10 +2274,7 @@ Val_t *Lif(Val_t *args, Val_t *env)
 Val_t *Lquote(Val_t *args, Val_t *env)
 {
     Val_t *err;
-    if (!MatchArgs("v", args, &err))
-    {
-        return MakeError(err);
-    }
+    if (!MatchArgs("v", args, &err)) { return MakeError(err); }
     return CopyVal(args->first);
 }
 
@@ -2540,17 +2286,9 @@ Val_t *Ldo(Val_t *args, Val_t *env)
     while (p && IsList(p))
     {
         e = Eval(p->first, env);
-        if (IsError(e))
-        {
-            // eval error
-            return e;
-        }
+        if (IsError(e)) { return e; } // eval error
         p = p->rest;
-        if (p)
-        {
-            // free all values except the last one
-            FreeValRec(e);
-        }
+        if (p) { FreeValRec(e); } // free all values except the last one
     }
     return e;
 }
@@ -2559,29 +2297,15 @@ Val_t *Ldo(Val_t *args, Val_t *env)
 Val_t *Land(Val_t *args, Val_t *env)
 {
     Val_t *err;
-    if (!MatchArgs("v&v", args, &err))
-    {
-        return MakeError(err);
-    }
+    if (!MatchArgs("v&v", args, &err)) { return MakeError(err); }
     Val_t *p = args;
     while (p && IsList(p))
     {
         Val_t *e = Eval(p->first, env);
-        if (IsError(e))
-        {
-            return e;
-        }
-        if (!IsTrue(e))
-        {
-            // item is false
-            return e;
-        }
+        if (IsError(e)) { return e; }
+        if (!IsTrue(e)) { return e; } // item is false
         p = p->rest;
-        if (!p)
-        {
-            // last item is true
-            return e;
-        }
+        if (!p) { return e; } // last item is true
         FreeValRec(e);
     }
     // malformed list
@@ -2592,29 +2316,15 @@ Val_t *Land(Val_t *args, Val_t *env)
 Val_t *Lor(Val_t *args, Val_t *env)
 {
     Val_t *err;
-    if (!MatchArgs("v&v", args, &err))
-    {
-        return MakeError(err);
-    }
+    if (!MatchArgs("v&v", args, &err)) { return MakeError(err); }
     Val_t *p = args;
     while (p && IsList(p))
     {
         Val_t *e = Eval(p->first, env);
-        if (IsError(e))
-        {
-            return e;
-        }
-        if (IsTrue(e))
-        {
-            // item is true
-            return e;
-        }
+        if (IsError(e)) { return e; }
+        if (IsTrue(e)) { return e; } // item is true
         p = p->rest;
-        if (!p)
-        {
-            // last item is false
-            return e;
-        }
+        if (!p) { return e; } // last item is false
         FreeValRec(e);
     }
     // malformed list
@@ -2625,10 +2335,7 @@ Val_t *Lor(Val_t *args, Val_t *env)
 Val_t *Lcond(Val_t *args, Val_t *env)
 {
     Val_t *err;
-    if (!MatchArgs("vv&v", args, &err))
-    {
-        return MakeError(err);
-    }
+    if (!MatchArgs("vv&v", args, &err)) { return MakeError(err); }
     if (ListLength(args) % 2 != 0)
     {
         return MakeErrorMessage("`cond` requires an even amount of"
@@ -2639,10 +2346,7 @@ Val_t *Lcond(Val_t *args, Val_t *env)
     while (p && IsList(p))
     {
         Val_t *e = Eval(p->first, env);
-        if (IsError(e))
-        {
-            return e;
-        }
+        if (IsError(e)) { return e; }
         if (IsTrue(e))
         {
             FreeValRec(e);
@@ -2660,10 +2364,7 @@ Val_t *Lcond(Val_t *args, Val_t *env)
 Val_t *Llambda(Val_t *args, Val_t *env)
 {
     Val_t *err;
-    if (!MatchArgs("l(v", args, &err))
-    {
-        return MakeError(err);
-    }
+    if (!MatchArgs("l(v", args, &err)) { return MakeError(err); }
     Val_t *params = args->first;
     if (!IsList(params))
     {
@@ -2686,10 +2387,7 @@ Val_t *Llambda(Val_t *args, Val_t *env)
     }
     // make lambda... with an explicit NULL body if a body is not provided
     Val_t *body = args->rest;
-    if (body)
-    {
-        body = body->first;
-    }
+    if (body) { body = body->first; }
     return MakeList(MakeSymCopy("lambda", 6),
                     MakeList(CopyVal(params),
                              MakeList(CopyVal(body),
