@@ -114,6 +114,7 @@ long AsInt(Val_t *v);
 // - use read to deserialize
 // - use print to serialize
 int ReadVal(const char *start, int length, Val_t **out);
+int ReadVals(const char *start, int length, Val_t **out);
 int PrintValBuf(Val_t *p, char *out, int length, int readable);
 char *PrintValStr(Val_t *p, int readable);
 
@@ -892,6 +893,43 @@ int ReadVal(const char *str, int len, Val_t **out)
     }
 }
 
+// Read values.
+// Returns the number of values read.
+// Read as many expressions from the input str as possible
+int ReadVals(const char *str, int len, Val_t **out)
+{
+    int i = 0;
+    Val_t *val = NULL;
+
+    // Read first item... (may be the only item)
+    int read_len = ReadVal(str + i, len - i, &val);
+    if (!read_len) { return 0; }
+    i += read_len;
+    i += SkipChars(str + i, len - i);
+    if (i >= len || !str[i])
+    {
+        *out = val;
+        return 1;
+    }
+
+    // Read additional items into a list...
+    int n; // number of items read
+    val = MakeList(val, NULL);
+    Val_t *p = val;
+    for (n = 1; i < len && str[i]; n++, p = p->rest)
+    {
+        Val_t *e;
+        read_len = ReadVal(str + i, len - i, &e);
+        if (!read_len) { break; }
+        i += read_len;
+        i += SkipChars(str + i, len - i);
+        p->rest = MakeList(e, NULL);
+    }
+
+    *out = val;
+    return n;
+}
+
 // Prints p to the given `out` buffer.
 // Does not do null termination.
 // If out is NULL, it just calculates the print length
@@ -1247,7 +1285,7 @@ int IsMacro(Val_t *v)
     if (!v->rest) { return 0; }
     Val_t *id = v->rest->first;
     if (!IsInt(id)) { return 0; }
-    if (v->rest->rest) { return 0; } // too many items 
+    if (v->rest->rest) { return 0; } // too many items
     return 1;
 }
 
