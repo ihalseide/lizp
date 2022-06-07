@@ -32,36 +32,6 @@ int LoadFile(const char *filename, char **text_out, int *len_out)
     return 0;
 }
 
-// Read as many expressions from the str as possible
-Val_t *ReadAll(const char *str, int len)
-{
-    int i = 0;
-    Val_t *val = NULL;
-
-    // Read first item... (may be the only item)
-    int read_len = ReadVal(str + i, len - i, &val);
-    if (!read_len) { return val; }
-    i += read_len;
-    i += SkipChars(str + i, len - i);
-    if (i >= len || !str[i]) { return val; }
-
-    // Read additional items into a list...
-    val = MakeList(val, NULL);
-    Val_t *p = val;
-    while (i < len && str[i])
-    {
-        Val_t *e;
-        read_len = ReadVal(str + i, len - i, &e);
-        if (!read_len) { return val; }
-        i += read_len;
-        i += SkipChars(str + i, len - i);
-        p->rest = MakeList(e, NULL);
-        p = p->rest;
-    }
-
-    return val;
-}
-
 int main(int argc, char **argv)
 {
     if (argc != 2)
@@ -81,7 +51,8 @@ int main(int argc, char **argv)
     }
 
     // convert to data structure
-    Val_t *val = ReadAll(text, length);
+    Val_t *val;
+    int n = ReadVals(text, length, &val);
     free(text);
 
     // print back out

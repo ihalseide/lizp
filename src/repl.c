@@ -46,10 +46,14 @@ void rep(const char *str, int len, Val_t *env)
     //printf("\n<str len=%d>%.*s</str>", len, len, str);
 
     Val_t *expr;
-    int readlen = ReadVal(str, len, &expr);
-    if (!readlen)
+    int n = ReadVals(str, len, &expr);
+    if (!n) { return; }
+
+    // wrap multiple expressions in an implicit "do" form
+    if (n > 1)
     {
-        return;
+        Val_t *doo = MakeSymCopy("do", 2);
+        expr = MakeList(doo, expr);
     }
 
     // debug print
