@@ -8,6 +8,10 @@ LIZP
 
     The license for this is at the end of the file.
 
+Notes:
+
+    FIXME: Currently this program also requires "stb_ds.h".
+
 Usage
 
     You only need to include this header file in your project. You can
@@ -87,10 +91,10 @@ void FreeVal(Val_t *p);
 void FreeValRec(Val_t *p);
 
 // value creation
-Val_t *MakeList(Val_t *first, Val_t *rest);
-Val_t *MakeSym(char *s);
-Val_t *MakeSymCopy(const char *name, int len);
 Val_t *MakeInt(long n);
+Val_t *MakeList(Val_t *first, Val_t *rest);
+Val_t *MakeSym(char *s);                       // "s" MUST be a free-able string
+Val_t *MakeSymCopy(const char *name, int len);
 Val_t *MakeSymStr(const char *s);
 
 // value type checking
@@ -115,24 +119,22 @@ char *PrintValStr(Val_t *p, int readable);
 
 #ifdef LIZP_EVAL
 
-typedef Val_t *LizpFunc(Val_t *args);
-typedef Val_t *LizpMacro(Val_t *args, Val_t *env);
-typedef struct FuncRecord FuncRecord;
-typedef struct MacroRecord MacroRecord;
+typedef Val_t *LizpFunc_t(Val_t *args);
+typedef Val_t *LizpMacro_t(Val_t *args, Val_t *env);
 
-struct FuncRecord
+typedef struct FuncRecord
 {
     const char *name;
     const char *form;
-    LizpFunc *func;
-};
+    LizpFunc_t *func;
+} FuncRecord_t;
 
-struct MacroRecord
+typedef struct MacroRecord
 {
     const char *name;
     const char *form;
-    LizpMacro *macro;
-};
+    LizpMacro_t *macro;
+} MacroRecord_t;
 
 Val_t *MakeTrue(void);
 Val_t *MakeError(Val_t *rest);
@@ -148,10 +150,10 @@ Val_t *Eval(Val_t *ast, Val_t *env);
 Val_t *EvalEach(Val_t *list, Val_t *env);
 int EnvGet(Val_t *env, Val_t *key, Val_t **out);
 int EnvSet(Val_t *env, Val_t *key, Val_t *val);
-int EnvSetFunc(Val_t *env, const char *name, LizpFunc *func);
-int EnvSetMacro(Val_t *env, const char *name, LizpMacro *macro);
-int EnvSetFuncEx(Val_t *env, const char *name, const char *form, LizpFunc *func);
-int EnvSetMacroEx(Val_t *env, const char *name, const char *form, LizpMacro *macro);
+int EnvSetFunc(Val_t *env, const char *name, LizpFunc_t *func);
+int EnvSetMacro(Val_t *env, const char *name, LizpMacro_t *macro);
+int EnvSetFuncEx(Val_t *env, const char *name, const char *form, LizpFunc_t *func);
+int EnvSetMacroEx(Val_t *env, const char *name, const char *form, LizpMacro_t *macro);
 int EnvSetSym(Val_t *env, const char *symbol, Val_t *val);
 void EnvPop(Val_t *env);
 void EnvPush(Val_t *env);
@@ -222,6 +224,7 @@ Val_t *Llet(Val_t *args, Val_t *env);     // [let [sym1 expr1 sym2 expr2 ...] bo
 #include <string.h>
 #include "stb_ds.h"
 
+// Meant to be used by MatchArgs()
 static int Match1Arg(char c, Val_t *arg, Val_t **err)
 {
     switch (c)
@@ -1118,16 +1121,16 @@ MacroRecord *da_macros;
 
 // Put function in the dynamic array
 // Meant to be used by `EnvSetFunc` to bind native functions
-static size_t PutFunc(const char *name, const char *form, LizpFunc *func)
+static size_t PutFunc(const char *name, const char *form, LizpFunc_t *func)
 {
-    FuncRecord new = (FuncRecord)
+    FuncRecord r = (FuncRecord)
     {
         .name = name,
         .form = form,
         .func = func,
     };
     size_t id = arrlen(da_funcs);
-    arrput(da_funcs, new);
+    arrput(da_funcs, r);
     return id;
 }
 
@@ -1136,25 +1139,22 @@ static size_t PutFunc(const char *name, const char *form, LizpFunc *func)
 static FuncRecord *GetFunc(size_t id)
 {
     size_t len = arrlen(da_funcs);
-    if (id < 0 || id >= len)
-    {
-        return NULL;
-    }
+    if (id < 0 || id >= len) { return NULL; }
     return &(da_funcs[id]);
 }
 
 // Put a macro function into the dynamic array
 // Meant to be used by `EnvSetMacro` to bind native macros
-static size_t PutMacro(const char *name, const char *form, LizpMacro *macro)
+static size_t PutMacro(const char *name, const char *form, LizpMacro_t *macro)
 {
-    MacroRecord new = (MacroRecord)
+    MacroRecord r = (MacroRecord)
     {
         .name = name,
         .form = form,
         .macro = macro,
     };
     size_t id = arrlen(da_macros);
-    arrput(da_macros, new);
+    arrput(da_macros, r);
     return id;
 }
 
@@ -1648,17 +1648,11 @@ Val_t *Eval(Val_t *ast, Val_t *env)
 // Set a symbol value to be associated with a C function
 // Also, use the form string to always check the arguments before the function
 // is called (see `MatchArgs`).
-int EnvSetFuncEx(Val_t *env, const char *name, const char *form, LizpFunc *func)
+int EnvSetFuncEx(Val_t *env, const char *name, const char *form, LizpFunc_t *func)
 {
-    if (!env || !name || !func)
-    {
-        return 0;
-    }
+    if (!env || !name || !func) { return 0; }
     Val_t *key = MakeSymStr(name);
-    if (!key)
-    {
-        return 0;
-    }
+    if (!key) { return 0; }
     long handle = PutFunc(name, form, func);
     Val_t *val = MakeList(MakeSymCopy("native func", 11), MakeList(MakeInt(handle), NULL));
     if (!val)
@@ -1678,14 +1672,14 @@ int EnvSetFuncEx(Val_t *env, const char *name, const char *form, LizpFunc *func)
 
 // Environment Set Function.
 // Set a symbol value to be associated with a C function
-int EnvSetFunc(Val_t *env, const char *name, LizpFunc *func)
+int EnvSetFunc(Val_t *env, const char *name, LizpFunc_t *func)
 {
     return EnvSetFuncEx(env, name, NULL, func);
 }
 
 // Environment set macro extended.
 // Add a custom C macro to the environment.
-int EnvSetMacroEx(Val_t *env, const char *name, const char *form, LizpMacro *m)
+int EnvSetMacroEx(Val_t *env, const char *name, const char *form, LizpMacro_t *m)
 {
     if (!env || !name || !m) { return 0; }
     Val_t *key = MakeSymStr(name);
@@ -1709,7 +1703,7 @@ int EnvSetMacroEx(Val_t *env, const char *name, const char *form, LizpMacro *m)
 
 // Environment set macro.
 // Add a custom C macro to the environment.
-int EnvSetMacro(Val_t *env, const char *name, LizpMacro *m)
+int EnvSetMacro(Val_t *env, const char *name, LizpMacro_t *m)
 {
     return EnvSetMacroEx(env, name, NULL, m);
 }
