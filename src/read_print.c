@@ -52,8 +52,13 @@ int main(int argc, char **argv)
 
     // convert to data structure
     Val_t *val;
-    int n = valReadAllFromBuffer(text, length, &val);
+    unsigned n = valReadAllFromBuffer(text, length, &val);
     free(text);
+
+    if (n > 1)
+    {
+        fprintf(stderr, "info: read multiple values: %u values\n", n);
+    }
 
     // print back out
     text = valWriteToNewString(val, 1);
