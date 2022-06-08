@@ -73,7 +73,7 @@ typedef enum ValKind
 
 struct List;
 
-// Val: (tagged union)
+// Val: is a symbol string or a List
 typedef struct Val
 {
     ValKind_t kind;
@@ -84,6 +84,7 @@ typedef struct Val
     };
 } Val_t;
 
+// List is an array
 typedef struct List
 {
     unsigned length;
@@ -130,100 +131,6 @@ unsigned valReadAllFromBuffer(const char *start, unsigned length, Val_t **out);
 unsigned valWriteToBuffer(Val_t *p, char *out, unsigned length, bool readable);
 char *valWriteToNewString(Val_t *p, bool readable);
 
-#ifdef LIZP_EVAL
-
-typedef Val_t *LizpFunc_t(Val_t *args);
-typedef Val_t *LizpMacro_t(Val_t *args, Val_t *env);
-
-typedef struct FuncRecord
-{
-    const char *name;
-    const char *form;
-    LizpFunc_t *func;
-} FuncRecord_t;
-
-typedef struct MacroRecord
-{
-    const char *name;
-    const char *form;
-    LizpMacro_t *macro;
-} MacroRecord_t;
-
-Val_t *valCreateTrue(void);
-Val_t *valCreateFalse(void);
-
-bool valIsFunction(Val_t *v);
-bool valIsLambda(Val_t *v);
-bool valIsTrue(Val_t *v);
-
-Val_t *evaluate(Val_t *ast, Val_t *env);
-Val_t *evaluateList(Val_t *list, Val_t *env);
-bool EnvGet(Val_t *env, Val_t *key, Val_t **out);
-bool EnvSet(Val_t *env, Val_t *key, Val_t *val);
-bool EnvSetFunc(Val_t *env, const char *name, LizpFunc_t *func);
-bool EnvSetMacro(Val_t *env, const char *name, LizpMacro_t *macro);
-bool EnvSetFuncEx(Val_t *env, const char *name, const char *form, LizpFunc_t *func);
-bool EnvSetMacroEx(Val_t *env, const char *name, const char *form, LizpMacro_t *macro);
-bool EnvSetSym(Val_t *env, const char *symbol, Val_t *val);
-void EnvPop(Val_t *env);
-void EnvPush(Val_t *env);
-
-#endif /* LIZP_EVAL */
-
-#ifdef LIZP_CORE_FUNCTIONS
-// For optional core Lizp functions that would be useful for most lizp scripts
-
-void lizpRegisterCore(Val_t *env);
-Val_t *reverse_func(Val_t *args);    // [reverse list] reverse a list
-Val_t *concat_func(Val_t *args);     // [concat list.1 (list.N)...] concatenate lists together
-Val_t *join_func(Val_t *args);       // [join separator (list)...] join together each list with the separator list in between
-Val_t *without_func(Val_t *args);    // [without item list] remove all occurrences of item from the list
-Val_t *replace_func(Val_t *args);    // [replace item1 item2 list] replace all occurrences of item1 in list with item2
-Val_t *replace1_func(Val_t *args);   // [replaceN item1 item2 list n] replace up to n of item1 with item2 in list
-Val_t *replaceI_func(Val_t *args);   // [replaceI index item list] replace element in list at index with item
-Val_t *zip_func(Val_t *args);        // [zip list.1 (list.N)...]
-Val_t *append_func(Val_t *args);     // [append val list]
-Val_t *prepend_func(Val_t *args);    // [prepend val list]
-Val_t *print_func(Val_t *args);      // [print (v)...]
-Val_t *plus_func(Val_t *args);       // [+ integers...] sum
-Val_t *multiply_func(Val_t *args);   // [* integers...] product
-Val_t *subtract_func(Val_t *args);   // [- x (y)] subtraction
-Val_t *divide_func(Val_t *args);     // [/ x y] division
-Val_t *mod_func(Val_t *args);        // [% x y] modulo
-Val_t *equal_func(Val_t *args);      // [= x y (expr)...] check equality
-Val_t *not_func(Val_t *args);        // [not expr] boolean not
-Val_t *symbol_q_func(Val_t *args);   // [symbol? val] check if value is a symbol
-Val_t *integer_q_func(Val_t *args);  // [integer? val] check if value is a integer symbol
-Val_t *list_q_func(Val_t *args);     // [list? val] check if value is a list
-Val_t *empty_q_func(Val_t *args);    // [empty? val] check if value is a the empty list
-Val_t *nth_func(Val_t *args);        // [nth index list] get the nth item in a list
-Val_t *list_func(Val_t *args);       // [list (val)...] create list from arguments (variadic)
-Val_t *length_func(Val_t *args);     // [length list]
-Val_t *lambda_q_func(Val_t *args);   // [lambda? v]
-Val_t *function_q_func(Val_t *args); // [function? v]
-Val_t *native_q_func(Val_t *args);   // [native? v]
-Val_t *increasing_func(Val_t *args); // [<= x y (expr)...] check number order
-Val_t *decreasing_func(Val_t *args); // [>= x y (expr)...] check number order
-Val_t *strictly_increasing_func(Val_t *args);   // [< x y (expr)...] check number order
-Val_t *strictly_decreasing_func(Val_t *args);   // [> x y (expr)...] check number order
-Val_t *chars_func(Val_t *args);      // [chars sym] -> list
-Val_t *symbol_func(Val_t *args);     // [symbol list] -> symbol
-Val_t *member_q_func(Val_t *args);   // [member? item list] -> boolean value
-Val_t *count_func(Val_t *args);      // [count item list] -> integer symbol
-Val_t *position_func(Val_t *args);   // [position item list] -> integer symbol
-Val_t *slice_func(Val_t *args);      // [slice list start (end)] gets a sublist "slice" inclusive of start and end
-
-// macros
-Val_t *quote_func(Val_t *args, Val_t *env);   // [quote expr]
-Val_t *if_func(Val_t *args, Val_t *env);      // [if condition consequence alternative]
-Val_t *cond_func(Val_t *args, Val_t *env);    // [cond condition1 consequence1 condition2 consequence2 ...]
-Val_t *do_func(Val_t *args, Val_t *env);      // [do expr ...]
-Val_t *lambda_func(Val_t *args, Val_t *env);  // [lambda [args ...] body-expr]
-Val_t *and_func(Val_t *args, Val_t *env);     // [and expr1 expr2 ...]
-Val_t *or_func(Val_t *args, Val_t *env);      // [or expr1 expr2 ...]
-Val_t *let_func(Val_t *args, Val_t *env);     // [let [sym1 expr1 sym2 expr2 ...] body-expr]
-
-#endif /* LIZP_CORE_FUNCTIONS */
 #endif /* _lizp_h_ */
 
 #ifdef LIZP_IMPLEMENTATION
@@ -231,9 +138,6 @@ Val_t *let_func(Val_t *args, Val_t *env);     // [let [sym1 expr1 sym2 expr2 ...
 #include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
-
-// TODO: remove this
-#include "stb_ds.h"
 
 // Free value
 void valFree(Val_t v)
