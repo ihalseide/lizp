@@ -395,26 +395,26 @@ Val_t *valCopy(Val_t *p)
 // String needs quotes?
 // Check if a string for a symbol name needs to be quoted
 // in order to be printed "readably".
-bool StrNeedsQuotes(const char *s)
+bool stringNeedsQuotes(const char *s)
 {
     while (*s)
     {
         switch (*s)
         {
-            case '[':
-            case ']':
-            case '(':
-            case ')':
-            case '\n':
-            case '\t':
-            case '"':
-            case '\\':
+        case '[':
+        case ']':
+        case '(':
+        case ')':
+        case '\n':
+        case '\t':
+        case '"':
+        case '\\':
+            return 1;
+        default:
+            if (isspace(*s))
+            {
                 return 1;
-            default:
-                if (isspace(*s))
-                {
-                    return 1;
-                }
+            }
         }
         s++;
     }
@@ -440,27 +440,27 @@ unsigned stringEscape(char *str, unsigned len)
             c = str[r];
             switch (c)
             {
-                case 'a':
-                    c = '\a';
-                    break;
-                case 'b':
-                    c = '\b';
-                    break;
-                case 'e': // escape
-                    c = '\x1b';
-                    break;
-                case 'n':
-                    c = '\n';
-                    break;
-                case 'r':
-                    c = '\r';
-                    break;
-                case 't':
-                    c = '\t';
-                    break;
-                default:
-                    // default result character is itself
-                    break;
+            case 'e': // escape
+                c = '\x1b';
+                break;
+            case 'a':
+                c = '\a';
+                break;
+            case 'b':
+                c = '\b';
+                break;
+            case 'n':
+                c = '\n';
+                break;
+            case 'r':
+                c = '\r';
+                break;
+            case 't':
+                c = '\t';
+                break;
+            default:
+                // default result character is itself
+                break;
             }
         }
         str[w] = c;
@@ -551,91 +551,91 @@ unsigned valReadOneFromBuffer(const char *str, unsigned len, Val_t **out)
             // Symbol
             switch (str[i])
             {
-                case '\0':
-                    // No symbol
-                    if (out) { *out = NULL; }
+            case '\0':
+                // No symbol
+                if (out) { *out = NULL; }
+                return i;
+            case '"':
+                // Quoted symbol
+                {
+                    i++;
+                    const unsigned j = i;
+                    bool done = 0, good = 0;
+                    while (!done && i < len)
+                    {
+                        switch (str[i])
+                        {
+                        case '\n':
+                        case '\0':
+                            done = 1;
+                            break;
+                        case '\\':
+                            i++;
+                            if (str[i] == '"') { i++; }
+                            break;
+                        case '"':
+                            done = 1;
+                            good = 1;
+                            i++;
+                            break;
+                        default:
+                            i++;
+                            break;
+                        }
+                    }
+                    if (!good)
+                    {
+                        // invalid
+                        *out = NULL;
+                        return i;
+                    }
+                    // Make symbol string with escape sequences processed
+                    unsigned len = i - j - 1;
+                    if (len == 0)
+                    {
+                        *out = NULL;
+                        return i;
+                    }
+                    char *str1 = malloc(len + 1);
+                    memcpy(str1, str + j, len);
+                    str1[len] = 0;
+                    unsigned len2 = stringEscape(str1, len);
+                    str1 = realloc(str1, len2);
+                    *out = valCreateSymbolCopy(str1, len2);
+                    free(str1);
                     return i;
-                case '"':
-                    // Quoted symbol
+                }
+            default:
+                // Symbol
+                {
+                    const unsigned j = i;
+                    bool done = 0;
+                    while (!done && i < len)
                     {
-                        i++;
-                        const unsigned j = i;
-                        bool done = 0, good = 0;
-                        while (!done && i < len)
+                        char c = str[i];
+                        switch (c)
                         {
-                            switch (str[i])
+                        case '\0':
+                        case '"':
+                        case '[':
+                        case ']':
+                        case '(':
+                        case ')':
+                            done = 1;
+                            break;
+                        default:
+                            if (isspace(c))
                             {
-                                case '\n':
-                                case '\0':
-                                    done = 1;
-                                    break;
-                                case '\\':
-                                    i++;
-                                    if (str[i] == '"') { i++; }
-                                    break;
-                                case '"':
-                                    done = 1;
-                                    good = 1;
-                                    i++;
-                                    break;
-                                default:
-                                    i++;
-                                    break;
+                                done = 1;
+                                break;
                             }
+                            i++;
+                            break;
                         }
-                        if (!good)
-                        {
-                            // invalid
-                            *out = NULL;
-                            return i;
-                        }
-                        // Make symbol string with escape sequences processed
-                        unsigned len = i - j - 1;
-                        if (len == 0)
-                        {
-                            *out = NULL;
-                            return i;
-                        }
-                        char *str1 = malloc(len + 1);
-                        memcpy(str1, str + j, len);
-                        str1[len] = 0;
-                        unsigned len2 = stringEscape(str1, len);
-                        str1 = realloc(str1, len2);
-                        *out = valCreateSymbolCopy(str1, len2);
-                        free(str1);
-                        return i;
                     }
-                default:
-                    // Symbol
-                    {
-                        const unsigned j = i;
-                        bool done = 0;
-                        while (!done && i < len)
-                        {
-                            char c = str[i];
-                            switch (c)
-                            {
-                                case '\0':
-                                case '"':
-                                case '[':
-                                case ']':
-                                case '(':
-                                case ')':
-                                    done = 1;
-                                    break;
-                                default:
-                                    if (isspace(c))
-                                    {
-                                        done = 1;
-                                        break;
-                                    }
-                                    i++;
-                                    break;
-                            }
-                        }
-                        *out = valCreateSymbolCopy(str + j, i - j);
-                        return i;
-                    }
+                    *out = valCreateSymbolCopy(str + j, i - j);
+                    return i;
+                }
             }
         }
     }
@@ -677,7 +677,10 @@ unsigned valWriteToBuffer(Val_t *v, char *out, unsigned length, bool readable)
     {
         // Symbol
         char *s = v->symbol;
-        bool quoted = readable && StrNeedsQuotes(s);
+        // It needs to scan the string an extra time before-hand
+        // in order to know if the string should be quoted and have
+        // escape sequences processed.
+        bool quoted = readable && stringNeedsQuotes(s);
         if (quoted)
         {
             // Opening quote
@@ -694,26 +697,38 @@ unsigned valWriteToBuffer(Val_t *v, char *out, unsigned length, bool readable)
                 bool esc = false;
                 switch (c)
                 {
-                    case '\r':
-                        c = 'r';
-                        esc = true;
-                        break;
-                    case '\n':
-                        c = 'n';
-                        esc = true;
-                        break;
-                    case '\t':
-                        c = 't';
-                        esc = true;
-                        break;
-                    case '"':
-                        c = '"';
-                        esc = true;
-                        break;
-                    case '\\':
-                        c = '\\';
-                        esc = true;
-                        break;
+                case '\x1b': // escape
+                    c = 'e';
+                    esc = true;
+                    break;
+                case '\a':
+                    c = 'a';
+                    esc = true;
+                    break;
+                case '\b':
+                    c = 'b';
+                    esc = true;
+                    break;
+                case '\n':
+                    c = 'n';
+                    esc = true;
+                    break;
+                case '\r':
+                    c = 'r';
+                    esc = true;
+                    break;
+                case '\t':
+                    c = 't';
+                    esc = true;
+                    break;
+                case '"':
+                    c = '"';
+                    esc = true;
+                    break;
+                case '\\':
+                    c = '\\';
+                    esc = true;
+                    break;
                 }
                 if (esc)
                 {
