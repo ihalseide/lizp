@@ -7,13 +7,13 @@
 // Return value:
 // - 0 upon success
 // - non-zero upon failure
-int loadFile(const char *filename, char **text_out, int *len_out)
+unsigned loadFile(const char *filename, char **text_out, unsigned *len_out)
 {
     FILE *fp = fopen(filename, "r");
     if (!fp) { return 1; }
 
     fseek(fp, 0, SEEK_END);
-    int len = ftell(fp);
+    unsigned len = ftell(fp);
     rewind(fp);
 
     char *text = malloc(len + 1);
@@ -28,7 +28,7 @@ int loadFile(const char *filename, char **text_out, int *len_out)
     fclose(fp);
 
     *text_out = text;
-    *len_out = len;
+    if (len_out) { *len_out = len; }
     return 0;
 }
 
@@ -43,8 +43,8 @@ int main(int argc, char **argv)
     // load file contents
     char *fname = argv[1];
     char *text;
-    int length;
-    if (loadFile(fname, &text, &length))
+    unsigned textLength;
+    if (loadFile(fname, &text, &textLength))
     {
         perror("fopen");
         return 1;
@@ -52,7 +52,7 @@ int main(int argc, char **argv)
 
     // convert to data structure
     Val_t *val;
-    unsigned n = valReadAllFromBuffer(text, length, &val);
+    unsigned n = valReadAllFromBuffer(text, textLength, &val);
     free(text);
 
     if (n > 1)
