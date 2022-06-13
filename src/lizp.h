@@ -71,45 +71,35 @@ typedef enum ValKind
     VK_LIST,
 } ValKind_t;
 
-struct List;
-
-// Val: is a symbol string or a List
-typedef struct Val
-{
-    ValKind_t kind;
-    union
-    {
-        char *symbol;
-        struct List *list;
-    };
-} Val_t;
-
-// List is an array
-typedef struct List
-{
-    unsigned length;
-    Val_t values[];
-} List_t;
+typedef struct List List_t;
+typedef struct Val Val_t;
 
 // Lists
 List_t *listAlloc(unsigned length);
+Val_t *listFindFirst(List_t *list, Val_t *item);
+Val_t *listGetAssociate(List_t *list, Val_t *key);
+Val_t *listItem(List_t *list, unsigned index);
+bool listContainsItem(List_t *list, Val_t *item);
+unsigned listCountItem(List_t *list, Val_t *item);
 unsigned listLength(List_t *list);
 void listAppend(List_t **p_list, Val_t item);
 void listInsert(List_t **p_list, unsigned index, Val_t value);
 void listPrepend(List_t **p_list, Val_t item);
 void listRemove(List_t **p_list, unsigned index);
-bool listGetItemAfterSymbol(List_t *list, const char *symbol, Val_t **out);
+
+// value assignment
+void valSetSymbol(Val_t *p, char *symbol);
+void valSetList(Val_t *p, List_t *list);
 
 // value allocation/freeing
-Val_t *valAlloc(void);
 Val_t *valCopy(Val_t *p);
 Val_t *valCreateInteger(long n);
 Val_t *valCreateList(List_t *list);
 Val_t *valCreateSymbol(char *string);
 Val_t *valCreateSymbolCopy(const char *start, unsigned len);
 Val_t *valCreateSymbolStr(const char *string);
-void valFree(Val_t p);
-void valFreeRec(Val_t p);
+void valFreeValue(Val_t *p);
+void valFreeValueRec(Val_t *p);
 
 // value type checking
 ValKind_t valKind(Val_t *v);
@@ -119,17 +109,20 @@ bool valIsList(Val_t *v);
 bool valIsSymbol(Val_t *v);
 
 // value utility functions
-Val_t *valNthItem(Val_t *v, unsigned n);
-//bool argsIsMatchForm(const char *form, Val_t *args, Val_t **err);
+int valCompare(Val_t *lhs, Val_t *rhs);
 bool valIsEqual(Val_t *x, Val_t *y);
 long valAsInteger(Val_t *v);
 unsigned valListLength(Val_t *list);
+Val_t *valListItem(Val_t *list, unsigned index);
 
 // value serialization
-unsigned valReadOneFromBuffer(const char *start, unsigned length, Val_t **out);
-unsigned valReadAllFromBuffer(const char *start, unsigned length, Val_t **out);
-unsigned valWriteToBuffer(Val_t *p, char *out, unsigned length, bool readable);
 char *valWriteToNewString(Val_t *p, bool readable);
+unsigned valWriteToBuffer(Val_t *p, char *out, unsigned length, bool readable);
+void valWriteToFile(Val_t *v, int readable, FILE *f);
+
+// value de-serialization
+unsigned valReadAllFromBuffer(const char *start, unsigned length, List_t **out);
+unsigned valReadOneFromBuffer(const char *start, unsigned length, Val_t **out);
 
 #endif /* _lizp_h_ */
 
@@ -139,43 +132,105 @@ char *valWriteToNewString(Val_t *p, bool readable);
 #include <stdlib.h>
 #include <string.h>
 
-// Free value
-void valFree(Val_t v)
+// Val: is a symbol string or a List
+struct Val
 {
-    switch (valKind(&v))
+    ValKind_t kind;
+    union
+    {
+        char *symbol;
+        List_t *list;
+    };
+};
+
+// List is an array
+struct List
+{
+    unsigned length;
+    Val_t values[];
+};
+
+// Free value data
+void valFreeValue(Val_t *p)
+{
+    switch (valKind(p))
     {
     case VK_SYMBOL:
-        if (v.symbol) { free(v.symbol); }
+        if (p->symbol) { free(p->symbol); }
         break;
     case VK_LIST:
-        if (v.list) { free(v.list); }
+        if (p->list) { free(p->list); }
         break;
     }
 }
 
-// Free value recursively
-void valFreeRec(Val_t v)
+// Free value data recursively
+void valFreeValueRec(Val_t *p)
 {
-    if (valIsList(&v) && !valIsEmptyList(&v))
+    if (valIsList(p) && !valIsEmptyList(p))
     {
-        unsigned len = listLength(v.list);
+        unsigned len = listLength(p->list);
         for (unsigned i = 0; i < len; i++)
         {
-            valFreeRec(v.list->values[i]);
+            valFreeValueRec(&p->list->values[i]);
         }
     }
-    valFree(v);
+    valFreeValue(p);
 }
 
-static bool stringEqual(const char *a, const char *b)
+// Compare values
+// Return value:
+// returns an integer less than, equal to, or greater than zero depending
+// on whether the left-hand-side value is less than, equal to, or greater than the right-hand-side
+//   COMPARE:  lhs <> rhs
+int valCompare(Val_t *lhs, Val_t *rhs)
 {
-    if (a == b) { return true; }
-    while (*a && *b && *a == *b)
+    if (valIsEqual(lhs, rhs)) { return 0; }
+    ValKind_t l_kind = valKind(lhs);
+    ValKind_t r_kind = valKind(rhs);
+    switch (l_kind)
     {
-        a++;
-        b++;
+    case VK_SYMBOL:
+        switch (r_kind)
+        {
+        case VK_SYMBOL:
+            // symbol <> symbol
+            return strcmp(lhs->symbol, rhs->symbol);
+        case VK_LIST:
+            // symbol <> list
+            return -1;
+        }
+        break;
+    case VK_LIST:
+        switch (r_kind)
+        {
+        case VK_SYMBOL:
+            // list <> symbol
+            return 1;
+        case VK_LIST:
+            {
+                // list <> list
+                unsigned l_len = valListLength(lhs);
+                unsigned r_len = valListLength(rhs);
+                bool l_is_shorter = (l_len < r_len);
+                // compare each element
+                unsigned length = l_is_shorter? l_len : r_len;
+                for (unsigned i = 0; i < length; i++)
+                {
+                    Val_t *l_e = &lhs->list->values[i];
+                    Val_t *r_e = &rhs->list->values[i];
+                    int cmp = valCompare(l_e, r_e);
+                    if (cmp == 0) { continue; }
+                    return cmp;
+                }
+                // if the elements so far are equal,
+                // then the shorter list comes first
+                return l_is_shorter? -1 : 1;
+            }
+        }
+        break;
     }
-    return *a == *b;
+    return 0;
 }
 
 bool valIsEqual(Val_t *x, Val_t *y)
@@ -184,7 +239,7 @@ bool valIsEqual(Val_t *x, Val_t *y)
     if (valIsSymbol(x))
     {
         // compare strings
-        return stringEqual(x->symbol, y->symbol);
+        return strcmp(x->symbol, y->symbol) == 0;
     }
     if (valIsList(x))
     {
@@ -214,7 +269,7 @@ ValKind_t valKind(Val_t *v)
 // NULL is also considered an empty list
 bool valIsList(Val_t *p)
 {
-    return valKind(p) == VK_LIST;
+    return p && valKind(p) == VK_LIST;
 }
 
 bool valIsEmptyList(Val_t *p)
@@ -225,13 +280,13 @@ bool valIsEmptyList(Val_t *p)
 // Check if a value is a symbol
 bool valIsSymbol(Val_t *p)
 {
-    return valKind(p) == VK_SYMBOL;
+    return p && valKind(p) == VK_SYMBOL;
 }
 
 //  check if a value is a integer symbol
 bool valIsInteger(Val_t *v)
 {
-    if (!valIsSymbol(v)) { return 0; }
+    if (!valIsSymbol(v)) { return false; }
     char *end;
     unsigned base = 10;
     strtol(v->symbol, &end, base);
@@ -239,12 +294,27 @@ bool valIsInteger(Val_t *v)
 }
 
 // Dereference and free a value pointer.
-// Is useful for storing a value into an array
-Val_t valGet(Val_t *p)
+// Is useful for storing a value into an array.
+// "unwrap"
+static Val_t valGet(Val_t *p)
 {
     Val_t v = *p;
     free(p);
     return v;
+}
+
+void valSetSymbol(Val_t *p, char *symbol)
+{
+    if (!p) { return; }
+    p->kind = VK_SYMBOL;
+    p->symbol = symbol;
+}
+
+void valSetList(Val_t *p, List_t *list)
+{
+    if (!p) { return; }
+    p->kind = VK_LIST;
+    p->list = list;
 }
 
 // Make symbol
@@ -356,7 +426,7 @@ bool StrNeedsQuotes(const char *s)
 // Converts escape sequences into the corresponding real ASCII
 // values.
 // Modifies the string in-place
-unsigned EscapeStr(char *str, unsigned len)
+unsigned stringEscape(char *str, unsigned len)
 {
     if (!str || len <= 0) { return 0; }
     unsigned r = 0; // read index
@@ -472,7 +542,6 @@ unsigned valReadOneFromBuffer(const char *str, unsigned len, Val_t **out)
             if (str[i] == ']')
             {
                 i++; // consume the ']'
-                i += stringSkipSpace(str + i, len - i);
             }
             *out = valCreateList(list);
             return i;
@@ -480,8 +549,6 @@ unsigned valReadOneFromBuffer(const char *str, unsigned len, Val_t **out)
     default:
         {
             // Symbol
-            // leading space
-            i += stringSkipSpace(str, len);
             switch (str[i])
             {
                 case '\0':
@@ -522,7 +589,7 @@ unsigned valReadOneFromBuffer(const char *str, unsigned len, Val_t **out)
                             *out = NULL;
                             return i;
                         }
-                        // Make escaped symbol string
+                        // Make symbol string with escape sequences processed
                         unsigned len = i - j - 1;
                         if (len == 0)
                         {
@@ -532,7 +599,8 @@ unsigned valReadOneFromBuffer(const char *str, unsigned len, Val_t **out)
                         char *str1 = malloc(len + 1);
                         memcpy(str1, str + j, len);
                         str1[len] = 0;
-                        unsigned len2 = EscapeStr(str1, len);
+                        unsigned len2 = stringEscape(str1, len);
+                        str1 = realloc(str1, len2);
                         *out = valCreateSymbolCopy(str1, len2);
                         free(str1);
                         return i;
@@ -574,40 +642,27 @@ unsigned valReadOneFromBuffer(const char *str, unsigned len, Val_t **out)
 }
 
 // Read all values from buffer.
-// Return value: the number of VALUES read.
+// Return value: the number of CHARACTERS read
 // see also: valReadOneFromBuffer()
-unsigned valReadAllFromBuffer(const char *str, unsigned len, Val_t **out)
+unsigned valReadAllFromBuffer(const char *str, unsigned len, List_t **out)
 {
+    List_t *list = NULL;
     unsigned i = 0;
-    Val_t *val = NULL;
 
-    // Read first item... (may be the only item)
-    unsigned read_len = valReadOneFromBuffer(str + i, len - i, &val);
-    if (!read_len) { return 0; }
-    i += read_len;
-    i += stringSkipSpace(str + i, len - i);
-    if (i >= len || !str[i])
+    do
     {
-        *out = val;
-        return 1;
-    }
-
-    // Read additional items into a list...
-    unsigned n; // number of items read
-    List_t *list = listAlloc(1);
-    list->values[0] = valGet(val);
-    for (n = 1; i < len && str[i]; n++)
-    {
-        Val_t *e;
-        read_len = valReadOneFromBuffer(str + i, len - i, &e);
-        if (!read_len) { break; }
-        i += read_len;
+        Val_t *item;
+        unsigned step = valReadOneFromBuffer(str + i, len - i, &item);
+        if (!step) { break; }
+        i += step;
         i += stringSkipSpace(str + i, len - i);
-        listAppend(&list, valGet(e));
+        if (!item) { break; }
+        listAppend(&list, valGet(item));
     }
+    while (i < len && str[i]);
 
-    *out = valCreateList(list);
-    return n;
+    *out = list;
+    return i;
 }
 
 // Prints p to the given `out` buffer.
@@ -724,9 +779,25 @@ char *valWriteToNewString(Val_t *v, bool readable)
     return s;
 }
 
+// Print value to a file
+void valWriteToFile(Val_t *v, int readable, FILE *f)
+{
+    char *s = valWriteToNewString(v, readable);
+    fprintf(f, "%s", s);
+    free(s);
+}
+
 unsigned valListLength(Val_t *v)
 {
     return listLength(v->list);
+}
+
+// Get list item from value
+Val_t *valListItem(Val_t *v, unsigned index)
+{
+    if (!v) { return NULL; }
+    if (!valIsList(v)) { return NULL; }
+    return listItem(v->list, index);
 }
 
 // Get the length of a list.
@@ -738,7 +809,7 @@ unsigned listLength(List_t *l)
 }
 
 // NOTE: for now, it just allocates one more slot in the list
-static unsigned listSize(unsigned length)
+unsigned listSize(unsigned length)
 {
     List_t l;
     return sizeof(l) + sizeof(*l.values) * length;
@@ -751,6 +822,14 @@ List_t *listAlloc(unsigned length)
     if (!p) { return p; }
     p->length = length;
     return p;
+}
+
+// Get list item
+Val_t *listItem(List_t *list, unsigned index)
+{
+    if (!list) { return NULL; }
+    if (index >= list->length) { return NULL; }
+    return &list->values[index];
 }
 
 // Prepend an item to the beginning of the list
@@ -813,6 +892,52 @@ void listInsert(List_t **p_list, unsigned index, Val_t item)
     (*p_list)->values[index] = item;
 }
 
+unsigned listCountItem(List_t *list, Val_t *item)
+{
+    if (!list) { return 0; }
+    if (!item) { return 0; }
+    unsigned length = listLength(list);
+    unsigned count = 0;
+    for (unsigned i = 0; i < length; i++)
+    {
+        Val_t *e = &list->values[i];
+        if (!valIsEqual(e, item)) { continue; }
+        count++;
+    }
+    return count;
+}
+
+bool listContainsItem(List_t *list, Val_t *item)
+{
+    if (!list) { return false; }
+    if (!item) { return false; }
+    unsigned length = listLength(list);
+    for (unsigned i = 0; i < length; i++)
+    {
+        Val_t *e = &list->values[i];
+        if (valIsEqual(e, item)) { continue; }
+        return true;
+    }
+    return false;
+}
+
+// Return the address of the first item found in the list that
+// is equal to the given item
+Val_t *listFindFirst(List_t *list, Val_t *item)
+{
+    if (!list) { return NULL; }
+    if (!item) { return NULL; }
+    unsigned length = listLength(list);
+    for (unsigned i = 0; i < length; i++)
+    {
+        Val_t *e = &list->values[i];
+        if (valIsEqual(e, item)) { continue; }
+        return e;
+    }
+    return NULL;
+}
+
+
 long valAsInteger(Val_t *v)
 {
     if (!valIsInteger(v)) { return 0; }
@@ -820,227 +945,19 @@ long valAsInteger(Val_t *v)
 }
 
 // Get value right after a symbol in a list
-bool listGetItemAfterSymbol(List_t *list, const char *symbolName, Val_t **out)
+Val_t *listGetAssociate(List_t *list, Val_t *key)
 {
     unsigned length = listLength(list);
     for (unsigned i = 0; i < length; i++)
     {
         Val_t *e = &list->values[i];
-        if (valIsSymbol(e) && stringEqual(e->symbol, symbolName))
-        {
-            *out = e;
-            return 1;
-        }
+        if (!valIsEqual(e, key)) { continue; }
+        unsigned next = i + 1;
+        if (next >= length) { return NULL; }
+        return &list->values[next];
     }
-    return 0;
+    return NULL;
 }
-
-// Get the Nth item in a list value (0-based index)
-Val_t *valNthItem(Val_t *v, unsigned n)
-{
-    if (!valIsList(v)) { return NULL; }
-    List_t *list = v->list;
-    unsigned length = listLength(list);
-    if (n >= length) { return NULL; }
-    return &list->values[n];
-}
-
-/*
-// Meant to be used by argsIsMatchForm()
-static bool isArgMatch(char c, Val_t *arg, Val_t **err)
-{
-    switch (c)
-    {
-        case 'v':
-            // any value
-            return 1;
-        case 'l':
-            // list
-            if (valIsList(arg))
-            {
-                return 1;
-            }
-            if (err)
-            {
-                *err = valCreateSymbolStr("should be a list");
-            }
-            return 0;
-        case 'L':
-            // non-empty list
-            if (arg && valIsList(arg))
-            {
-                return 1;
-            }
-            if (err)
-            {
-                *err = valCreateSymbolStr("should be a non-empty list");
-            }
-            return 0;
-        case 's':
-            // symbol
-            if (valIsSymbol(arg))
-            {
-                return 1;
-            }
-            if (err)
-            {
-                *err = valCreateSymbolStr("should be a symbol");
-            }
-            return 0;
-        case 'n':
-            // symbol for number/integer
-            if (valIsInteger(arg))
-            {
-                return 1;
-            }
-            if (err)
-            {
-                *err = valCreateSymbolStr("should be a symbol for an integer");
-            }
-            return 0;
-        default:
-            // error
-            return 0;
-    }
-}
-
-// Match Arguments
-// Check if the `args` list matches the given `form`
-// If the `args` do not match, then `err` is set to a new value (which can be
-//   passed to `valCreateError`)
-// Meanings for characters in the `form` string:
-// - "v" : any value
-// - "l" : a list
-// - "s" : a symbol
-// - "L" : a non-empty list
-// - "n" : an integer symbol (number)
-// - "(" : mark the rest of the arguments as optional. must be last
-// - "&" : variadic, mark the rest of the arguments as optional and all with the same type of the
-//   very next character. must be last
-bool argsIsMatchForm(const char *form, Val_t *args, Val_t **err)
-{
-    unsigned i = 0;
-    bool optional = false;
-    Val_t *p = args;
-    while (form[i] && (optional? (p != NULL) : 1))
-    {
-        switch (form[i])
-        {
-        case 'v':
-        case 'l':
-        case 's':
-        case 'L':
-        case 'n':
-            // types
-            if (!p)
-            {
-                if (err)
-                {
-                    int n = strcspn(form, "&(");
-                    char *arguments = (n == 1)? "argument" : "arguments";
-                    List_t *list = listAlloc(3);
-                    list->values[0] = valGet(valCreateSymbolStr("not enough arguments: requires at least"));
-                    list->values[1] = valGet(valCreateInteger(n));
-                    list->values[2] = valGet(valCreateSymbolStr(arguments));
-                    *err = valCreateList(list);
-                }
-                return 0;
-            }
-            if (!isArgMatch(form[i], p->first, err))
-            {
-                if (err)
-                {
-                    // wrap message with more context
-                    List_t *list = listAlloc(3);
-                    list->values[0] = valGet(valCreateList(valCreateSymbolStr("argument")));
-                    list->values[1] = valGet(valCreateInteger(i + 1));
-                    list->values[2] = valGet(*err);
-                    *err = valCreateList(list);
-                }
-                return 0;
-            }
-            p = p->rest;
-            i++;
-            break;
-        case '(':
-            // optional marker
-            if (optional)
-            {
-                if (err)
-                {
-                    *err = valCreateSymbolStr(
-                        "`argsIsMatchForm` invalid `form` string: optional marker '(' may only appear once");
-                }
-                return 0;
-            }
-            optional = 1;
-            i++;
-            break;
-        case '&':
-            // variadic marker
-            i++;
-            switch (form[i])
-            {
-            case 'v':
-            case 'l':
-            case 's':
-            case 'L':
-            case 'n':
-                // the rest of the arguments should match the given type
-                while (p)
-                {
-                    if (!isArgMatch(form[i], p->first, err))
-                    {
-                        return 0;
-                    }
-                    p = p->rest;
-                }
-                i++;
-                if (!form[i])
-                {
-                    return 1;
-                }
-                if (err)
-                {
-                    *err = valCreateSymbolStr(
-                        "`argsIsMatchForm` invalid `form` string: '&' requires a only directive after it");
-                }
-                return 1;
-            default:
-                // invalid char
-                if (err)
-                {
-                    *err = valCreateSymbolStr(
-                        "`argsIsMatchForm` invalid `form` string: '&' requires a directive after it");
-                }
-                return 0;
-            }
-        default:
-            // invalid char
-            if (err)
-            {
-                *err = valCreateSymbolStr(
-                    "`argsIsMatchForm` invalid `form` string: requires a directive");
-            }
-            return 0;
-        }
-    }
-    if (p)
-    {
-        if (err)
-        {
-            unsigned n = strlen(form) - (optional? 1 : 0);
-            char *arguments = (n == 1) ? "argument" : "arguments";
-            *err = valCreateList(valCreateSymbolStr("too many arguments, requires at most"),
-                            valCreateList(valCreateInteger(n),
-                                     valCreateList(valCreateSymbolStr(arguments),
-                                              NULL)));
-        }
-        return 0;
-    }
-    return 1;
-}
-*/
 
 #endif /* LIZP_IMPLEMENTATION */
 
