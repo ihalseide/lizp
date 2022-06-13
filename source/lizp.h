@@ -1,54 +1,104 @@
 /*
+<!DOCTYPE html><html>
+
+<h1>
 LIZP
+</h1>
 
-    Programming language and linked list data serialization.
+<p>
+Lizp is a simple list data serialization "format".
 
-    This is written in the way of the C99 standard and should also work
-    with C++.
+<p>
+This source code is written in the way of the C99 standard and should also work with C++.
 
-    The license for this is at the end of the file.
+<p>
+The license for the lizp source code is at the end of the file.
 
-Notes:
-
-    FIXME: Currently this program also requires "stb_ds.h".
-
+<h2>
 Usage
+</h2>
 
-    You only need to include this header file in your project. You can
+<p>
+You only need to include this header file in your project. You can
 
-        #include "lizp.h"
+<pre>
+#include "lizp.h"
+</pre>
 
-    in any file that needs it. Then in one place, you need to type:
+in any file that needs it. Then in one place, you need to type:
 
-        #define LIZP_IMPLEMENTATION
-        #include "lizp.h"
+<pre>
+#define LIZP_IMPLEMENTATION
+#include "lizp.h"
+</pre>
 
-    If you want to use lizp as a scripting language and need to enable
-    evaluation, then you should define:
+<p>
+If you want to use lizp as a scripting language and need to enable evaluation,
+then you should define:
 
-        #define LIZP_EVAL
+<pre>
+#define LIZP_EVAL
+</pre>
 
-    And if you want to include some useful macros and functions, then
-    you should define:
+And if you want to include some useful macros and functions, then
+you should define:
 
-        #define LIZP_CORE_FUNCTIONS
+<pre>
+#define LIZP_CORE_FUNCTIONS
+</pre>
 
-    Since the lizp core functions implies that you are doing evaluation,
-    this also automatically defines LIZP_EVAL, so you don't need to
-    define it too.
+Since the lizp core functions implies that you are doing evaluation,
+this also automatically defines LIZP_EVAL,
+so you don't need to define it too.
 
+<h2>
+Documentation
+</h2>
+
+<h3 id=data-types>
 Data types
+</h3>
 
-    The only real data type is the "Value" known as Val_t, which can can
-    either by a symbol or a list. Symbols are arbitrary null-terminated
-    strings, and lists are linked lists of 0 or more values. The empty
-    list is a NULL pointer.
+<p>
+The main data type is the value, which is known as <code>Val_t</code> in the source.
+Every value is either a symbol or a list.
 
-    Symbols can additionally be interpretted as more data types if you wish,
-    but you would have to provide the parsing functions to convert a string
-    into the desired data type. In this header file, the valAsInteger() function
-    is an example of this.
+<p>
+Symbols are null-terminated "C" strings.
+Symbols can be enclosed in quotation marks or not. 
+Quotation marks are optional for strings that do not use characters that also have a meaning in the lizp syntax,
+but for strings which use those characters, the quotation marks are required to include those characters in the
+symbol string.
+The characters which play a role in the lizp syntax are:
+<q>[</q>, <q>]</q>, <q>(</q>, <q>)</q>, `"` (the double quotation mark), <q>\</q>
+and whitespace (whitespace is used to separate symbols).
+Symbols can additionally be interpretted as more data types if you wish,
+but you would have to parse the symbol to convert it into the desired data type.
+In this header file, the valAsInteger() function is an example of this.
+Some examples are provided below (in reader syntax):
+<ol>
+<li><code>a</code>
+<li><code>1.00</code>
+<li><code>_dog_</code>
+<li><code>:key</code>
+<li><code>"quoted with spaces"</code>
+<li><code>"[ a b c ]"</code>
+<li><code>"I said \"hi\" to them."</code>
+<li><code>%appdata%</code>
+</ol>
 
+<p>
+Lists, known as <code>List_t</code> in the source, are ordered sequences of 0 or more values.
+A null pointer for a <code>List_t</code> is considered to be an empty list.
+The syntax for a list is an opening bracket followed by zero or more whitespace-separated values followed by a closing bracket.
+Some examples are provided below (in reader syntax):
+<ol>
+<li><code>[]</code> (empty list)
+<li><code>[a]</code> (a list containing only the symbol "a")
+<li><code>[1 2 3]</code> (a list containing three numbers (which are symbols))
+</ol>
+
+</html>
 */
 
 #ifndef _lizp_h_

@@ -13,27 +13,6 @@
 
 #define BUF_SZ (2*1024)
 
-// Print value to a file
-void valWriteToFile(FILE *f, Val_t *v, int readable)
-{
-    char *s = valWriteToNewString(v, readable);
-    fprintf(f, "%s", s);
-    free(s);
-}
-
-// [print (v)...]
-Val_t *print_func(Val_t *args)
-{
-    int readable = 0;
-    Val_t *p = args;
-    while (p)
-    {
-        valWriteToFile(stdout, p->first, readable);
-        p = p->rest;
-    }
-    return NULL;
-}
-
 // do one read-eval-print cycle on the string
 void rep(const char *str, int len, Val_t *env)
 {
