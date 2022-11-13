@@ -1,31 +1,29 @@
 // Main REPL (read-eval-print loop) program
 
+#define LIZP_IMPLEMENTATION
+#include "lizp.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-#define LIZP_IMPLEMENTATION
-#define LIZP_CORE_FUNCTIONS
-#include "lizp.h"
-
-#define STB_DS_IMPLEMENTATION
-#include "stb_ds.h"
-
 #define BUF_SZ (2*1024)
 
+
 // Print value to a file
-void valWriteToFile(FILE *f, Val_t *v, int readable)
+void valWriteToFile(FILE *f, Val *v, int readable)
 {
     char *s = valWriteToNewString(v, readable);
     fprintf(f, "%s", s);
     free(s);
 }
 
+
 // [print (v)...]
-Val_t *print_func(Val_t *args)
+Val *print_func(Val *args)
 {
     int readable = 0;
-    Val_t *p = args;
+    Val *p = args;
     while (p)
     {
         valWriteToFile(stdout, p->first, readable);
@@ -34,34 +32,34 @@ Val_t *print_func(Val_t *args)
     return NULL;
 }
 
+
 // do one read-eval-print cycle on the string
-void rep(const char *str, int len, Val_t *env)
+void rep(const char *str, int len, Val *env)
 {
-    if (!str || !*str || len <= 0)
-    {
-        return;
-    }
+    if (!str || !*str || len <= 0) { return; }
 
     // debug print
     //printf("\n<str len=%d>%.*s</str>", len, len, str);
 
-    Val_t *expr;
+    Val *expr;
     int n = valReadAllFromBuffer(str, len, &expr);
     if (!n) { return; }
 
     // wrap multiple expressions in an implicit "do" form
     if (n > 1)
     {
-        Val_t *doo = valCreateSymbolCopy("do", 2);
+        Val *doo = valCreateSymbolStr("do");
         expr = valCreateList(doo, expr);
     }
+
+    // expr is always a value that should be free'd at this point
 
     // debug print
     //putchar('\n');
     //valWriteToFile(stdout, expr, 1);
 
     // Eval
-    Val_t *val = evaluate(expr, env);
+    Val *val = evaluate(expr, env);
 
     // Print
     putchar('\n');
@@ -71,8 +69,9 @@ void rep(const char *str, int len, Val_t *env)
     valFree(val);
 }
 
+
 // read, eval, print loop
-void REPL(Val_t *env)
+void REPL(Val *env)
 {
     char buffer[BUF_SZ];
     while (1)
@@ -93,7 +92,8 @@ void REPL(Val_t *env)
     printf("end of input\n");
 }
 
-void loadFile(const char *fname, Val_t *env)
+
+void loadFile(const char *fname, Val *env)
 {
     // read file contents wrapped in a "do" block
     FILE *f = fopen(fname, "rb");
@@ -125,7 +125,7 @@ void loadFile(const char *fname, Val_t *env)
 int main (int argc, char **argv)
 {
     // init environment
-    Val_t *env = valCreateList(NULL, NULL);
+    Val *env = valCreateList(NULL, NULL);
     lizpRegisterCore(env);
     EnvSetFunc(env, "print", print_func);
     EnvSetSym(env, "#f", valCreateFalse());
