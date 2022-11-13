@@ -192,6 +192,10 @@ Val *let_func(Val *args, Val *env);     // [let [sym1 expr1 sym2 expr2 ...] body
 #include <stdio.h> // for snprintf
 
 
+static Val *pool;
+static const char const_lambda[] = "Lambda";
+
+
 static char *stringCopy(const char *buf, unsigned len) {
     if (!buf) { return NULL; }
     char *s = malloc(len + 1);
@@ -201,9 +205,6 @@ static char *stringCopy(const char *buf, unsigned len) {
     }
     return s;
 }
-
-
-static Val *pool;
 
 
 // Allocate a new value
@@ -234,11 +235,14 @@ Val *valAllocKind(ValKind k)
 }
 
 
+static bool symbolIsStatic(const char *string);
+
+
 // Free value
 void valFree(Val *p)
 {
     if (!p) { return; }
-    if (valIsSymbol(p) && p->symbol) { free(p->symbol); }
+    if (valIsSymbol(p) && p->symbol && !symbolIsStatic(p->symbol)) { free(p->symbol); }
     p->kind = VK_FREE;
     p->rest = pool;
     pool = p;
@@ -267,6 +271,12 @@ void valFreeRec(Val *v)
         p = n;
     }
     return;
+}
+
+
+static bool symbolIsStatic(const char *string)
+{
+    return string == const_lambda;
 }
 
 
@@ -1033,7 +1043,7 @@ bool valIsLambda(Val *v)
     if (!v || !valIsList(v)) { return 0; }
     Val *l = v->first;
     if (!l || !valIsSymbol(l)) { return 0; }
-    if (strcmp(l->symbol, "lambda")) { return 0; }
+    if (l->symbol != const_lambda) { return 0; } // must be the exact "private" pointer
     if (!v->rest) { return 0; }
     Val *params = v->rest->first;
     if (!valIsList(params)) { return 0; }
@@ -2085,7 +2095,7 @@ Val *lambda_func(Val *args, Val *env)
     // make lambda... with an explicit NULL body if a body is not provided
     Val *body = args->rest;
     if (body) { body = body->first; }
-    return valCreateList(valCreateSymbolCopy("lambda", 6),
+    return valCreateList(valCreateSymbol(const_lambda),  // NOTE: this passes the actual lambda pointer
                     valCreateList(valCopy(params),
                              valCreateList(valCopy(body),
                                       NULL)));
