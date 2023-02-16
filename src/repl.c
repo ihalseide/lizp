@@ -11,7 +11,7 @@
 
 
 // Print value to a file
-void valWriteToFile(FILE *f, Val *v, int readable)
+void valWriteToFile(FILE *f, const Val *v, int readable)
 {
     char *s = valWriteToNewString(v, readable);
     fprintf(f, "%s", s);
@@ -30,6 +30,18 @@ Val *print_func(Val *args)
         p = p->rest;
     }
     return NULL;
+}
+
+
+// [defglobal var val]
+Val *defglobal_func(Val *args, Val *env)
+{
+    Val *err;
+    if (!argsIsMatchForm("sv", args, &err)) { return valCreateError(err); }
+    Val *name = valCopy(args->first);
+    Val *val = valCopy(evaluate(args->rest->first, env));
+    assert(EnvSet(env, name, val));
+    return valCopy(val);
 }
 
 
@@ -134,6 +146,7 @@ int main (int argc, char **argv)
     Val *env = valCreateList(NULL, NULL);
     lizpRegisterCore(env);
     EnvSetFunc(env, "print", print_func);
+    EnvSetMacro(env, "defglobal", defglobal_func);
     EnvSetSym(env, "#f", valCreateFalse());
     EnvSetSym(env, "#t", valCreateTrue());
     // load each file given on the command line
