@@ -185,6 +185,7 @@ Val *let_func(Val *args, Val *env);     // [let [sym1 expr1 sym2 expr2 ...] body
 
 #ifdef LIZP_IMPLEMENTATION
 
+#include <assert.h>
 #include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
@@ -1400,6 +1401,7 @@ void lizpRegisterCore(Val *env)
 Val *reverse_func(Val *args)
 {
     // TODO: implement
+    assert(0 && "reverse_func is not implemented");
     return NULL;
 }
 
@@ -1407,6 +1409,7 @@ Val *reverse_func(Val *args)
 Val *concat_func(Val *args)
 {
     // TODO: implement
+    assert(0 && "concat_func is not implemented");
     return NULL;
 }
 
@@ -1414,6 +1417,7 @@ Val *concat_func(Val *args)
 Val *join_func(Val *args)
 {
     // TODO: implement
+    assert(0 && "join_func is not implemented");
     return NULL;
 }
 
@@ -1455,6 +1459,7 @@ Val *without_func(Val *args)
 Val *replace_func(Val *args)
 {
     // TODO: implement
+    assert(0 && "replace_func is not implemented");
     return NULL;
 }
 
@@ -1462,6 +1467,7 @@ Val *replace_func(Val *args)
 Val *replace1_func(Val *args)
 {
     // TODO: implement
+    assert(0 && "replace1_func is not implemented");
     return NULL;
 }
 
@@ -1469,6 +1475,7 @@ Val *replace1_func(Val *args)
 Val *replaceI_func(Val *args)
 {
     // TODO: implement
+    assert(0 && "replaceI_func is not implemented");
     return NULL;
 }
 
@@ -1476,6 +1483,7 @@ Val *replaceI_func(Val *args)
 Val *zip_func(Val *args)
 {
     // TODO: implement
+    assert(0 && "zip_func is not implemented");
     return NULL;
 }
 
@@ -2007,6 +2015,7 @@ Val *if_func(Val *args, Val *env)
 // (macro) [quote expr]
 Val *quote_func(Val *args, Val *env)
 {
+    (void)env;
     Val *err;
     if (!argsIsMatchForm("v", args, &err)) { return valCreateError(err); }
     return valCopy(args->first);
@@ -2098,6 +2107,7 @@ Val *cond_func(Val *args, Val *env)
 // (macro) [lambda [(symbol)...] (expr)]
 Val *lambda_func(Val *args, Val *env)
 {
+    (void)env;
     Val *err;
     if (!argsIsMatchForm("l(v", args, &err)) { return valCreateError(err); }
     if (!valListLengthIsWithin(args, 2, 2)) { return valCreateErrorMessage("lambda macro requires 2 arguments"); }
