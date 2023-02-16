@@ -75,7 +75,7 @@ typedef struct Val {
 // memory management
 Val *valAlloc(void);
 Val *valAllocKind(ValKind k);
-Val *valCopy(Val *p);
+Val *valCopy(const Val *p);
 void valFree(Val *p);
 void valFreeRec(Val *p);
 
@@ -87,13 +87,13 @@ Val *valCreateSymbolCopy(const char *start, unsigned len);
 Val *valCreateSymbolStr(const char *string);
 
 // value type checking
-ValKind valKind(Val *v);
-bool valIsInteger(Val *v);
-bool valIsList(Val *v);
-bool valIsSymbol(Val *v);
-bool valIsFunc(Val *v);
-bool valIsMacro(Val *v);
-bool argsIsMatchForm(const char *form, Val *args, Val **err);
+ValKind valKind(const Val *v);
+bool valIsInteger(const Val *v);
+bool valIsList(const Val *v);
+bool valIsSymbol(const Val *v);
+bool valIsFunc(const Val *v);
+bool valIsMacro(const Val *v);
+bool argsIsMatchForm(const char *form, const Val *args, Val **err);
 
 // value utility functions
 bool valGetListItemAfterSymbol(Val *list, const char *symbol, Val **out);
@@ -116,14 +116,15 @@ Val *valCreateError(Val *rest);
 Val *valCreateErrorMessage(const char *msg);
 Val *valCreateFalse(void);
 
-bool valIsError(Val *v);
-bool valIsLambda(Val *v);
-bool valIsTrue(Val *v);
+bool valIsError(const Val *v);
+bool valIsLambda(const Val *v);
+bool valIsTrue(const Val *v);
 
-Val *evaluate(Val *ast, Val *env);
+Val *evaluate(const Val *ast, Val *env);
 Val *evaluateList(Val *list, Val *env);
-bool EnvGet(Val *env, Val *key, Val **out);
+bool EnvGet(Val *env, const Val *key, Val **out);
 bool EnvSet(Val *env, Val *key, Val *val);
+bool EnvSet_const(Val *env, const Val *key, const Val *val);
 bool EnvSetFunc(Val *env, const char *name, LizpFunc *func);
 bool EnvSetMacro(Val *env, const char *name, LizpMacro *macro);
 bool EnvSetSym(Val *env, const char *symbol, Val *val);
@@ -298,7 +299,7 @@ bool valIsEqual(const Val *x, const Val *y)
     if (valIsList(x))
     {
         // List equality
-        Val *px = x, *py = y;
+        const Val *px = x, *py = y;
         while (px && valIsList(px) && py && valIsList(py))
         {
             if (!valIsEqual(px->first, py->first)) { break; }
@@ -314,7 +315,7 @@ bool valIsEqual(const Val *x, const Val *y)
 
 
 // Get a value's kind a.k.a type
-ValKind valKind(Val *v)
+ValKind valKind(const Val *v)
 {
     if (!v) { return VK_LIST; }
     return v->kind;
@@ -323,21 +324,21 @@ ValKind valKind(Val *v)
 
 // Check if a value is a list
 // NULL is also considered an empty list
-bool valIsList(Val *p) { return valKind(p) == VK_LIST; }
+bool valIsList(const Val *p) { return valKind(p) == VK_LIST; }
 
 
 // Check if a value is a symbol
-bool valIsSymbol(Val *p) { return valKind(p) == VK_SYMBOL; }
+bool valIsSymbol(const Val *p) { return valKind(p) == VK_SYMBOL; }
 
 
-bool valIsFunc(Val *v) { return v && valKind(v) == VK_FUNC; }
+bool valIsFunc(const Val *v) { return v && valKind(v) == VK_FUNC; }
 
 
-bool valIsMacro(Val *v) { return v && valKind(v) == VK_MACRO; }
+bool valIsMacro(const Val *v) { return v && valKind(v) == VK_MACRO; }
 
 
 //  check if a value is a integer symbol
-bool valIsInteger(Val *v)
+bool valIsInteger(const Val *v)
 {
     if (!valIsSymbol(v)) { return 0; }
     const unsigned base = 10;
@@ -418,9 +419,9 @@ static Val *valCreateMacro(LizpMacro *m)
 
 
 // New copy, with no structure-sharing
-Val *valCopy(Val *p)
+Val *valCopy(const Val *p)
 {
-    if (!p) { return p; }
+    if (!p) { return NULL; }
     if (valIsSymbol(p)) { return valCreateSymbolStr(p->symbol); }
     if (valIsFunc(p)) { return valCreateFunc(p->func); }
     if (valIsMacro(p)) { return valCreateMacro(p->macro); }
@@ -1023,10 +1024,10 @@ bool IsSeparate(Val *a, Val *b)
 
 
 // Check whether a value is considered as true
-bool valIsTrue(Val *v) { return v != NULL; }
+bool valIsTrue(const Val *v) { return v != NULL; }
 
 
-Val *valCreateTrue(void) { return valCreateSymbol(const_true); }
+Val *valCreateTrue(void) { return valCreateSymbolStr(const_true); }
 
 
 Val *valCreateFalse(void) { return NULL; }
@@ -1047,7 +1048,7 @@ Val *valCreateErrorMessage(const char *msg)
 }
 
 // Check whether a value is a lambda value (special list)
-bool valIsLambda(Val *v)
+bool valIsLambda(const Val *v)
 {
     if (!v || !valIsList(v)) { return 0; }
     Val *l = v->first;
@@ -1068,7 +1069,7 @@ bool valIsLambda(Val *v)
 
 
 // check if the value matches the form [error ...]
-bool valIsError(Val *v)
+bool valIsError(const Val *v)
 {
     if (!v || !valIsList(v)) { return 0; }
     Val *first = v->first;
@@ -1077,7 +1078,7 @@ bool valIsError(Val *v)
 
 
 // Set value in environment
-// Arguments should by copies of Values
+// Key and Val Arguments should by copies of Values
 // Returns non-zero upon success
 bool EnvSet(Val *env, Val *key, Val *val)
 {
@@ -1089,10 +1090,22 @@ bool EnvSet(Val *env, Val *key, Val *val)
     return 1;
 }
 
+
+// Set value in environment
+// Arguments should by copies of Values
+// Returns non-zero upon success
+bool EnvSet_const(Val *env, const Val *key, const Val *val)
+{
+    Val *key_copy = valCopy(key);
+    Val *val_copy = valCopy(val);
+    return EnvSet(env, key_copy, val_copy);
+}
+
+
 // Environment Get.
 // Get value in environment, does not return a copy
 // Return value: whether the symbol is present
-bool EnvGet(Val *env, Val *key, Val **out)
+bool EnvGet(Val *env, const Val *key, Val **out)
 {
     if (!env) { return 0; }
     Val *scope = env;
@@ -1115,6 +1128,7 @@ bool EnvGet(Val *env, Val *key, Val **out)
     return 0;
 }
 
+
 // push a new context onto the environment
 void EnvPush(Val *env)
 {
@@ -1122,6 +1136,7 @@ void EnvPush(Val *env)
     env->rest = valCreateList(env->first, env->rest);
     env->first = NULL;
 }
+
 
 // pop off the latest context from the environment
 void EnvPop(Val *env)
@@ -1134,6 +1149,7 @@ void EnvPop(Val *env)
     // Only free the one pair
     valFree(pair);
 }
+
 
 // Return values must not share structure with first, args, or env
 static Val *ApplyLambda(Val *first, Val *args, Val *env)
@@ -1233,7 +1249,7 @@ Val *evaluateList(Val *list, Val *env)
 // Returns the evaluated value
 // NOTE: must only return new values that do not share any
 //       structure with the ast or the env
-Val *evaluate(Val *ast, Val *env)
+Val *evaluate(const Val *ast, Val *env)
 {
     if (!ast) { return NULL; } // empty list
     if (valIsInteger(ast)) { return valCopy(ast); } // integers are self-evaluating
@@ -2108,7 +2124,7 @@ Val *lambda_func(Val *args, Val *env)
     // make lambda... with an explicit NULL body if a body is not provided
     Val *body = args->rest;
     if (body) { body = body->first; }
-    return valCreateList(valCreateSymbol(const_lambda),  // NOTE: this passes the actual lambda pointer
+    return valCreateList(valCreateSymbolStr(const_lambda),
                     valCreateList(valCopy(params),
                              valCreateList(valCopy(body),
                                       NULL)));
@@ -2169,6 +2185,7 @@ static bool isArgMatch(char c, Val *arg, Val **err)
             return 0;
         default:
             // error
+            *err = valCreateSymbolStr("internal error: invalid type specifier in `isArgMatch`");
             return 0;
     }
 }
@@ -2187,11 +2204,11 @@ static bool isArgMatch(char c, Val *arg, Val **err)
 // - "(" : mark the rest of the arguments as optional. must be last
 // - "&" : variadic, mark the rest of the arguments as optional and all with the same type of the
 //   very next character. must be last
-bool argsIsMatchForm(const char *form, Val *args, Val **err)
+bool argsIsMatchForm(const char *form, const Val *args, Val **err)
 {
     unsigned i = 0;
     bool optional = false;
-    Val *p = args;
+    const Val *p = args;
     while (form[i] && (optional? (p != NULL) : 1))
     {
         switch (form[i])
