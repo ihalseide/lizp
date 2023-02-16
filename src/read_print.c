@@ -51,7 +51,7 @@ int main(int argc, char **argv)
     }
 
     // convert to data structure
-    Val_t *val;
+    Val *val;
     int n = valReadAllFromBuffer(text, length, &val);
     free(text);
 

@@ -2,10 +2,7 @@
 LIZP
 
     Programming language and linked list data serialization.
-
-    This is written in the way of the C99 standard and should also work
-    with C++.
-
+    This is written in the way of the C99 standard.
     The license for this is at the end of the file.
 
 Notes:
@@ -76,7 +73,7 @@ typedef struct Val {
 
 
 // memory management
-Val *valAlloc();
+Val *valAlloc(void);
 Val *valAllocKind(ValKind k);
 Val *valCopy(Val *p);
 void valFree(Val *p);
@@ -193,7 +190,8 @@ Val *let_func(Val *args, Val *env);     // [let [sym1 expr1 sym2 expr2 ...] body
 
 
 static Val *pool;
-static const char const_lambda[] = "Lambda";
+static const char const_lambda[] = "lambda";
+static const char const_true[] = "#t";
 
 
 static char *stringCopy(const char *buf, unsigned len) {
@@ -276,7 +274,8 @@ void valFreeRec(Val *v)
 
 static bool symbolIsStatic(const char *string)
 {
-    return string == const_lambda;
+    return string == const_lambda
+        || string == const_true;
 }
 
 
@@ -307,6 +306,8 @@ bool valIsEqual(const Val *x, const Val *y)
         }
         return px == NULL && py == NULL;
     }
+    if (valIsFunc(x) && valIsFunc(y)) { return x->func == y->func; }
+    if (valIsMacro(x) && valIsMacro(y)) { return x->macro == y->macro; }
     return 0;
 }
 
@@ -555,10 +556,16 @@ unsigned valReadOneFromBuffer(const char *str, unsigned len, Val **out)
     switch (str[i])
     {
     case '\0': // end of string
+        *out = valCreateErrorMessage("reached an unexpected end of input");
+        return i;
     case ']':  // unmatched list
+        *out = valCreateErrorMessage("read an unexpected '['");
+        return i;
     case '(':  // uncaught comment
+        *out = valCreateErrorMessage("read an unexpected '('");
+        return i;
     case ')':  // uncaught comment
-        *out = NULL;
+        *out = valCreateErrorMessage("read an unexpected ')'");
         return i;
     case '[':
         // begin list
@@ -716,7 +723,7 @@ unsigned valReadAllFromBuffer(const char *str, unsigned len, Val **out)
     if (!read_len) { return 0; }
     i += read_len;
     i += SkipChars(str + i, len - i);
-    if (i >= len || !str[i])
+    if (valIsError(val) || i >= len || !str[i])
     {
         *out = val;
         return 1;
@@ -728,8 +735,14 @@ unsigned valReadAllFromBuffer(const char *str, unsigned len, Val **out)
     Val *p = val;
     for (n = 1; i < len && str[i]; n++, p = p->rest)
     {
-        Val *e;
+        Val *e = NULL;
         read_len = valReadOneFromBuffer(str + i, len - i, &e);
+        if (valIsError(e))
+        {
+            valFreeRec(val);
+            val = e;
+            break;
+        }
         if (!read_len) { break; }
         i += read_len;
         i += SkipChars(str + i, len - i);
@@ -1009,20 +1022,14 @@ bool IsSeparate(Val *a, Val *b)
 
 
 // Check whether a value is considered as true
-bool valIsTrue(Val *v)
-{
-    return v != NULL;
-}
+bool valIsTrue(Val *v) { return v != NULL; }
 
-Val *valCreateTrue(void)
-{
-    return valCreateSymbolCopy("true", 4);
-}
 
-Val *valCreateFalse(void)
-{
-    return NULL;
-}
+Val *valCreateTrue(void) { return valCreateSymbol(const_true); }
+
+
+Val *valCreateFalse(void) { return NULL; }
+
 
 // make a list of the form [error rest...]
 Val *valCreateError(Val *rest)
@@ -1031,6 +1038,7 @@ Val *valCreateError(Val *rest)
     if (valIsList(rest)) { return valCreateList(e, rest); }
     return valCreateList(e, valCreateList(rest, NULL));
 }
+
 
 Val *valCreateErrorMessage(const char *msg)
 {
@@ -1065,6 +1073,7 @@ bool valIsError(Val *v)
     Val *first = v->first;
     return valIsSymbol(first) && !strcmp("error", first->symbol);
 }
+
 
 // Set value in environment
 // Arguments should by copies of Values
@@ -1962,6 +1971,7 @@ Val *if_func(Val *args, Val *env)
 {
     Val *err;
     //if (!argsIsMatchForm("vv(v", args, &err)) { return valCreateError(err); }
+    if (!valListLengthIsWithin(args, 2, 3)) { return valCreateErrorMessage("`if` macro requires 2 or 3 expressions"); }
     Val *f = evaluate(args->first, env);
     if (valIsError(f)) { return f; } // eval error
     int t = valIsTrue(f);
@@ -2043,7 +2053,8 @@ Val *cond_func(Val *args, Val *env)
 {
     Val *err;
     //if (!argsIsMatchForm("vv&v", args, &err)) { return valCreateError(err); }
-    if (valListLength(args) % 2 != 0)
+    unsigned n = valListLength(args);
+    if ((n < 2) || (n % 2))
     {
         return valCreateErrorMessage("`cond` requires an even amount of"
                                 " alternating condition expressions and"
@@ -2072,6 +2083,7 @@ Val *lambda_func(Val *args, Val *env)
 {
     Val *err;
     //if (!argsIsMatchForm("l(v", args, &err)) { return valCreateError(err); }
+    if (!valListLengthIsWithin(args, 2, 2)) { return valCreateErrorMessage("lambda macro requires 2 arguments"); }
     Val *params = args->first;
     if (!valIsList(params))
     {

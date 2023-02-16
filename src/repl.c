@@ -41,8 +41,14 @@ void rep(const char *str, int len, Val *env)
     // debug print
     //printf("\n<str len=%d>%.*s</str>", len, len, str);
 
-    Val *expr;
+    Val *expr = NULL;
     int n = valReadAllFromBuffer(str, len, &expr);
+    if (valIsError(expr))
+    {
+        putchar('\n');
+        valWriteToFile(stdout, expr, 1);
+        return;
+    }
     if (!n) { return; }
 
     // wrap multiple expressions in an implicit "do" form
