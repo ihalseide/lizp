@@ -93,6 +93,7 @@ bool valIsList(Val *v);
 bool valIsSymbol(Val *v);
 bool valIsFunc(Val *v);
 bool valIsMacro(Val *v);
+bool argsIsMatchForm(const char *form, Val *args, Val **err);
 
 // value utility functions
 bool valGetListItemAfterSymbol(Val *list, const char *symbol, Val **out);
@@ -339,7 +340,7 @@ bool valIsMacro(Val *v) { return v && valKind(v) == VK_MACRO; }
 bool valIsInteger(Val *v)
 {
     if (!valIsSymbol(v)) { return 0; }
-    unsigned base = 10;
+    const unsigned base = 10;
     char *end;
     strtol(v->symbol, &end, base);
     return end && !(*end);
@@ -1405,7 +1406,7 @@ Val *join_func(Val *args)
 Val *without_func(Val *args)
 {
     Val *err;
-    //if (!argsIsMatchForm("vl", args, &err)) { return valCreateError(err); }
+    if (!argsIsMatchForm("vl", args, &err)) { return valCreateError(err); }
     Val *item = NthItem(args, 0);
     Val *list = NthItem(args, 1);
     if (!list) { return NULL; }
@@ -1466,7 +1467,7 @@ Val *zip_func(Val *args)
 Val *append_func(Val *args)
 {
     Val *err;
-    //if (!argsIsMatchForm("vl", args, &err)) { return valCreateError(err); }
+    if (!argsIsMatchForm("vl", args, &err)) { return valCreateError(err); }
     Val *v = args->first;
     Val *list = args->rest->first;
     Val *last = valCreateList(valCopy(v), NULL);
@@ -1490,7 +1491,7 @@ Val *append_func(Val *args)
 Val *prepend_func(Val *args)
 {
     Val *err;
-    //if (!argsIsMatchForm("vl", args, &err)) { return valCreateError(err); }
+    if (!argsIsMatchForm("vl", args, &err)) { return valCreateError(err); }
     Val *v = args->first;
     Val *list = args->rest->first;
     return valCreateList(valCopy(v), valCopy(list));
@@ -1500,7 +1501,7 @@ Val *prepend_func(Val *args)
 Val *plus_func(Val *args)
 {
     Val *err;
-    //if (!argsIsMatchForm("&n", args, &err)) { return valCreateError(err); }
+    if (!argsIsMatchForm("&n", args, &err)) { return valCreateError(err); }
     long sum = 0;
     Val *p = args;
     while (p)
@@ -1517,7 +1518,7 @@ Val *plus_func(Val *args)
 Val *multiply_func(Val *args)
 {
     Val *err;
-    //if (!argsIsMatchForm("&n", args, &err)) { return valCreateError(err); }
+    if (!argsIsMatchForm("&n", args, &err)) { return valCreateError(err); }
     long product = 1;
     Val *p = args;
     while (p)
@@ -1533,7 +1534,7 @@ Val *multiply_func(Val *args)
 Val *subtract_func(Val *args)
 {
     Val *err;
-    //if (!argsIsMatchForm("n(n", args, &err)) { return valCreateError(err); }
+    if (!argsIsMatchForm("n(n", args, &err)) { return valCreateError(err); }
     if (!valListLengthIsWithin(args, 1, 2)) { return valCreateErrorMessage("takes 1 or 2 arguments"); }
     Val *vx = args->first;
     long x = atol(vx->symbol);
@@ -1547,7 +1548,7 @@ Val *subtract_func(Val *args)
 Val *divide_func(Val *args)
 {
     Val *err;
-    //if (!argsIsMatchForm("nn", args, &err)) { return valCreateError(err); }
+    if (!argsIsMatchForm("nn", args, &err)) { return valCreateError(err); }
     long x = valAsInteger(NthItem(args, 0));
     long y = valAsInteger(NthItem(args, 1));
     if (y == 0)
@@ -1562,7 +1563,7 @@ Val *divide_func(Val *args)
 Val *mod_func(Val *args)
 {
     Val *err;
-    //if (!argsIsMatchForm("nn", args, &err)) { return valCreateError(err); }
+    if (!argsIsMatchForm("nn", args, &err)) { return valCreateError(err); }
     long x = valAsInteger(NthItem(args, 0));
     long y = valAsInteger(NthItem(args, 1));
     if (y == 0)
@@ -1577,7 +1578,7 @@ Val *mod_func(Val *args)
 Val *equal_func(Val *args)
 {
     Val *err;
-    //if (!argsIsMatchForm("vv&v", args, &err)) { return valCreateError(err); }
+    if (!argsIsMatchForm("vv&v", args, &err)) { return valCreateError(err); }
     Val *f = args->first;
     Val *p = args->rest;
     while (p && valIsList(p))
@@ -1592,7 +1593,7 @@ Val *equal_func(Val *args)
 Val *not_func(Val *args)
 {
     Val *err;
-    //if (!argsIsMatchForm("v", args, &err)) { return valCreateError(err); }
+    if (!argsIsMatchForm("v", args, &err)) { return valCreateError(err); }
     return valIsTrue(args->first)? valCreateFalse() : valCreateTrue();
 }
 
@@ -1600,7 +1601,7 @@ Val *not_func(Val *args)
 Val *symbol_q_func(Val *args)
 {
     Val *err;
-    //if (!argsIsMatchForm("v", args, &err)) { return valCreateError(err); }
+    if (!argsIsMatchForm("v", args, &err)) { return valCreateError(err); }
     Val *v = args->first;
     return !valIsSymbol(v)? valCreateTrue() : valCreateFalse();
 }
@@ -1609,7 +1610,7 @@ Val *symbol_q_func(Val *args)
 Val *integer_q_func(Val *args)
 {
     Val *err;
-    //if (!argsIsMatchForm("v", args, &err)) { return valCreateError(err); }
+    if (!argsIsMatchForm("v", args, &err)) { return valCreateError(err); }
     return valIsInteger(args->first)? valCreateTrue() : valCreateFalse();
 }
 
@@ -1617,7 +1618,7 @@ Val *integer_q_func(Val *args)
 Val *list_q_func(Val *args)
 {
     Val *err;
-    //if (!argsIsMatchForm("v", args, &err)) { return valCreateError(err); }
+    if (!argsIsMatchForm("v", args, &err)) { return valCreateError(err); }
     return valIsList(args->first)? valCreateTrue() : valCreateFalse();
 }
 
@@ -1625,7 +1626,7 @@ Val *list_q_func(Val *args)
 Val *empty_q_func(Val *args)
 {
     Val *err;
-    //if (!argsIsMatchForm("v", args, &err)) { return valCreateError(err); }
+    if (!argsIsMatchForm("v", args, &err)) { return valCreateError(err); }
     return (!args->first)? valCreateTrue() : valCreateFalse();
 }
 
@@ -1633,7 +1634,7 @@ Val *empty_q_func(Val *args)
 Val *nth_func(Val *args)
 {
     Val *err;
-    //if (!argsIsMatchForm("nl", args, &err)) { return valCreateError(err); }
+    if (!argsIsMatchForm("nl", args, &err)) { return valCreateError(err); }
     Val *i = args->first;
     Val *list = args->rest->first;
     long n = atol(i->symbol);
@@ -1662,7 +1663,7 @@ Val *list_func(Val *args)
 Val *length_func(Val *args)
 {
     Val *err;
-    //if (!argsIsMatchForm("l", args, &err)) { return valCreateError(err); }
+    if (!argsIsMatchForm("l", args, &err)) { return valCreateError(err); }
     return valCreateInteger(valListLength(args->first));
 }
 
@@ -1670,7 +1671,7 @@ Val *length_func(Val *args)
 Val *lambda_q_func(Val *args)
 {
     Val *err;
-    //if (!argsIsMatchForm("v", args, &err)) { return valCreateError(err); }
+    if (!argsIsMatchForm("v", args, &err)) { return valCreateError(err); }
     return valIsLambda(args->first)? valCreateTrue() : valCreateFalse();
 }
 
@@ -1678,7 +1679,7 @@ Val *lambda_q_func(Val *args)
 Val *function_q_func(Val *args)
 {
     Val *err;
-    //if (!argsIsMatchForm("v", args, &err)) { return valCreateError(err); }
+    if (!argsIsMatchForm("v", args, &err)) { return valCreateError(err); }
     Val *v = args->first;
     return (valIsFunc(v) || valIsLambda(v))? valCreateTrue() : valCreateFalse();
 }
@@ -1687,7 +1688,7 @@ Val *function_q_func(Val *args)
 Val *native_q_func(Val *args)
 {
     Val *err;
-    //if (!argsIsMatchForm("v", args, &err)) { return valCreateError(err); }
+    if (!argsIsMatchForm("v", args, &err)) { return valCreateError(err); }
     return valIsFunc(args->first)? valCreateTrue() : valCreateFalse();
 }
 
@@ -1695,7 +1696,7 @@ Val *native_q_func(Val *args)
 Val *increasing_func(Val *args)
 {
     Val *err;
-    //if (!argsIsMatchForm("nn&n", args, &err)) { return valCreateError(err); }
+    if (!argsIsMatchForm("nn&n", args, &err)) { return valCreateError(err); }
     Val *f = args->first;
     long x = atol(f->symbol);
     Val *p = args->rest;
@@ -1714,7 +1715,7 @@ Val *increasing_func(Val *args)
 Val *decreasing_func(Val *args)
 {
     Val *err;
-    //if (!argsIsMatchForm("nn&n", args, &err)) { return valCreateError(err); }
+    if (!argsIsMatchForm("nn&n", args, &err)) { return valCreateError(err); }
     Val *f = args->first;
     long x = atol(f->symbol);
     Val *p = args->rest;
@@ -1733,7 +1734,7 @@ Val *decreasing_func(Val *args)
 Val *strictly_increasing_func(Val *args)
 {
     Val *err;
-    //if (!argsIsMatchForm("nn&n", args, &err)) { return valCreateError(err); }
+    if (!argsIsMatchForm("nn&n", args, &err)) { return valCreateError(err); }
     Val *f = args->first;
     long x = atol(f->symbol);
     Val *p = args->rest;
@@ -1752,7 +1753,7 @@ Val *strictly_increasing_func(Val *args)
 Val *strictly_decreasing_func(Val *args)
 {
     Val *err;
-    //if (!argsIsMatchForm("nn&n", args, &err)) { return valCreateError(err); }
+    if (!argsIsMatchForm("nn&n", args, &err)) { return valCreateError(err); }
     Val *f = args->first;
     long x = atol(f->symbol);
     Val *p = args->rest;
@@ -1771,7 +1772,7 @@ Val *strictly_decreasing_func(Val *args)
 Val *chars_func(Val *args)
 {
     Val *err;
-    //if (!argsIsMatchForm("s", args, &err)) { return valCreateError(err); }
+    if (!argsIsMatchForm("s", args, &err)) { return valCreateError(err); }
     Val *sym = args->first;
     char *s = sym->symbol;
     Val *result = valCreateList(valCreateSymbolCopy(s, 1), NULL);
@@ -1790,7 +1791,7 @@ Val *chars_func(Val *args)
 Val *symbol_func(Val *args)
 {
     Val *err;
-    //if (!argsIsMatchForm("L", args, &err)) { return valCreateError(err); }
+    if (!argsIsMatchForm("L", args, &err)) { return valCreateError(err); }
     Val *list = args->first;
     int len = valListLength(list);
     char *sym = malloc(1 + len);
@@ -1817,7 +1818,7 @@ Val *symbol_func(Val *args)
 Val *member_q_func(Val *args)
 {
     Val *err;
-    //if (!argsIsMatchForm("vl", args, &err)) { return valCreateError(err); }
+    if (!argsIsMatchForm("vl", args, &err)) { return valCreateError(err); }
     Val *item = args->first;
     Val *list = args->rest->first;
     while (list && valIsList(list))
@@ -1832,7 +1833,7 @@ Val *member_q_func(Val *args)
 Val *count_func(Val *args)
 {
     Val *err;
-    //if (!argsIsMatchForm("vl", args, &err)) { return valCreateError(err); }
+    if (!argsIsMatchForm("vl", args, &err)) { return valCreateError(err); }
     Val *item = args->first;
     Val *list = args->rest->first;
     long count = 0;
@@ -1848,7 +1849,7 @@ Val *count_func(Val *args)
 Val *position_func(Val *args)
 {
     Val *err;
-    //if (!argsIsMatchForm("vl", args, &err)) { return valCreateError(err); }
+    if (!argsIsMatchForm("vl", args, &err)) { return valCreateError(err); }
     Val *item = args->first;
     Val *list = args->rest->first;
     long i = 0;
@@ -1866,7 +1867,7 @@ Val *position_func(Val *args)
 Val *slice_func(Val *args)
 {
     Val *err;
-    //if (!argsIsMatchForm("ln(n", args, &err)) { return valCreateError(err); }
+    if (!argsIsMatchForm("ln(n", args, &err)) { return valCreateError(err); }
     Val *list = args->first;
     Val *start = args->rest->first;
     long start_i = atol(start->symbol);
@@ -1931,7 +1932,7 @@ Val *slice_func(Val *args)
 Val *let_func(Val *args, Val *env)
 {
     Val *err;
-    //if (!argsIsMatchForm("Lv", args, &err)) { return valCreateError(err); }
+    if (!argsIsMatchForm("Lv", args, &err)) { return valCreateError(err); }
     Val *bindings = args->first;
     Val *body = args->rest->first;
     // create and check bindings
@@ -1970,7 +1971,7 @@ Val *let_func(Val *args, Val *env)
 Val *if_func(Val *args, Val *env)
 {
     Val *err;
-    //if (!argsIsMatchForm("vv(v", args, &err)) { return valCreateError(err); }
+    if (!argsIsMatchForm("vv(v", args, &err)) { return valCreateError(err); }
     if (!valListLengthIsWithin(args, 2, 3)) { return valCreateErrorMessage("`if` macro requires 2 or 3 expressions"); }
     Val *f = evaluate(args->first, env);
     if (valIsError(f)) { return f; } // eval error
@@ -1991,7 +1992,7 @@ Val *if_func(Val *args, Val *env)
 Val *quote_func(Val *args, Val *env)
 {
     Val *err;
-    //if (!argsIsMatchForm("v", args, &err)) { return valCreateError(err); }
+    if (!argsIsMatchForm("v", args, &err)) { return valCreateError(err); }
     return valCopy(args->first);
 }
 
@@ -2014,7 +2015,7 @@ Val *do_func(Val *args, Val *env)
 Val *and_func(Val *args, Val *env)
 {
     Val *err;
-    //if (!argsIsMatchForm("v&v", args, &err)) { return valCreateError(err); }
+    if (!argsIsMatchForm("v&v", args, &err)) { return valCreateError(err); }
     Val *p = args;
     while (p && valIsList(p))
     {
@@ -2033,7 +2034,7 @@ Val *and_func(Val *args, Val *env)
 Val *or_func(Val *args, Val *env)
 {
     Val *err;
-    //if (!argsIsMatchForm("v&v", args, &err)) { return valCreateError(err); }
+    if (!argsIsMatchForm("v&v", args, &err)) { return valCreateError(err); }
     Val *p = args;
     while (p && valIsList(p))
     {
@@ -2052,7 +2053,7 @@ Val *or_func(Val *args, Val *env)
 Val *cond_func(Val *args, Val *env)
 {
     Val *err;
-    //if (!argsIsMatchForm("vv&v", args, &err)) { return valCreateError(err); }
+    if (!argsIsMatchForm("vv&v", args, &err)) { return valCreateError(err); }
     unsigned n = valListLength(args);
     if ((n < 2) || (n % 2))
     {
@@ -2082,7 +2083,7 @@ Val *cond_func(Val *args, Val *env)
 Val *lambda_func(Val *args, Val *env)
 {
     Val *err;
-    //if (!argsIsMatchForm("l(v", args, &err)) { return valCreateError(err); }
+    if (!argsIsMatchForm("l(v", args, &err)) { return valCreateError(err); }
     if (!valListLengthIsWithin(args, 2, 2)) { return valCreateErrorMessage("lambda macro requires 2 arguments"); }
     Val *params = args->first;
     if (!valIsList(params))
@@ -2111,6 +2112,201 @@ Val *lambda_func(Val *args, Val *env)
                     valCreateList(valCopy(params),
                              valCreateList(valCopy(body),
                                       NULL)));
+}
+
+
+// Meant to be used by argsIsMatchForm()
+static bool isArgMatch(char c, Val *arg, Val **err)
+{
+    switch (c)
+    {
+        case 'v':
+            // any value
+            return 1;
+        case 'l':
+            // list
+            if (valIsList(arg))
+            {
+                return 1;
+            }
+            if (err)
+            {
+                *err = valCreateSymbolStr("should be a list");
+            }
+            return 0;
+        case 'L':
+            // non-empty list
+            if (arg && valIsList(arg))
+            {
+                return 1;
+            }
+            if (err)
+            {
+                *err = valCreateSymbolStr("should be a non-empty list");
+            }
+            return 0;
+        case 's':
+            // symbol
+            if (valIsSymbol(arg))
+            {
+                return 1;
+            }
+            if (err)
+            {
+                *err = valCreateSymbolStr("should be a symbol");
+            }
+            return 0;
+        case 'n':
+            // symbol for number/integer
+            if (valIsInteger(arg))
+            {
+                return 1;
+            }
+            if (err)
+            {
+                *err = valCreateSymbolStr("should be a symbol for an integer");
+            }
+            return 0;
+        default:
+            // error
+            return 0;
+    }
+}
+
+
+// Match Arguments
+// Check if the `args` list matches the given `form`
+// If the `args` do not match, then `err` is set to a new value (which can be
+//   passed to `valCreateError`)
+// Meanings for characters in the `form` string:
+// - "v" : any value
+// - "l" : a list
+// - "s" : a symbol
+// - "L" : a non-empty list
+// - "n" : an integer symbol (number)
+// - "(" : mark the rest of the arguments as optional. must be last
+// - "&" : variadic, mark the rest of the arguments as optional and all with the same type of the
+//   very next character. must be last
+bool argsIsMatchForm(const char *form, Val *args, Val **err)
+{
+    unsigned i = 0;
+    bool optional = false;
+    Val *p = args;
+    while (form[i] && (optional? (p != NULL) : 1))
+    {
+        switch (form[i])
+        {
+        case 'v':
+        case 'l':
+        case 's':
+        case 'L':
+        case 'n':
+            // types
+            if (!p)
+            {
+                if (err)
+                {
+                    int n = strcspn(form, "&(");
+                    char *arguments = (n == 1)? "argument" : "arguments";
+                    *err = valCreateList(valCreateSymbolStr("not enough arguments: requires at least"),
+                                    valCreateList(valCreateInteger(n),
+                                             valCreateList(valCreateSymbolStr(arguments),
+                                                      NULL)));
+                }
+                return 0;
+            }
+            if (!isArgMatch(form[i], p->first, err))
+            {
+                if (err)
+                {
+                    // wrap message with more context
+                    *err = valCreateList(valCreateSymbolStr("argument"),
+                                    valCreateList(valCreateInteger(i + 1),
+                                             valCreateList(*err,
+                                                      NULL)));
+                }
+                return 0;
+            }
+            p = p->rest;
+            i++;
+            break;
+        case '(':
+            // optional marker
+            if (optional)
+            {
+                if (err)
+                {
+                    *err = valCreateSymbolStr(
+                        "`argsIsMatchForm` invalid `form` string: optional marker '(' may only appear once");
+                }
+                return 0;
+            }
+            optional = 1;
+            i++;
+            break;
+        case '&':
+            // variadic marker
+            i++;
+            switch (form[i])
+            {
+            case 'v':
+            case 'l':
+            case 's':
+            case 'L':
+            case 'n':
+                // the rest of the arguments should match the given type
+                while (p)
+                {
+                    if (!isArgMatch(form[i], p->first, err))
+                    {
+                        return 0;
+                    }
+                    p = p->rest;
+                }
+                i++;
+                if (!form[i])
+                {
+                    return 1;
+                }
+                if (err)
+                {
+                    *err = valCreateSymbolStr(
+                        "`argsIsMatchForm` invalid `form` string: '&' requires a only directive after it");
+                }
+                return 1;
+            default:
+                // invalid char
+                if (err)
+                {
+                    *err = valCreateSymbolStr(
+                        "`argsIsMatchForm` invalid `form` string: '&' requires a directive after it");
+                }
+                return 0;
+            }
+        default:
+            // invalid char
+            if (err)
+            {
+                *err = valCreateSymbolStr(
+                    "`argsIsMatchForm` invalid `form` string: requires a directive");
+            }
+            return 0;
+        }
+    }
+    if (p)
+    {
+        if (err)
+        {
+            unsigned n = strlen(form) - (optional? 1 : 0);
+            char *arguments = (n == 1) ? "argument" : "arguments";
+            *err = valCreateList(valCreateSymbolStr("too many arguments, requires at most"),
+                            valCreateList(valCreateInteger(n),
+                                     valCreateList(valCreateSymbolStr(arguments),
+                                              NULL)));
+        }
+        return 0;
+    }
+    return 1;
 }
 
 #endif /* LIZP_IMPLEMENTATION */
