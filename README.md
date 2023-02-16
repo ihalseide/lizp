@@ -1,6 +1,6 @@
 # Lizp
 
-This a Lisp programming language. See https://div0.com/lizp.
+This a Lisp programming language. See https://div0.com/p/lizp.
 
 ## Contributing
 
