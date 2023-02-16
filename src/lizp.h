@@ -108,8 +108,8 @@ bool valListLengthIsLessThan(const Val *l, unsigned n);
 // value serialization
 unsigned valReadOneFromBuffer(const char *start, unsigned length, Val **out);
 unsigned valReadAllFromBuffer(const char *start, unsigned length, Val **out);
-unsigned valWriteToBuffer(Val *p, char *out, unsigned length, bool readable);
-char *valWriteToNewString(Val *p, bool readable);
+unsigned valWriteToBuffer(const Val *p, char *out, unsigned length, bool readable);
+char *valWriteToNewString(const Val *p, bool readable);
 
 Val *valCreateTrue(void);
 Val *valCreateError(Val *rest);
@@ -760,7 +760,7 @@ unsigned valReadAllFromBuffer(const char *str, unsigned len, Val **out)
 // Does not do null termination.
 // If out is NULL, it just calculates the print length
 // Returns: number of chars written
-unsigned valWriteToBuffer(Val *v, char *out, unsigned length, bool readable)
+unsigned valWriteToBuffer(const Val *v, char *out, unsigned length, bool readable)
 {
     // String output count / index
     unsigned i = 0;
@@ -891,7 +891,7 @@ unsigned valWriteToBuffer(Val *v, char *out, unsigned length, bool readable)
 }
 
 // Print value to a new string
-char *valWriteToNewString(Val *v, bool readable)
+char *valWriteToNewString(const Val *v, bool readable)
 {
     unsigned len1 = valWriteToBuffer(v, NULL, 0, readable);
     if (len1 <= 0) { return NULL; }
@@ -1196,10 +1196,18 @@ static Val *ApplyLambda(Val *first, Val *args, Val *env)
 }
 
 
-static Val *ApplyNative(Val *f, Val *args) { return f->func(args); }
+// Functions should return copied values
+static Val *ApplyNative(Val *f, Val *args)
+{
+    return f->func(args);
+}
 
 
-static Val *ApplyMacro(Val *m, Val *args, Val *env) { return m->macro(args, env); }
+// Macros should return copied values
+static Val *ApplyMacro(Val *m, Val *args, Val *env)
+{
+    return m->macro(args, env);
+}
 
 
 // Apply functions
