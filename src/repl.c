@@ -24,8 +24,8 @@ LizpVal *print_func(LizpVal *args) {
     int readable = 0;
     LizpVal *p = args;
     while (p) {
-        valWriteToFile(stdout, p->first, readable);
-        p = p->rest;
+        valWriteToFile(stdout, p->list->first, readable);
+        p = p->list->rest;
     }
     return NULL;
 }
@@ -33,8 +33,8 @@ LizpVal *print_func(LizpVal *args) {
 
 // [defglobal var val]
 LizpVal *defglobal_func(LizpVal *args, LizpVal *env) {
-    LizpVal *name = valCopy(args->first);
-    LizpVal *val = valCopy(evaluate(args->rest->first, env));
+    LizpVal *name = valCopy(args->list->first);
+    LizpVal *val = valCopy(evaluate(args->list->rest->list->first, env));
     assert(EnvSet(env, name, val));
     return valCopy(val);
 }
@@ -101,11 +101,11 @@ void REPL(LizpVal *env) {
         }
         else if (0 == strcmp(buffer, "?defs\n")) {
             // shortcut to Print out environment variables
-            LizpVal *p = env->first;
+            LizpVal *p = env->list->first;
             while (p) {
-                valWriteToFile(stdout, p->first->first, 1);
+                valWriteToFile(stdout, p->list->first->list->first, 1);
                 printf(" ");
-                p = p->rest;
+                p = p->list->rest;
             }
         }
         else {
