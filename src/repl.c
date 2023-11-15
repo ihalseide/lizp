@@ -6,13 +6,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdbool.h>
 
-#define BUF_SZ (2*1024)
+#define BUF_SZ (4*1024)
 
 
 // Print value to a file
-void valWriteToFile(FILE *f, const Val *v, int readable)
-{
+void valWriteToFile(FILE *f, const LizpVal *v, int readable) {
     char *s = valWriteToNewString(v, readable);
     fprintf(f, "%s", s);
     free(s);
@@ -20,12 +20,10 @@ void valWriteToFile(FILE *f, const Val *v, int readable)
 
 
 // [print (v)...]
-Val *print_func(Val *args)
-{
+LizpVal *print_func(LizpVal *args) {
     int readable = 0;
-    Val *p = args;
-    while (p)
-    {
+    LizpVal *p = args;
+    while (p) {
         valWriteToFile(stdout, p->first, readable);
         p = p->rest;
     }
@@ -34,39 +32,37 @@ Val *print_func(Val *args)
 
 
 // [defglobal var val]
-Val *defglobal_func(Val *args, Val *env)
-{
-    Val *err;
-    if (!argsIsMatchForm("sv", args, &err)) { return valCreateError(err); }
-    Val *name = valCopy(args->first);
-    Val *val = valCopy(evaluate(args->rest->first, env));
+LizpVal *defglobal_func(LizpVal *args, LizpVal *env) {
+    LizpVal *name = valCopy(args->first);
+    LizpVal *val = valCopy(evaluate(args->rest->first, env));
     assert(EnvSet(env, name, val));
     return valCopy(val);
 }
 
 
 // do one read-eval-print cycle on the string
-void rep(const char *str, int len, Val *env)
-{
-    if (!str || !*str || len <= 0) { return; }
+void rep(const char *str, int len, LizpVal *env, bool writeFinalValue) {
+    if (!str || !*str || len <= 0) {
+        return; 
+    }
 
     // debug print
     //printf("\n<str len=%d>%.*s</str>", len, len, str);
 
-    Val *expr = NULL;
+    LizpVal *expr = NULL;
     int n = valReadAllFromBuffer(str, len, &expr);
-    if (valIsError(expr))
-    {
+    if (valIsError(expr)) {
         putchar('\n');
         valWriteToFile(stdout, expr, 1);
         return;
     }
-    if (!n) { return; }
+    if (!n) {
+        return; 
+    }
 
     // wrap multiple expressions in an implicit "do" form
-    if (n > 1)
-    {
-        Val *doo = valCreateSymbolStr("do");
+    if (n > 1) {
+        LizpVal *doo = valCreateSymbolStr("do");
         expr = valCreateList(doo, expr);
     }
 
@@ -77,11 +73,13 @@ void rep(const char *str, int len, Val *env)
     //valWriteToFile(stdout, expr, 1);
 
     // Eval
-    Val *val = evaluate(expr, env);
+    LizpVal *val = evaluate(expr, env);
 
     // Print
-    putchar('\n');
-    valWriteToFile(stdout, val, 1);
+    if (writeFinalValue) {
+        putchar('\n');
+        valWriteToFile(stdout, val, 1);
+    }
 
     valFreeRec(expr);
     valFree(val);
@@ -89,71 +87,129 @@ void rep(const char *str, int len, Val *env)
 
 
 // read, eval, print loop
-void REPL(Val *env)
-{
+void REPL(LizpVal *env) {
     char buffer[BUF_SZ];
-    while (1)
-    {
+    while (true) {
         // Read
         printf("\n>>> ");
-        if (!fgets(buffer, sizeof(buffer), stdin))
-        {
+        if (!fgets(buffer, sizeof(buffer), stdin)) {
             break;
         }
         int len = strlen(buffer);
-        if (len <= 0)
-        {
+        if (len <= 0) {
             break;
         }
-        rep(buffer, len, env);
+        else if (0 == strcmp(buffer, "?defs\n")) {
+            // shortcut to Print out environment variables
+            LizpVal *p = env->first;
+            while (p) {
+                valWriteToFile(stdout, p->first->first, 1);
+                printf(" ");
+                p = p->rest;
+            }
+        }
+        else {
+            rep(buffer, len, env, true);
+        }
     }
     printf("end of input\n");
 }
 
 
-void loadFile(const char *fname, Val *env)
-{
-    // read file contents wrapped in a "do" block
-    FILE *f = fopen(fname, "rb");
-    if (!f)
-    {
+void readFileName(const char *fileName, /*new*/ char **newContentOut, int *lengthOut) {
+    FILE *f = fopen(fileName, "rb");
+    if (!f) {
         perror("fopen");
         return;
     }
     fseek(f, 0, SEEK_END);
-    long file_sz = ftell(f);
+    long fileSize = ftell(f);
     rewind(f);
-    char prelude[] = "[do\n";
-    long buffer_sz = sizeof(prelude) - 1 + file_sz + 2;
-    char *buffer = malloc(buffer_sz);
-    if (!buffer)
-    {
-        fclose(f);
-        return;
-    }
-    fread(buffer + sizeof(prelude) - 1, file_sz, 1, f);
+    char *buffer = malloc(fileSize + 1);
+    fread(buffer, fileSize, 1, f);
     fclose(f);
-    memcpy(buffer, prelude, sizeof(prelude) - 1);
-    buffer[buffer_sz - 2] = ']';
-    buffer[buffer_sz - 1] = 0;
-    rep(buffer, buffer_sz, env);
-    free(buffer);
+    buffer[fileSize] = 0;
+    *newContentOut = buffer;
+    *lengthOut = fileSize;
 }
 
-int main (int argc, char **argv)
-{
+
+// Concatentate a list of zero-terminated char strings
+char *concatStrings(unsigned number, const char *strings[]) {
+    int totalLength = 0;
+    int *lengths = malloc(number * sizeof(*lengths));
+    {
+        // Get string lengths
+        unsigned i = 0;
+        while (i < number) {
+            const char *string = strings[i];
+            int length;
+            if (string == NULL) {
+                length = 0;
+            }
+            else {
+                length = strlen(string);
+            }
+            lengths[i] = length;
+            totalLength += length;
+
+            // Truncate string list if a NULL string is encountered
+            if (string == NULL) {
+                number = i;
+                break;
+            }
+            i++;
+        }
+    }
+    char *result = malloc(totalLength + 1);
+    {
+        // Copy strings into the result buffer
+        unsigned i = 0;
+        unsigned j = 0;
+        while (i < number) {
+            if (lengths[i]) {
+                memcpy(&result[j], strings[i], lengths[i]);
+                j += lengths[i];
+            }
+            i++;
+        }
+    }
+    result[totalLength] = 0;
+    return result;
+}
+
+
+void loadFile(const char *fileName, LizpVal *env) {
+    // read file contents wrapped in a "do" block
+    /*new*/ char *fileContents;
+    int fileContentsLength;
+    readFileName(fileName, &fileContents, &fileContentsLength);
+    const char *strings[4] = { "[do\n", fileContents, "]\n", NULL };
+    /*new*/ char *runMe = concatStrings(3, strings);
+    int runMeLength = strlen(runMe);
+    assert(runMeLength > fileContentsLength);
+    rep(runMe, runMeLength, env, false);
+    free(fileContents);
+    free(runMe);
+}
+
+int main (int argc, char **argv) {
     // init environment
-    Val *env = valCreateList(NULL, NULL);
+    LizpVal *env = valCreateList(NULL, NULL);
     lizpRegisterCore(env);
     EnvSetFunc(env, "print", print_func);
     EnvSetMacro(env, "defglobal", defglobal_func);
     EnvSetSym(env, "#f", valCreateFalse());
     EnvSetSym(env, "#t", valCreateTrue());
     // load each file given on the command line
-    for (int i = 1; i < argc; i++)
+    const char *programName = argv[0];
     {
-        printf("loading %s\n", argv[i]);
-        loadFile(argv[i], env);
+        int i = 1;
+        while (i < argc) {
+            printf("%s: loading \"%s\"\n", programName, argv[i]);
+            loadFile(argv[i], env);
+            i++;
+        }
     }
     // read-eval-print loop
     printf("\nLIZP read-eval-print loop:");
