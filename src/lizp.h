@@ -8,6 +8,7 @@ LIZP
 Notes:
 
     None
+    TODO: fix the EnvGet and EnvSet working with arrays. RIght now the symbols cannot be found!
 
 Usage
 
@@ -50,23 +51,16 @@ typedef struct LizpVal *LizpMacro(struct LizpVal *args, struct LizpVal *env);
 
 
 typedef enum LizpValKind {
-    VK_FREE = 0,
-    VK_SYMBOL,
-    VK_LIST,
-    VK_ARRAY,
-    VK_FUNC,   // built-in function
-    VK_MACRO,  // built-in macro
+    VK_FREE = 0,  // free, for memory management
+    VK_SYMBOL,    // string symbol
+    VK_LIST,      // list=array
+    VK_FUNC,      // built-in function
+    VK_MACRO,     // built-in macro
 } LizpValKind;
 
 
-typedef struct LizpList {
-    struct LizpVal *first;
-    struct LizpVal *rest;
-} LizpList;
-
-
 typedef struct LizpArray {
-    struct LizpVal *start;
+    struct LizpVal **start;
     unsigned length;
     unsigned capacity;
 } LizpArray;
@@ -75,64 +69,73 @@ typedef struct LizpArray {
 typedef struct LizpVal {
     LizpValKind kind;
     union {
-        char *symbol;
-        LizpList *list;
-        LizpArray *array;
-        LizpFunc *func;
-        LizpMacro *macro;
+        char *symbol;              // string symbol
+        LizpArray *list;           // list=array
+        LizpFunc *func;            // built-in function
+        LizpMacro *macro;          // built-in macro
+        struct LizpVal *nextFree;  // only for memory management
     };
 } LizpVal;
 
 
 // memory management
-/*new */ void *LizpAlloc(unsigned size);
+void *LizpAlloc(unsigned size);
 void LizpFree(void *pointer);
 LizpVal *valAlloc(void);
 LizpVal *valAllocKind(LizpValKind k);
-LizpVal *valCopy(const LizpVal *p);
 void valFree(LizpVal *p);
 void valFreeRec(LizpVal *p);
 
 // value creation
+LizpVal *valCopy(const LizpVal *p);
 LizpVal *valCreateInteger(long n);
-LizpVal *valCreateList(LizpVal *first, LizpVal *rest);
+LizpVal *valCreateList(LizpArray *list);
+LizpVal *valCreateListFirst(LizpVal *first);
 LizpVal *valCreateSymbol(char *string);
 LizpVal *valCreateSymbolCopy(const char *start, unsigned len);
 LizpVal *valCreateSymbolStr(const char *string);
-
-// value type checking
-LizpValKind valKind(const LizpVal *v);
-bool valIsInteger(const LizpVal *v);
-bool valIsList(const LizpVal *v);
-bool valIsSymbol(const LizpVal *v);
-bool valIsFunc(const LizpVal *v);
-bool valIsMacro(const LizpVal *v);
-
-// value utility functions
-bool valGetListItemAfterSymbol(LizpVal *list, const char *symbol, LizpVal **out);
-LizpVal *valGetListIndex(LizpVal *list, size_t symbol);
-bool valIsEqual(const LizpVal *x, const LizpVal *y);
-long valAsInteger(const LizpVal *v);
-unsigned valListLength(const LizpVal *l);
-bool valListLengthIsWithin(const LizpVal *l, unsigned min, unsigned max);
-bool valListLengthIsMoreThan(const LizpVal *l, unsigned n);
-bool valListLengthIsLessThan(const LizpVal *l, unsigned n);
-
-// value serialization
-unsigned valReadOneFromBuffer(const char *start, unsigned length, LizpVal **out);
-unsigned valReadAllFromBuffer(const char *start, unsigned length, LizpVal **out);
-unsigned valWriteToBuffer(const LizpVal *p, char *out, unsigned length, bool readable);
-/*new*/ char *valWriteToNewString(const LizpVal *p, bool readable);
-
 LizpVal *valCreateTrue(void);
 LizpVal *valCreateError(LizpVal *rest);
 LizpVal *valCreateErrorMessage(const char *msg);
 LizpVal *valCreateFalse(void);
 
+// value type checking
+bool valIsInteger(const LizpVal *v);
+bool valIsList(const LizpVal *v);
+bool valIsSymbol(const LizpVal *v);
+bool valIsFunc(const LizpVal *v);
+bool valIsMacro(const LizpVal *v);
 bool valIsError(const LizpVal *v);
 bool valIsLambda(const LizpVal *v);
 bool valIsTrue(const LizpVal *v);
 
+// value utility functions
+bool valGetListItemAfterSymbol(LizpVal *list, const char *symbol, LizpVal **out);
+bool valIsEqual(const LizpVal *x, const LizpVal *y);
+bool valListLengthIsLessThan(const LizpVal *l, unsigned n);
+bool valListLengthIsMoreThan(const LizpVal *l, unsigned n);
+bool valListLengthIsWithin(const LizpVal *l, unsigned min, unsigned max);
+long valAsInteger(const LizpVal *v);
+unsigned valListLength(const LizpVal *l);
+
+// LizpArray methods
+LizpArray *LizpArrayMake(unsigned initialCapacity);
+LizpArray *LizpArrayMakeFrom(LizpArray *list, unsigned firstIndex);
+LizpVal **LizpArrayGet(LizpArray *list, unsigned index);
+LizpVal *LizpArrayFirst(LizpArray *list);
+unsigned LizpArrayTrimCapacity(LizpArray *list);
+void LizpArrayAppend(LizpArray *list, LizpVal *val);
+void LizpArrayGrow(LizpArray *list);
+void LizpArrayPrepend(LizpArray *list, LizpVal *val);
+void LizpArrayRemove(LizpArray *list, unsigned index);
+
+// value serialization & deserialization
+unsigned valReadOneFromBuffer(const char *start, unsigned length, LizpVal **out);
+unsigned valReadAllFromBuffer(const char *start, unsigned length, LizpVal **out);
+unsigned valWriteToBuffer(const LizpVal *p, char *out, unsigned length, bool readable);
+char *valWriteToNewString(const LizpVal *p, bool readable);
+
+// evaluation
 LizpVal *evaluate(const LizpVal *ast, LizpVal *env);
 LizpVal *evaluateList(LizpVal *list, LizpVal *env);
 bool EnvGet(LizpVal *env, const LizpVal *key, LizpVal **out);
@@ -152,6 +155,7 @@ LizpVal *subtract_func(LizpVal *args);   // [- x (y)] subtraction
 LizpVal *divide_func(LizpVal *args);     // [/ x y] division
 LizpVal *mod_func(LizpVal *args);        // [% x y] modulo
 LizpVal *equal_func(LizpVal *args);      // [= x y (expr)...] check equality
+#if 0
 LizpVal *not_func(LizpVal *args);        // [not expr] boolean not
 LizpVal *symbol_q_func(LizpVal *args);   // [symbol? val] check if value is a symbol
 LizpVal *integer_q_func(LizpVal *args);  // [integer? val] check if value is a integer symbol
@@ -176,6 +180,7 @@ LizpVal *lambda_func(LizpVal *args, LizpVal *env);  // [lambda [args ...] body-e
 LizpVal *and_func(LizpVal *args, LizpVal *env);     // [and expr1 expr2 ...]
 LizpVal *or_func(LizpVal *args, LizpVal *env);      // [or expr1 expr2 ...]
 LizpVal *let_func(LizpVal *args, LizpVal *env);     // [let [sym1 expr1 sym2 expr2 ...] body-expr]
+#endif
 
 #endif /* _lizp_h_ */
 
@@ -188,13 +193,13 @@ LizpVal *let_func(LizpVal *args, LizpVal *env);     // [let [sym1 expr1 sym2 exp
 #include <stdio.h> // for snprintf
 
 
-static LizpVal *pool;
+// static LizpVal *pool; // TODO: use
 static const char const_lambda[] = "lambda";
 static const char const_true[] = "#t";
 static const char const_error[] = "error";
 
 
-/*new*/ void *LizpAlloc(unsigned size) {
+void *LizpAlloc(unsigned size) {
     return malloc(size);
 }
 
@@ -218,21 +223,8 @@ static /*new*/ char *stringCopy(const char *buf, unsigned len) {
 // Allocate a new value
 // Potential problem: memory use currently cannot shrink
 LizpVal *valAlloc() {
-    if (!pool) {
-        // Create another free list of things linked together
-        const int count = 10000;
-        pool = LizpAlloc(count * sizeof(*pool));
-        for (LizpVal *p = pool; p < pool + count - 1; p++) {
-            p->list = LizpAlloc(sizeof(*p->list));
-            p->list->rest = p + 1;
-        }
-        pool[count - 1].list = LizpAlloc(sizeof(LizpList));
-        pool[count - 1].list->rest = NULL;
-    }
-
-    LizpVal *p = pool;
-    pool = pool->list->rest;
-    return p;
+    // todo: use memory pool
+    return LizpAlloc(sizeof(LizpVal));
 }
 
 
@@ -248,41 +240,159 @@ LizpVal *valAllocKind(LizpValKind k) {
 static bool symbolIsStatic(const char *string);
 
 
+// Return a pointer to a LispVal* so that it can be modified
+LizpVal **LizpArrayGet(LizpArray *list, unsigned index) {
+    if (index >= list->length) {
+        return NULL;
+    }
+    return &list->start[index];
+}
+
+
+// Get the first element in a Lizp List
+LizpVal *LizpArrayFirst(LizpArray *list) {
+    LizpVal **loc = LizpArrayGet(list, 0);
+    if (!loc) {
+        return NULL;
+    }
+    return *loc;
+}
+
+
+// Create a new LizpArray
+LizpArray *LizpArrayMake(unsigned initialCapacity) {
+    assert(initialCapacity > 0); // temporory, for debugging now
+    LizpArray *p = LizpAlloc(sizeof(*p));
+    if (p) {
+        p->length = 0;
+        p->capacity = initialCapacity;
+        p->start = LizpAlloc(initialCapacity * sizeof(*p->start));
+    }
+    return p;
+}
+
+
+// Returns a new LizpArray with the copied contents of the given one, but withot the first #"firstIndex" items
+// NOTE: this does not do a deep copy (just the pointers for the list elements are copied)!
+LizpArray *LizpArrayMakeFrom(LizpArray *list, unsigned firstIndex) {
+    unsigned cap = list->length - firstIndex;
+    LizpArray *result = LizpArrayMake(cap);
+    for (unsigned i = firstIndex; i < list->length; i++) {
+        LizpArrayAppend(result, *LizpArrayGet(list, i));
+    }
+    return result;
+}
+
+
+// Grow the capacity for a LizpArray
+void LizpArrayGrow(LizpArray *list) {
+    unsigned newCapacity = list->capacity * 2;
+    unsigned nBytes = list->length * sizeof(*list->start);
+    LizpVal **newArray = LizpAlloc(newCapacity * sizeof(*newArray));
+    assert(newArray);
+    if (list->start && nBytes != 0) {
+        memcpy(newArray, list->start, nBytes);
+    }
+    LizpFree(list->start);
+    list->start = newArray;
+    list->capacity = newCapacity;
+    assert(list->capacity >= list->length);
+}
+
+
+// Shrink down the capacity to the actual used length (opposite of grow)
+unsigned LizpArrayTrimCapacity(LizpArray *list) {
+    assert(list->capacity >= list->length);
+    unsigned nBytes = list->length * sizeof(*list->start);
+    LizpVal *newArray = LizpAlloc(list->length * sizeof(*newArray));
+    memcpy(newArray, list->start, nBytes);
+    LizpFree(list->start);
+    list->start = newArray;
+    list->capacity = list->length;
+    assert(list->capacity >= list->length);
+}
+
+
+// Append a LizpVal to a LizpArray
+void LizpArrayAppend(LizpArray *list, LizpVal *val) {
+    if (list->length == list->capacity) {
+        LizpArrayGrow(list);
+    }
+    assert(list->capacity >= list->length);
+    list->length++;
+    list->start[list->length - 1] = val;
+    assert(list->capacity >= list->length);
+}
+
+
+void LizpArrayPrepend(LizpArray *list, LizpVal *val) {
+    assert(list->capacity >= list->length);
+    if (list->length == list->capacity) {
+        LizpArrayGrow(list);
+    }
+    unsigned nBytes = list->length * sizeof(*list->start);
+    list->length++;
+    LizpVal **loc0 = LizpArrayGet(list, 0);
+    LizpVal **loc1 = LizpArrayGet(list, 1);
+    memmove(loc1, loc0, nBytes);
+    *loc0 = val;
+    assert(list->capacity >= list->length);
+}
+
+
+void LizpArrayRemove(LizpArray *list, unsigned index) {
+    assert(index == 0); // other indices not implemented yet
+    assert(list->capacity >= list->length);
+    LizpVal **loc0 = LizpArrayGet(list, index);
+    LizpVal **loc1 = LizpArrayGet(list, index + 1);
+    unsigned nBytes = (list->length - 1) * sizeof(*list->start);
+    memmove(loc0, loc1, nBytes); // move [loc1...end] to [loc0...end-1]
+    list->length--;
+    assert(list->capacity >= list->length);
+}
+
+
+bool LizpArrayEqual(const LizpArray *a, const LizpArray *b) {
+    if (a == NULL || b == NULL) { return false; }
+    if (a->length != b->length) { return false; }
+    for (unsigned i = 0; i < a->length; i++) {
+        LizpVal **ae = LizpArrayGet(a, i);
+        LizpVal **be = LizpArrayGet(b, i);
+        assert(ae != NULL);
+        assert(be != NULL);
+        if (!valIsEqual(*ae, *be)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+
 // Free value
 void valFree(LizpVal *p) {
-    if (!p) { 
-	    return;
+    if (!p) { return; }
+    if (valIsSymbol(p) && p->symbol && !symbolIsStatic(p->symbol)) {
+        LizpFree(p->symbol);
     }
-    else {
-	    if (valIsSymbol(p) && p->symbol && !symbolIsStatic(p->symbol)) {
-		    LizpFree(p->symbol);
-	    }
-	    p->kind = VK_FREE;
-	    p->list->rest = pool;
-	    pool = p;
+    else if (valIsList(p) && p->list != NULL) {
+        LizpFree(p->list);
     }
+    // TODO: use memory pool
+    LizpFree(p);
 }
 
 
 // Free value recursively
 void valFreeRec(LizpVal *v) {
     if (!v) { return; }
-    if (valIsSymbol(v)) {
-        // Symbol
-        valFree(v);
-        return;
+    if (v->kind == VK_LIST) {
+        LizpArray *l = v->list;
+        unsigned length = l->length;
+        for (unsigned i = 0; i < length; i++) {
+            valFreeRec(*LizpArrayGet(l, i));
+        }
     }
-    if (!valIsList(v)) { return; }
-    // List
-    LizpVal *p = v;
-    LizpVal *n;
-    while (p && valIsList(p)) {
-        valFreeRec(p->list->first);
-        n = p->list->rest;
-        valFree(p);
-        p = n;
-    }
-    return;
+    valFree(v);
 }
 
 
@@ -303,69 +413,53 @@ static bool symbolsEqual(char *a, char *b) {
 }
 
 bool valIsEqual(const LizpVal *x, const LizpVal *y) {
-    if (x == NULL || y == NULL) {
-        return x == y; 
-    }
-    else if (valIsSymbol(x)) {
+    if (x == NULL || y == NULL) { return x == y; }
+    if (x->kind != y->kind) { return false; }
+    switch (x->kind) {
+    case VK_SYMBOL:
         return symbolsEqual(x->symbol, y->symbol);
-    }
-    else if (valIsList(x)) {
-        // List equality
-        const LizpVal *px = x, *py = y;
-        while (px && valIsList(px) && py && valIsList(py)) {
-            if (!valIsEqual(px->list->first, py->list->first)) { 
-                break; 
-            }
-            else {
-                px = px->list->rest;
-                py = py->list->rest;
-            }
-        }
-        return (px == NULL) && (py == NULL);
-    }
-    else if (valIsFunc(x) && valIsFunc(y)) {
+    case VK_LIST:
+        return LizpArrayEqual(x->list, y->list);
+    case VK_FUNC:
         return x->func == y->func; 
-    }
-    if (valIsMacro(x) && valIsMacro(y)) {
+    case VK_MACRO:
         return x->macro == y->macro; 
-    }
-    return 0;
-}
-
-
-// Get a value's kind a.k.a type
-LizpValKind valKind(const LizpVal *v) {
-    if (!v) {
-        return VK_LIST; 
-    }
-    else {
-        return v->kind;
+    default:
+        return false;
     }
 }
 
 
 // Check if a value is a list
-// NULL is also considered an empty list
-bool valIsList(const LizpVal *p) { return valKind(p) == VK_LIST; }
+// NULL is NOT considered an empty list
+bool valIsList(const LizpVal *v) {
+    return v && v->kind == VK_LIST;
+}
 
 
 // Check if a value is a symbol
-bool valIsSymbol(const LizpVal *p) { return valKind(p) == VK_SYMBOL; }
+bool valIsSymbol(const LizpVal *v) {
+    return v && v->kind == VK_SYMBOL;
+}
 
 
-bool valIsFunc(const LizpVal *v) { return v && valKind(v) == VK_FUNC; }
+bool valIsFunc(const LizpVal *v) {
+    return v && v->kind == VK_FUNC; 
+}
 
 
-bool valIsMacro(const LizpVal *v) { return v && valKind(v) == VK_MACRO; }
+bool valIsMacro(const LizpVal *v) {
+    return v && v->kind == VK_MACRO; 
+}
 
 
 //  check if a value is a integer symbol
 bool valIsInteger(const LizpVal *v) {
-    if (!valIsSymbol(v)) { return 0; }
+    if (!valIsSymbol(v)) { return false; }
     const unsigned base = 10;
     char *end;
     strtol(v->symbol, &end, base);
-    return end && !(*end);
+    return end && 0 == *end;
 }
 
 
@@ -410,21 +504,20 @@ LizpVal *valCreateInteger(long n) {
 // - first: sym or list (null included)
 // - rest: list (NULL included)
 // NOTE: rest must be NULL or a list LizpVal.
-LizpVal *valCreateList(LizpVal *first, LizpVal *rest) {
-    if (!valIsList(rest)) { return NULL; } // allow proper lists only
-    LizpList *l = LizpAlloc(sizeof(*l));
-    if (l) {
-        LizpVal *p = valAllocKind(VK_LIST);
-        p->list = l;
-        if (p) {
-            p->list->first = first;
-            p->list->rest = rest;
-        }
-        return p;
+LizpVal *valCreateList(LizpArray *list) {
+    LizpVal *p = valAllocKind(VK_LIST);
+    if (p) {
+        p->list = list;
     }
-    else {
-        return NULL;
-    }
+    return p;
+}
+
+
+// Create a new list value with a given first element
+LizpVal *valCreateListFirst(LizpVal *first) {
+    LizpArray *list = LizpArrayMake(1);
+    LizpArrayAppend(list, first);
+    return valCreateList(list);
 }
 
 
@@ -444,10 +537,7 @@ static LizpVal *valCreateMacro(LizpMacro *m) {
 
 // New copy, with no structure-sharing
 LizpVal *valCopy(const LizpVal *p) {
-    if (!p) { 
-        return NULL; 
-    }
-    else {
+    if (p) { 
         switch(p->kind) {
         case VK_SYMBOL:
             return valCreateSymbolStr(p->symbol); 
@@ -457,21 +547,19 @@ LizpVal *valCopy(const LizpVal *p) {
             return valCreateMacro(p->macro); 
         case VK_LIST:
             {
-                // Copy list
-                LizpVal *copy = valCreateList(valCopy(p->list->first), NULL);
-                LizpVal *pcopy = copy;
-                p = p->list->rest;
-                while (valIsList(p) && p) {
-                    pcopy->list->rest = valCreateList(valCopy(p->list->first), NULL);
-                    pcopy = pcopy->list->rest;
-                    p = p->list->rest;
+                // Copy list (deep copy)
+                const LizpArray *list = p->list;
+                LizpArray *copy = LizpArrayMake(list->length);
+                for (unsigned i = 0; i < list->length; i++) {
+                    const LizpVal **listSrc = LizpArrayGet(list, i);
+                    assert(listSrc);
+                    LizpArrayAppend(copy, valCopy(*listSrc));
                 }
-                return copy;
+                return valCreateList(copy);
             }
-        default:
-            return NULL;
         }
     }
+    return NULL; 
 }
 
 
@@ -596,8 +684,7 @@ unsigned valReadOneFromBuffer(const char *str, unsigned len, LizpVal **out) {
             i++;
             // empty list?
             i += SkipChars(str + i, len - i);
-            if (str[i] == ']')
-            {
+            if (str[i] == ']') {
                 i++;
                 *out = NULL;
                 return i;
@@ -605,27 +692,26 @@ unsigned valReadOneFromBuffer(const char *str, unsigned len, LizpVal **out) {
             // first item
             LizpVal *e;
             unsigned l = valReadOneFromBuffer(str + i, len - i, &e);
-            if (!l)
-            {
+            if (!l) {
                 *out = NULL;
                 return i;
             };
             i += l;
-            LizpVal *list = valCreateList(e, NULL);
-            LizpVal *p = list;
+            LizpVal *list = valCreateListFirst(e);
             // rest of items
             while (i < len && str[i] != ']') {
                 LizpVal *e;
                 unsigned l = valReadOneFromBuffer(str + i, len - i, &e);
                 i += l;
-                p->list->rest = valCreateList(e, NULL);
-                p = p->list->rest;
+                LizpArrayAppend(list->list, e);
                 if (l <= 0) {
+                    LizpArrayTrimCapacity(list->list);
                     *out = list;
                     return l;
                 }
                 i += SkipChars(str + i, len - i);
             }
+            LizpArrayTrimCapacity(list->list);
             *out = list;
             if (str[i] == ']') {
                 i++;
@@ -638,93 +724,84 @@ unsigned valReadOneFromBuffer(const char *str, unsigned len, LizpVal **out) {
         {
             // leading space
             i += SkipChars(str + i, len);
-            switch (str[i])
-            {
-                case '\0':
-                    // No symbol
-                    if (out) { *out = NULL; }
-                    return i;
-                case '"':
-                    // Quoted symbol
-                    {
-                        i++;
-                        const unsigned j = i;
-                        bool done = 0, good = 0;
-                        while (!done && i < len)
-                        {
-                            switch (str[i])
-                            {
-                                case '\n':
-                                case '\0':
-                                    done = 1;
-                                    break;
-                                case '\\':
-                                    i++;
-                                    if (str[i] == '"') { i++; }
-                                    break;
-                                case '"':
-                                    done = 1;
-                                    good = 1;
-                                    i++;
-                                    break;
-                                default:
-                                    i++;
-                                    break;
-                            }
+            switch (str[i]) {
+            case '\0':
+                // No symbol
+                if (out) { *out = NULL; }
+                return i;
+            case '"':
+                // Quoted symbol
+                {
+                    i++;
+                    const unsigned j = i;
+                    bool done = 0, good = 0;
+                    while (!done && i < len) {
+                        switch (str[i]) {
+                        case '\n':
+                        case '\0':
+                            done = 1;
+                            break;
+                        case '\\':
+                            i++;
+                            if (str[i] == '"') { i++; }
+                            break;
+                        case '"':
+                            done = 1;
+                            good = 1;
+                            i++;
+                            break;
+                        default:
+                            i++;
+                            break;
                         }
-                        if (good && out)
-                        {
-                            // Make escaped symbol string
-                            unsigned len = i - j - 1;
-                            if (len == 0)
-                            {
-                                *out = NULL;
-                                return i;
-                            }
-                            char *str1 = LizpAlloc(len + 1);
-                            memcpy(str1, str + j, len);
-                            str1[len] = 0;
-                            unsigned len2 = EscapeStr(str1, len);
-                            *out = valCreateSymbolCopy(str1, len2);
-                            LizpFree(str1);
+                    }
+                    if (good && out) {
+                        // Make escaped symbol string
+                        unsigned len = i - j - 1;
+                        if (len == 0) {
+                            *out = NULL;
                             return i;
                         }
-                        if (out) { *out = NULL; } // invalid
+                        char *str1 = LizpAlloc(len + 1);
+                        memcpy(str1, str + j, len);
+                        str1[len] = 0;
+                        unsigned len2 = EscapeStr(str1, len);
+                        *out = valCreateSymbolCopy(str1, len2);
+                        LizpFree(str1);
                         return i;
                     }
-                default:
-                    // Symbol (not in quotes)
-                    {
-                        const unsigned j = i;
-                        bool done = 0;
-                        while (!done && i < len)
-                        {
-                            switch (str[i])
-                            {
-                                case '\0':
-                                case '"':
-                                case '[':
-                                case ']':
-                                case '(':
-                                case ')':
-                                    done = 1;
-                                    break;
-                                default:
-                                    if (isspace(str[i]))
-                                    {
-                                        done = 1;
-                                        break;
-                                    }
-                                    i++;
-                                    break;
+                    if (out) { *out = NULL; } // invalid
+                    return i;
+                }
+            default:
+                // Symbol (not in quotes)
+                {
+                    const unsigned j = i;
+                    bool done = 0;
+                    while (!done && i < len) {
+                        switch (str[i]) {
+                        case '\0':
+                        case '"':
+                        case '[':
+                        case ']':
+                        case '(':
+                        case ')':
+                            done = 1;
+                            break;
+                        default:
+                            if (isspace(str[i])) {
+                                done = 1;
+                                break;
                             }
+                            i++;
+                            break;
                         }
-                        if (out)
-                        {
-                            *out = valCreateSymbolCopy(str + j, i - j);
-                        }
-                        return i;
                     }
+                    if (out) {
+                        *out = valCreateSymbolCopy(str + j, i - j);
+                    }
+                    return i;
+                }
             }
         }
     }
@@ -743,22 +820,19 @@ unsigned valReadAllFromBuffer(const char *str, unsigned len, LizpVal **out)
     if (!read_len) { return 0; }
     i += read_len;
     i += SkipChars(str + i, len - i);
-    if (valIsError(val) || i >= len || !str[i])
-    {
+    if (valIsError(val) || i >= len || !str[i]) {
         *out = val;
         return 1;
     }
 
     // Read additional items into a list...
-    unsigned n; // number of items read
-    val = valCreateList(val, NULL);
+    unsigned n = 1; // number of items read
+    val = valCreateListFirst(val);
     LizpVal *p = val;
-    for (n = 1; i < len && str[i]; n++, p = p->list->rest)
-    {
+    for (; i < len && str[i]; n++) {
         LizpVal *e = NULL;
         read_len = valReadOneFromBuffer(str + i, len - i, &e);
-        if (valIsError(e))
-        {
+        if (valIsError(e)) {
             valFreeRec(val);
             val = e;
             break;
@@ -766,7 +840,7 @@ unsigned valReadAllFromBuffer(const char *str, unsigned len, LizpVal **out)
         if (!read_len) { break; }
         i += read_len;
         i += SkipChars(str + i, len - i);
-        p->list->rest = valCreateList(e, NULL);
+        LizpArrayAppend(val->list, e);
     }
 
     *out = val;
@@ -781,109 +855,90 @@ unsigned valWriteToBuffer(const LizpVal *v, char *out, unsigned length, bool rea
 {
     // String output count / index
     unsigned i = 0;
-    if (valIsList(v))
-    {
+    if (valIsList(v)) {
         if (out && i < length) { out[i] = '['; }
         i++;
-        if (v)
-        {
+        if (v) {
             // first item
-            if (out)
-            {
-                i += valWriteToBuffer(v->list->first, out + i, length - i, readable);
+            if (out) {
+                i += valWriteToBuffer(LizpArrayFirst(v->list), out + i, length - i, readable);
             }
-            else
-            {
-                i += valWriteToBuffer(v->list->first, NULL, 0, readable);
+            else {
+                i += valWriteToBuffer(LizpArrayFirst(v->list), NULL, 0, readable);
             }
-            v = v->list->rest;
-            while (v)
-            {
+            for (unsigned j = 1; j < v->list->length; j++) {
                 // space
                 if (out && i < length) { out[i] = ' '; }
                 i++;
                 // item
-                if (out)
-                {
-                    i += valWriteToBuffer(v->list->first, out + i, length - i, readable);
+                LizpVal *vv = *LizpArrayGet(v->list, j);
+                if (out) {
+                    i += valWriteToBuffer(vv, out + i, length - i, readable);
                 }
-                else
-                {
-                    i += valWriteToBuffer(v->list->first, NULL, 0, readable);
+                else {
+                    i += valWriteToBuffer(vv, NULL, 0, readable);
                 }
-                v = v->list->rest;
             }
         }
         if (out && i < length) { out[i] = ']'; }
         i++;
         return i;
     }
-    else if (valIsSymbol(v))
-    {
+    else if (valIsSymbol(v)) {
         // Symbol
         char *s = v->symbol;
         bool quoted = readable && StrNeedsQuotes(s);
-        if (quoted)
-        {
+        if (quoted) {
             // Opening quote
-            if (out && i < length)
-            {
+            if (out && i < length) {
                 out[i] = '"';
             }
             i++;
         }
         // Contents
-        while (*s)
-        {
+        while (*s) {
             char c = *s;
-            if (quoted)
-            {
+            if (quoted) {
                 // escaping
                 bool esc = false;
-                switch (c)
-                {
-                    case '\r':
-                        c = 'r';
-                        esc = true;
-                        break;
-                    case '\n':
-                        c = 'n';
-                        esc = true;
-                        break;
-                    case '\t':
-                        c = 't';
-                        esc = true;
-                        break;
-                    case '"':
-                        c = '"';
-                        esc = true;
-                        break;
-                    case '\\':
-                        c = '\\';
-                        esc = true;
-                        break;
+                switch (c) {
+                case '\r':
+                    c = 'r';
+                    esc = true;
+                    break;
+                case '\n':
+                    c = 'n';
+                    esc = true;
+                    break;
+                case '\t':
+                    c = 't';
+                    esc = true;
+                    break;
+                case '"':
+                    c = '"';
+                    esc = true;
+                    break;
+                case '\\':
+                    c = '\\';
+                    esc = true;
+                    break;
                 }
-                if (esc)
-                {
-                    if (out && i < length)
-                    {
+                if (esc) {
+                    if (out && i < length) {
                         out[i] = '\\';
                     }
                     i++;
                 }
             }
-            if (out && i < length)
-            {
+            if (out && i < length) {
                 out[i] = c;
             }
             i++;
             s++;
         }
-        if (quoted)
-        {
+        if (quoted) {
             // Closing quote
-            if (out && i < length)
-            {
+            if (out && i < length) {
                 out[i] = '"';
             }
             i++;
@@ -902,7 +957,17 @@ unsigned valWriteToBuffer(const LizpVal *v, char *out, unsigned length, bool rea
         if (out) { memcpy(out, txt, len); }
         return len;
     }
+    else if (v == NULL) {
+        const char txt[] = "nil";
+        const size_t len = sizeof(txt) - 1;
+        if (out) { memcpy(out, txt, len); }
+        return len;
+    }
     else {
+        const char txt[] = "<invalid LIZP value>";
+        const size_t len = sizeof(txt) - 1;
+        if (out) { memcpy(out, txt, len); }
+        return len;
         return 0;
     }
 }
@@ -921,46 +986,26 @@ char *valWriteToNewString(const LizpVal *v, bool readable)
 }
 
 
-bool valListLengthIsMoreThan(const LizpVal *l, unsigned len)
-{
-    while (l && len)
-    {
-        len--;
-        l = l->list->rest;
-    }
-    return !len && l;
+bool valListLengthIsMoreThan(const LizpVal *l, unsigned len) {
+    return l->list->length > len;
 }
 
 
-bool valListLengthIsLessThan(const LizpVal *l, unsigned len)
-{
-    while (l && len)
-    {
-        len--;
-        l = l->list->rest;
-    }
-    return len && !l;
+bool valListLengthIsLessThan(const LizpVal *l, unsigned len) {
+    return l->list->length < len;
 }
 
 
 // inclusive range
-bool valListLengthIsWithin(const LizpVal *l, unsigned min, unsigned max)
-{
+bool valListLengthIsWithin(const LizpVal *l, unsigned min, unsigned max) {
     return !valListLengthIsLessThan(l, min) && !valListLengthIsMoreThan(l, max);
 }
 
 
 // Get the length of a list.
 // Returns 0 for a non-list value.
-unsigned valListLength(const LizpVal *l)
-{
-    unsigned len = 0;
-    while (l && valIsList(l))
-    {
-        len++;
-        l = l->list->rest;
-    }
-    return len;
+unsigned valListLength(const LizpVal *l) {
+    return l->list->length;
 }
 
 
@@ -971,80 +1016,40 @@ long valAsInteger(const LizpVal *v) {
 
 
 // Get value right after a symbol in a list
-bool valGetListItemAfterSymbol(LizpVal *list, const char *symname, LizpVal **out)
-{
-    if (!valIsList(list)) { return 0; }
-    while (list)
-    {
-        LizpVal *e = list->list->first;
-        if (valIsSymbol(e) && !strcmp(e->symbol, symname))
-        {
+bool valGetListItemAfterSymbol(LizpVal *list, const char *symname, LizpVal **out) {
+    *out = NULL;
+    if (!valIsList(list)) { return false; }
+    for (unsigned i = 0; i < list->list->length; i++) {
+        LizpVal *e = *LizpArrayGet(list->list, i);
+        if (valIsSymbol(e) && !strcmp(e->symbol, symname)) {
             // found a spot
-            list = list->list->rest;
-            if (!list) { return 0; }
-            *out = list->list->first;
-            return 1;
+            LizpVal **loc = LizpArrayGet(list->list, i + 1);
+            if (loc) {
+                *out = *loc;
+                return true;
+            }
         }
-        list = list->list->rest;
     }
-    return 0;
-}
-
-
-LizpVal *valGetListIndex(LizpVal *list, size_t index)
-{
-    while (list && index) { list = list->list->rest; }
-    return list;
+    return false;
 }
 
 
 // Get the Nth item in a list (0-based index)
-LizpVal *NthItem(LizpVal *list, unsigned n)
-{
+LizpVal *NthItem(LizpVal *list, unsigned n) {
     if (!valIsList(list)) { return NULL; }
-    for (; n > 0; n--)
-    {
-        list = list->list->rest;
+    LizpVal **loc = LizpArrayGet(list->list, n);
+    if (loc) {
+        return *loc;
     }
-    return list? list->list->first : list;
-}
-
-// Check if two values do not share structure
-bool IsSeparate(LizpVal *a, LizpVal *b)
-{
-    // empty list (NULL) is separate from anything
-    if (!a || !b) { return 1; }
-    // the same object is not separate from itself
-    if (a == b) { return 0; }
-    // symbols are separate if they have different symbol strings
-    if (valIsSymbol(a) && valIsSymbol(b)) { return a->symbol != b->symbol; }
-    // lists are separate if everything under them are separate
-    if (valIsList(a) && valIsList(b))
-    {
-        return IsSeparate(a->list->first, b->list->first)
-            && IsSeparate(a->list->first, b->list->rest)
-            && IsSeparate(a->list->rest, b->list->first)
-            && IsSeparate(a->list->rest, b->list->rest);
+    else {
+        return NULL;
     }
-    // symbol and list are separate if the list
-    // (and sublists) never contains the symbol
-    if (valIsSymbol(a))
-    {
-        // swap to make sure `a` is list and `b` is symbol
-        LizpVal *t = b;
-        b = a;
-        a = t;
-    }
-    return IsSeparate(a->list->first, b)
-        && IsSeparate(a->list->rest, b);
 }
 
 
 // Check whether a value is considered as true (right now, ONLY #t is true)
 bool valIsTrue(const LizpVal *v) { 
-    return v
-        && valIsSymbol(v) 
-        && v->symbol == const_true;
+    return valIsSymbol(v) && v->symbol == const_true;
 }
 
 
@@ -1055,10 +1060,20 @@ LizpVal *valCreateFalse(void) { return NULL; }
 
 
 // make a list of the form [error rest...]
-LizpVal *valCreateError(LizpVal *rest) {
+LizpVal *valCreateError(LizpVal *data) {
     LizpVal *e = valCreateSymbol(const_error); // direct reference to the constant `static` error symbol string
-    if (valIsList(rest)) { return valCreateList(e, rest); }
-    return valCreateList(e, valCreateList(rest, NULL));
+    LizpVal *result = valCreateListFirst(e);
+    if (valIsList(data)) { 
+        for (unsigned i = 0; i < data->list->length; i++) {
+            LizpVal *val = *LizpArrayGet(data->list, i);
+            LizpArrayAppend(result->list, val);
+        }
+        return result;
+    }
+    else {
+        LizpArrayAppend(result->list, data);
+        return result;
+    }
 }
 
 
@@ -1072,30 +1087,27 @@ LizpVal *valCreateErrorMessage(const char *msg) {
 // - 3rd element is the lambda body
 // - total length of this list: 3
 bool valIsLambda(const LizpVal *v) {
-    // Value must be a list
-    if (!v || !valIsList(v)) { return false; }
+    // Value must be a 3-element list
+    if (v == NULL || !valIsList(v) || v->list->length != 3) { return false; }
     // Check lambda pointer (1st element)
-    LizpVal *l = v->list->first;
+    LizpVal *l = *LizpArrayGet(v->list, 0);
     if (!l || !valIsSymbol(l) || l->symbol != const_lambda) { return false; }
     // Check parameters list (2nd element)
-    if (!v->list->rest) { return false; }
-    LizpVal *params = v->list->rest->list->first;
+    LizpVal *params = *LizpArrayGet(v->list, 1);
     if (!valIsList(params)) { return false; }
-    LizpVal *pp = params;
-    while (pp && valIsList(pp)) {
-        if (!valIsSymbol(pp->list->first)) { return false; }
-        pp = pp->list->rest;
+    for (unsigned i = 0; i < params->list->length; i++) {
+        // All parameters must be a symbol
+        LizpVal **loc = LizpArrayGet(params->list, i);
+        if (!valIsSymbol(*loc)) { return false; }
     }
-    // check that the length is not more than 3
-    if (!v->list->rest->list->rest) { return false; }
     return true;
 }
 
 
 // check if the value matches the form [error ...]
 bool valIsError(const LizpVal *v) {
-    if (!v || !valIsList(v)) { return 0; }
-    LizpVal *first = v->list->first;
+    if (!v || !valIsList(v) || v->list->length < 1) { return false; }
+    LizpVal *first = *LizpArrayGet(v->list, 0);
     return valIsSymbol(first) && first->symbol == const_error; // must be the exact const_error pointer
 }
 
@@ -1103,22 +1115,20 @@ bool valIsError(const LizpVal *v) {
 // Set value in environment
 // Key and LizpVal Arguments should by copies of Values
 // Returns non-zero upon success
-bool EnvSet(LizpVal *env, LizpVal *key, LizpVal *val)
-{
-    if (!env || !valIsList(env)) { return 0; }
-    LizpVal *pair = valCreateList(key, valCreateList(val, NULL));
-    if (!pair) { return 0; }
+bool EnvSet(LizpVal *env, LizpVal *key, LizpVal *val) {
+    if (!env || !valIsList(env)) { return false; }
+    LizpVal *pair = valCreateListFirst(key);
+    LizpArrayAppend(pair->list, val);
     // push key-value pair onto the front of the list
-    env->list->first = valCreateList(pair, env->list->first);
-    return 1;
+    LizpArrayPrepend(env->list, pair);
+    return true;
 }
 
 
 // Set value in environment
 // Arguments should by copies of Values
 // Returns non-zero upon success
-bool EnvSet_const(LizpVal *env, const LizpVal *key, const LizpVal *val)
-{
+bool EnvSet_const(LizpVal *env, const LizpVal *key, const LizpVal *val) {
     LizpVal *key_copy = valCopy(key);
     LizpVal *val_copy = valCopy(val);
     return EnvSet(env, key_copy, val_copy);
@@ -1128,86 +1138,86 @@ bool EnvSet_const(LizpVal *env, const LizpVal *key, const LizpVal *val)
 // Environment Get.
 // Get value in environment, does not return a copy
 // Return value: whether the symbol is present
-bool EnvGet(LizpVal *env, const LizpVal *key, LizpVal **out)
-{
-    if (!env) { return 0; }
-    LizpVal *scope = env;
-    while (scope && valIsList(scope))
-    {
-        LizpVal *p = scope->list->first;
-        while (p && valIsList(p))
-        {
-            LizpVal *pair = p->list->first;
-            if (pair && valIsList(pair) && valIsEqual(pair->list->first, key))
-            {
-                if (out) { *out = pair->list->rest->list->first; }
-                return 1;
+bool EnvGet(LizpVal *env, const LizpVal *key, LizpVal **out) {
+    assert(env);
+    assert(out != NULL);
+    if (!env || !valIsList(env)) { return 0; }
+    // Iterate the "scopes" list which is the Env
+    for (unsigned i = 0; i < env->list->length; i++) {
+        LizpVal *scope = *LizpArrayGet(env->list, i);
+        //assert(scope && valIsList(scope));
+        if (!scope) { continue; }
+        for (unsigned j = 0; j < scope->list->length; j++) {
+            LizpVal *pair = *LizpArrayGet(scope->list, j);
+            if (pair && valIsList(pair)) {
+                LizpArray *pairList = pair->list;
+                if ((pair->list->length > 2) && valIsEqual(*LizpArrayGet(pair->list, 0), key)) {
+                    *out = *LizpArrayGet(pair->list, 1);
+                    return true;
+                }
             }
-            p = p->list->rest;
         }
-        // outer scope
-        scope = scope->list->rest;
     }
-    return 0;
+    *out = NULL;
+    return false;
 }
 
 
 // push a new context onto the environment
-void EnvPush(LizpVal *env)
-{
-    if (!env) { return; }
-    env->list->rest = valCreateList(env->list->first, env->list->rest);
-    env->list->first = NULL;
+void EnvPush(LizpVal *env) {
+    assert(valIsList(env));
+    LizpArrayPrepend(env->list, valCreateList(1));
 }
 
 
 // pop off the latest context from the environment
-void EnvPop(LizpVal *env)
-{
-    if (!env) { return; }
-    valFreeRec(env->list->first);
-    LizpVal *pair = env->list->rest;
-    env->list->first = pair->list->first;
-    env->list->rest = pair->list->rest;
-    // Only free the one pair
-    valFree(pair);
+void EnvPop(LizpVal *env) {
+    assert(valIsList(env));
+    LizpVal *loc0 = LizpArrayFirst(env->list);
+    valFreeRec(loc0);
+    LizpArrayRemove(env->list, 0);
 }
 
 
 // Return values must not share structure with first, args, or env
 static LizpVal *ApplyLambda(LizpVal *first, LizpVal *args, LizpVal *env) {
-    LizpVal *params = first->list->rest->list->first;
-    LizpVal *body = first->list->rest->list->rest->list->first;
+    assert(valIsList(first));
+    assert(valIsList(args));
+    assert(valIsList(env));
     // push env
     EnvPush(env);
     // bind values
-    LizpVal *p_params = params;
-    LizpVal *p_args = args;
-    while (p_params && valIsList(p_params) && p_args && valIsList(p_args))
-    {
-        LizpVal *param = p_params->list->first;
-        // parameter beginning with '&' binds the rest of the arguments
-        if ('&' == param->symbol[0])
-        {
-            if (p_params->list->rest)
-            {
-                // error: not the last parameter
-                EnvPop(env);
-                return NULL;
+    LizpVal *params = NthItem(first, 1);
+    LizpVal *body = NthItem(first, 2);
+    unsigned remainingParams = params->list->length;
+    unsigned remainingArgs = args->list->length;
+    for (unsigned i = 0; i < params->list->length; i++) {
+        LizpVal *param = *LizpArrayGet(params, i);
+        LizpVal *arg = *LizpArrayGet(args, i);
+        assert(valIsSymbol(param));
+        if ('&' == param->symbol[0] && i + 1 == params->list->length) {
+            // the last parameter beginning with '&' binds the rest of the arguments
+            LizpVal *restArgs = valCreateListFirst(valCopy(arg));
+            for (unsigned j = i; j < args->list->length; j++) {
+                LizpVal **argLocJ = LizpArrayGet(args->list, j);
+                LizpArrayAppend(restArgs->list, valCopy(*argLocJ));
+                remainingArgs--;
             }
-            EnvSet(env, valCopy(param), valCopy(p_args));
-            // p_params and p_args will both be non-null
-            break;
+            EnvSet(env, valCopy(param), restArgs);
+            remainingParams--;
         }
-        // normal parameter
-        EnvSet(env, valCopy(param), valCopy(p_args->list->first));
-        p_params = p_params->list->rest;
-        p_args = p_args->list->rest;
+        else {
+            // normal parameter
+            EnvSet(env, valCopy(param), valCopy(arg));
+            remainingArgs--;
+            remainingParams--;
+        }
     }
     // check a parameters-arguments arity mismatch
-    if ((p_params == NULL) != (p_args == NULL)) {
+    if (remainingParams != 0 || remainingArgs != 0) {
         // error
         EnvPop(env);
+        assert(0 && "better lambda fail not implemented yet");
         return NULL;
     }
     LizpVal *result = evaluate(body, env);
@@ -1217,15 +1227,13 @@ static LizpVal *ApplyLambda(LizpVal *first, LizpVal *args, LizpVal *env) {
 
 
 // Functions should return copied values
-static LizpVal *ApplyNative(LizpVal *f, LizpVal *args)
-{
+static LizpVal *ApplyNative(LizpVal *f, LizpVal *args) {
     return f->func(args);
 }
 
 
 // Macros should return copied values
-static LizpVal *ApplyMacro(LizpVal *m, LizpVal *args, LizpVal *env)
-{
+static LizpVal *ApplyMacro(LizpVal *m, LizpVal *args, LizpVal *env) {
     return m->macro(args, env);
 }
 
@@ -1236,32 +1244,26 @@ static LizpVal *Apply(LizpVal *first, LizpVal *args, LizpVal *env) {
     if (valIsLambda(first)) { return ApplyLambda(first, args, env); }
     if (valIsFunc(first)) { return ApplyNative(first, args); }
     // invalid function
-    return valCreateError(valCreateList(valCopy(first),
-                              valCreateList(valCreateSymbolStr("is not a function"),
-                                       NULL)));
+    LizpArray *l = LizpArrayMake(2);
+    LizpArrayAppend(l, valCopy(first));
+    LizpArrayAppend(l, valCreateSymbolStr("is not a function"));
+    return valCreateError(valCreateList(l));
 }
 
 
 // Evaluate each item in a list
 LizpVal *evaluateList(LizpVal *list, LizpVal *env) {
     if (!list || !valIsList(list)) { return NULL; }
-    LizpVal *result = valCreateList(NULL, NULL);
-    LizpVal *p_result = result;
-    while (list && valIsList(list)) {
-        LizpVal *e = evaluate(list->list->first, env);
+    LizpArray *result = LizpArrayMake(list->list->length);
+    for (unsigned i = 0; i < list->list->length; i++) {
+        LizpVal *e = evaluate(*LizpArrayGet(list->list, i), env);
         if (valIsError(e)) {
-            valFreeRec(result);
+            LizpFree(result);
             return e;
         }
-
-        p_result->list->first = e;
-        if (list->list->rest) {
-            p_result->list->rest = valCreateList(NULL, NULL);
-        }
-        p_result = p_result->list->rest;
-        list = list->list->rest;
+        LizpArrayAppend(result, e);
     }
-    return result;
+    return valCreateList(result);
 }
 
 
@@ -1292,17 +1294,21 @@ LizpVal *evaluate(const LizpVal *ast, LizpVal *env) {
         }
         // symbol not found
         LizpVal *name = valCopy(ast);
-        return valCreateError(
-                valCreateList(name,
-                    valCreateList(valCreateSymbolStr("is undefined"),
-                        NULL)));
+        LizpArray *errList = LizpArrayMake(2);
+        LizpArrayAppend(errList, name);
+        LizpArrayAppend(errList, valCreateSymbolStr("is undefined"));
+        return valCreateError(valCreateList(errList));
     }
     // evaluate list application...
-    LizpVal *first = evaluate(ast->list->first, env);
+    LizpVal *first = evaluate(*LizpArrayGet(ast->list, 0), env);
     if (valIsError(first)) { return first; }
-    if (valIsMacro(first)) { return ApplyMacro(first, ast->list->rest, env); }
+    if (valIsMacro(first)) {
+        LizpVal *theRest = valCreateList(LizpArrayMakeFrom(ast->list, 1));
+        return ApplyMacro(first, theRest, env); 
+    }
     // evaluate rest of elements for normal function application
-    LizpVal *args = evaluateList(ast->list->rest, env);
+    LizpVal *theRest = valCreateList(LizpArrayMakeFrom(ast->list, 1));
+    LizpVal *args = evaluateList(theRest, env);
     if (valIsError(args)) {
         valFreeRec(first);
         return args;
@@ -1374,6 +1380,7 @@ bool EnvSetSym(LizpVal *env, const char *sym, LizpVal *v) {
 void lizpRegisterCore(LizpVal *env)
 {
     // macros
+    /*
     EnvSetMacro(env, "quote", quote_func);
     EnvSetMacro(env, "if", if_func);
     EnvSetMacro(env, "cond", cond_func);
@@ -1382,6 +1389,7 @@ void lizpRegisterCore(LizpVal *env)
     EnvSetMacro(env, "and", and_func);
     EnvSetMacro(env, "or", or_func);
     EnvSetMacro(env, "let", let_func);
+    */
     // functions
     EnvSetFunc(env, "+", plus_func);
     EnvSetFunc(env, "*", multiply_func);
@@ -1389,6 +1397,7 @@ void lizpRegisterCore(LizpVal *env)
     EnvSetFunc(env, "-", subtract_func);
     EnvSetFunc(env, "%", mod_func);
     EnvSetFunc(env, "=", equal_func);
+    /*
     EnvSetFunc(env, "<", strictly_increasing_func);
     EnvSetFunc(env, "empty?", empty_q_func);
     EnvSetFunc(env, "member?", member_q_func);
@@ -1404,38 +1413,29 @@ void lizpRegisterCore(LizpVal *env)
     EnvSetFunc(env, "length", length_func);
     EnvSetFunc(env, "not", not_func);
     EnvSetFunc(env, "nth", nth_func);
+    */
 }
 
-
-// [prepend val list]
-LizpVal *prepend_func(LizpVal *args) {
-    LizpVal *v = args->list->first;
-    LizpVal *list = args->list->rest->list->first;
-    return valCreateList(valCopy(v), valCopy(list));
-}
 
 // [+ (integer)...] sum
 LizpVal *plus_func(LizpVal *args) {
     long sum = 0;
-    LizpVal *p = args;
-    while (p) {
-        LizpVal *e = p->list->first;
+    for (unsigned i = 0; i < args->list->length; i++) {
+        LizpVal *e = *LizpArrayGet(args->list, i);
         if (!valIsInteger(e)) { return valCreateErrorMessage("not an integer number"); }
         sum += valAsInteger(e);
-        p = p->list->rest;
     }
     return valCreateInteger(sum);
 }
 
+
 // [* (integer)...] product
 LizpVal *multiply_func(LizpVal *args) {
     long product = 1;
-    LizpVal *p = args;
-    while (p)
-    {
-        LizpVal *e = p->list->first;
+    for (unsigned i = 0; i < args->list->length; i++) {
+        LizpVal *e = NthItem(args, i);
+        if (!valIsInteger(e)) { return valCreateErrorMessage("not an integer number"); }
         product *= valAsInteger(e);
-        p = p->list->rest;
     }
     return valCreateInteger(product);
 }
@@ -1443,12 +1443,16 @@ LizpVal *multiply_func(LizpVal *args) {
 // [- x:int (y:int)] subtraction
 LizpVal *subtract_func(LizpVal *args) {
     if (!valListLengthIsWithin(args, 1, 2)) { return valCreateErrorMessage("takes 1 or 2 arguments"); }
-    LizpVal *vx = args->list->first;
+    LizpVal *vx = NthItem(args, 0);
     long x = atol(vx->symbol);
-    if (!args->list->rest) { return valCreateInteger(-x); }
-    LizpVal *vy = args->list->rest->list->first;
-    long y = atol(vy->symbol);
-    return valCreateInteger(x - y);
+    if (args->list->length == 1) {
+        return valCreateInteger(-x); 
+    }
+    else {
+        LizpVal *vy = NthItem(args, 1);
+        long y = atol(vy->symbol);
+        return valCreateInteger(x - y);
+    }
 }
 
 // [/ x:int y:int] division
@@ -1475,59 +1479,61 @@ LizpVal *mod_func(LizpVal *args) {
 
 // [= x y (expr)...] check equality
 LizpVal *equal_func(LizpVal *args) {
-    LizpVal *f = args->list->first;
-    LizpVal *p = args->list->rest;
-    while (p && valIsList(p)) {
-        if (!valIsEqual(f, p->list->first)) {
+    LizpVal *first = NthItem(args, 0);
+    for (unsigned i = 0; i < args->list->length; i++) {
+        if (!valIsEqual(first, *LizpArrayGet(args->list, i))) {
             return valCreateFalse(); 
         }
-        p = p->list->rest;
     }
     return valCreateTrue();
 }
 
 // [not expr] boolean not
 LizpVal *not_func(LizpVal *args) {
-    return valIsTrue(args->list->first)? valCreateFalse() : valCreateTrue();
+    LizpVal *arg1 = NthItem(args, 0);
+    return valIsTrue(arg1)? valCreateFalse() : valCreateTrue();
 }
 
 // [symbol? val] check if value is a symbol
 LizpVal *symbol_q_func(LizpVal *args) {
-    LizpVal *v = args->list->first;
-    return !valIsSymbol(v)? valCreateTrue() : valCreateFalse();
+    LizpVal *arg1 = NthItem(args, 0);
+    return (!valIsSymbol(arg1))? valCreateTrue() : valCreateFalse();
 }
 
 // [integer? val] check if value is a integer symbol
 LizpVal *integer_q_func(LizpVal *args) {
-    return valIsInteger(args->list->first)? valCreateTrue() : valCreateFalse();
+    LizpVal *arg1 = NthItem(args, 0);
+    return valIsInteger(arg1)? valCreateTrue() : valCreateFalse();
 }
 
 // [list? val] check if value is a list
 LizpVal *list_q_func(LizpVal *args) {
-    return valIsList(args->list->first)? valCreateTrue() : valCreateFalse();
+    LizpVal *arg1 = NthItem(args, 0);
+    return valIsList(arg1)? valCreateTrue() : valCreateFalse();
 }
 
 // [empty? val] check if value is a the empty list
 LizpVal *empty_q_func(LizpVal *args) {
-    return (!args->list->first)? valCreateTrue() : valCreateFalse();
+    LizpVal *arg1 = NthItem(args, 0);
+    return (valIsList(arg1) && arg1->list->length == 0)? valCreateTrue() : valCreateFalse();
 }
 
 // [nth index list] get the nth item in a list
 LizpVal *nth_func(LizpVal *args) {
-    LizpVal *i = args->list->first;
-    LizpVal *list = args->list->rest->list->first;
+    LizpVal *i = NthItem(args, 0);
+    LizpVal *list = NthItem(args, 1);
     long n = atol(i->symbol);
     if (n < 0) {
         // index negative
         return valCreateErrorMessage("index cannot be negative");
     }
-    LizpVal *p = list;
-    while (n > 0 && p && valIsList(p)) {
-        p = p->list->rest;
-        n--;
+    LizpVal **loc = LizpArrayGet(list->list, n);
+    if (loc == NULL) {
+        return valCreateErrorMessage("index too big");
     }
-    if (p) { return valCopy(p->list->first); }
-    return valCreateErrorMessage("index too big");
+    else {
+        return valCopy(*loc);
+    }
 }
 
 // [list (val)...] create list from arguments (variadic)
@@ -1537,83 +1543,40 @@ LizpVal *list_func(LizpVal *args) {
 
 // [length list]
 LizpVal *length_func(LizpVal *args) {
-    return valCreateInteger(valListLength(args->list->first));
+    LizpVal *arg1 = NthItem(args, 0);
+    return valCreateInteger(valListLength(arg1));
 }
 
 // [lambda? v]
 LizpVal *lambda_q_func(LizpVal *args) {
-    LizpVal *v = args->list->first;
-    return valIsLambda(v)? valCreateTrue() : valCreateFalse();
+    LizpVal *arg1 = NthItem(args, 0);
+    return valIsLambda(arg1)? valCreateTrue() : valCreateFalse();
 }
 
 
 // [function? v]
 LizpVal *function_q_func(LizpVal *args) {
-    LizpVal *v = args->list->first;
-    return (valIsFunc(v) || valIsLambda(v))? valCreateTrue() : valCreateFalse();
+    LizpVal *arg1 = NthItem(args, 0);
+    return (valIsFunc(arg1) || valIsLambda(arg1))? valCreateTrue() : valCreateFalse();
 }
 
 
 // [native? v]
 LizpVal *native_q_func(LizpVal *args) {
-    LizpVal *v = args->list->first;
-    return (valIsFunc(v))? valCreateTrue() : valCreateFalse();
-}
-
-
-// [< x y (expr)...] check number order
-LizpVal *strictly_increasing_func(LizpVal *args) {
-    LizpVal *f = args->list->first;
-    long x = atol(f->symbol);
-    LizpVal *p = args->list->rest;
-    while (p && valIsList(p))
-    {
-        LizpVal *e = p->list->first;
-        long y = atol(e->symbol);
-        if (!(x < y)) { return valCreateFalse(); }
-        x = y;
-        p = p->list->rest;
-    }
-    return valCreateTrue();
+    LizpVal *arg1 = NthItem(args, 0);
+    return (valIsFunc(arg1))? valCreateTrue() : valCreateFalse();
 }
 
 
 // [chars sym] -> list
 LizpVal *chars_func(LizpVal *args) {
-    LizpVal *sym = args->list->first;
-    char *s = sym->symbol;
-    LizpVal *result = valCreateList(valCreateSymbolCopy(s, 1), NULL);
-    s++;
-    LizpVal *p = result;
-    while (*s) {
-        p->list->rest = valCreateList(valCreateSymbolCopy(s, 1), NULL);
-        p = p->list->rest;
-        s++;
+    LizpVal *arg1 = NthItem(args, 0);
+    const char *s = arg1->symbol;
+    LizpArray *result = LizpArrayMake(strlen(s));
+    for (unsigned i = 0; i < result->length; i++) {
+        LizpArrayAppend(result, valCreateSymbolCopy(&s[i], 1));
     }
-    return result;
-}
-
-
-// [symbol list] -> symbol
-/*new*/ LizpVal *symbol_func(LizpVal *args) {
-    LizpVal *list = args->list->first;
-    int len = valListLength(list);
-    /*new*/ char *sym = LizpAlloc(1 + len);
-    int i = 0;
-    LizpVal *p = list;
-    while (p && valIsList(list)) {
-        LizpVal *e = p->list->first;
-        if (!valIsSymbol(e)) {
-            LizpFree(sym);
-            return valCreateErrorMessage("list must only contain symbols");
-        }
-        sym[i] = e->symbol[0];
-        i++;
-        p = p->list->rest;
-    }
-    sym[len] = 0;
-    // Next line is OK because sym was newly created 
-    return valCreateSymbol(sym);
+    return valCreateList(result);
 }
 
 
@@ -1623,181 +1586,16 @@ LizpVal *member_q_func(LizpVal *args) {
         return valCreateErrorMessage("`member?` function requires 2 parameters"); 
     }
     else {
-        LizpVal *item = args->list->first;
-        LizpVal *list = args->list->rest->list->first;
-        while (list && valIsList(list)) {
-            if (valIsEqual(list->list->first, item)) {
+        LizpVal *item = NthItem(args, 0);
+        LizpVal *list = NthItem(args, 1);
+        for (unsigned i = 0; i < list->list->length; i++) {
+            LizpVal *e = *LizpArrayGet(list->list, i);
+            if (valIsEqual(e, item)) {
                 return valCreateTrue(); 
             }
-            list = list->list->rest;
         }
         return valCreateFalse();
     }
-}
-
-
-// (macro) [let [key val...] expr]
-// create bindings
-LizpVal *let_func(LizpVal *args, LizpVal *env) {
-    LizpVal *bindings = args->list->first;
-    if (!valIsList(bindings)) {
-        return valCreateErrorMessage("`let` macro's first argument should be a list");
-    }
-    LizpVal *body = args->list->rest->list->first;
-    // create and check bindings
-    EnvPush(env);
-    LizpVal *p_binds = bindings;
-    while (p_binds && valIsList(p_binds)) {
-        LizpVal *sym = p_binds->list->first;
-        if (!valIsSymbol(sym) || !p_binds->list->rest || !valIsList(p_binds->list->rest)) {
-            // invalid symbol or uneven amount of args
-            EnvPop(env);
-            return valCreateErrorMessage(
-                    "`let` bindings list must consist of alternating symbols and expressions");
-        }
-        p_binds = p_binds->list->rest;
-        LizpVal *expr = p_binds->list->first;
-        LizpVal *val = evaluate(expr, env);
-        if (valIsError(val)) {
-            // eval error
-            EnvPop(env);
-            return val;
-        }
-        EnvSet(env, valCopy(sym), val);
-        p_binds = p_binds->list->rest;
-    }
-    // eval body
-    LizpVal *result = evaluate(body, env);
-    // destroy bindings
-    EnvPop(env);
-    return result;
-}
-
-// (macro) [if condition consequent (alternative)]
-LizpVal *if_func(LizpVal *args, LizpVal *env) {
-    if (!valListLengthIsWithin(args, 2, 3)) { return valCreateErrorMessage("`if` macro requires 2 or 3 expressions"); }
-    LizpVal *f = evaluate(args->list->first, env);
-    if (valIsError(f)) { return f; } // eval error
-    int t = valIsTrue(f);
-    valFreeRec(f);
-    if (t) {
-        LizpVal *consequent = args->list->rest->list->first;
-        return evaluate(consequent, env);
-    }
-    LizpVal *alt_list = args->list->rest->list->rest;
-    if (!alt_list) { return NULL; } // no alternative
-    LizpVal *alternative = alt_list->list->first;
-    return evaluate(alternative, env);
-}
-
-// (macro) [quote expr]
-LizpVal *quote_func(LizpVal *args, LizpVal *env) {
-    (void)env;
-    if (!valListLengthIsWithin(args, 1, 1)) {
-        return valCreateErrorMessage("`quote` macro requires 1 expression");
-    }
-    else {
-        LizpVal *arg1 = args->list->first;
-        return valCopy(arg1);
-    }
-}
-
-// (macro) [do (expr)...]
-LizpVal *do_func(LizpVal *args, LizpVal *env) {
-    LizpVal *p = args;
-    LizpVal *e = NULL;
-    while (p && valIsList(p))
-    {
-        e = evaluate(p->list->first, env);
-        if (valIsError(e)) { return e; } // eval error
-        p = p->list->rest;
-        if (p) { valFreeRec(e); } // free all values except the last one
-    }
-    return e;
-}
-
-// (macro) [and expr1 (expr)...]
-LizpVal *and_func(LizpVal *args, LizpVal *env) {
-    LizpVal *p = args;
-    while (p && valIsList(p)) {
-        LizpVal *e = evaluate(p->list->first, env);
-        if (valIsError(e)) { return e; }
-        if (!valIsTrue(e)) { return e; } // item is false
-        p = p->list->rest;
-        if (!p) { return e; } // last item is true
-        valFreeRec(e);
-    }
-    // malformed list
-    return NULL;
-}
-
-// (macro) [or expr1 (expr)...]
-LizpVal *or_func(LizpVal *args, LizpVal *env) {
-    LizpVal *p = args;
-    while (p && valIsList(p)) {
-        LizpVal *e = evaluate(p->list->first, env);
-        if (valIsError(e)) { return e; }
-        if (valIsTrue(e)) { return e; } // item is true
-        p = p->list->rest;
-        if (!p) { return e; } // last item is false
-        valFreeRec(e);
-    }
-    // malformed list
-    return NULL;
-}
-
-// (macro) [cond (condition result)...] (no nested lists)
-LizpVal *cond_func(LizpVal *args, LizpVal *env) {
-    unsigned n = valListLength(args);
-    if ((n < 2) || (n % 2)) {
-        return valCreateErrorMessage("`cond` requires an even amount of"
-                                " alternating condition expressions and"
-                                " consequence expressions");
-    }
-    LizpVal *p = args;
-    while (p && valIsList(p)) {
-        LizpVal *e = evaluate(p->list->first, env);
-        if (valIsError(e)) { return e; }
-        if (valIsTrue(e)) {
-            valFreeRec(e);
-            return evaluate(p->list->rest->list->first, env);
-        }
-        valFreeRec(e);
-        p = p->list->rest;
-        p = p->list->rest;
-    }
-    // no condition matched
-    return NULL;
-}
-
-// (macro) [lambda [(symbol)...] (expr)]
-LizpVal *lambda_func(LizpVal *args, LizpVal *env) {
-    (void)env;
-    if (!valListLengthIsWithin(args, 2, 2)) { return valCreateErrorMessage("lambda macro requires 2 arguments"); }
-    LizpVal *params = args->list->first;
-    if (!valIsList(params)) {
-        return valCreateErrorMessage("`lambda` first argument must be a list of"
-                                " symbols");
-    }
-    LizpVal *p = params;
-    // params must be symbols
-    while (p && valIsList(p)) {
-        LizpVal *e = p->list->first;
-        if (!valIsSymbol(e)) {
-            return valCreateError(
-                valCreateList(valCopy(e),
-                         valCreateList(valCreateSymbolStr("is not a symbol"),
-                                  NULL)));
-        }
-        p = p->list->rest;
-    }
-    // make lambda... with an explicit NULL body if a body is not provided
-    LizpVal *body = args->list->rest;
-    if (body) { body = body->list->first; }
-    return valCreateList(valCreateSymbolStr(const_lambda),
-                    valCreateList(valCopy(params),
-                             valCreateList(valCopy(body),
-                                      NULL)));
 }
 
 

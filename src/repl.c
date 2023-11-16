@@ -22,21 +22,10 @@ void valWriteToFile(FILE *f, const LizpVal *v, int readable) {
 // [print (v)...]
 LizpVal *print_func(LizpVal *args) {
     int readable = 0;
-    LizpVal *p = args;
-    while (p) {
-        valWriteToFile(stdout, p->list->first, readable);
-        p = p->list->rest;
+    for (unsigned i = 0; i < args->list->length; i++) {
+        valWriteToFile(stdout, *LizpArrayGet(args->list, i), readable);
     }
     return NULL;
-}
-
-
-// [defglobal var val]
-LizpVal *defglobal_func(LizpVal *args, LizpVal *env) {
-    LizpVal *name = valCopy(args->list->first);
-    LizpVal *val = valCopy(evaluate(args->list->rest->list->first, env));
-    assert(EnvSet(env, name, val));
-    return valCopy(val);
 }
 
 
@@ -62,8 +51,10 @@ void rep(const char *str, int len, LizpVal *env, bool writeFinalValue) {
 
     // wrap multiple expressions in an implicit "do" form
     if (n > 1) {
-        LizpVal *doo = valCreateSymbolStr("do");
-        expr = valCreateList(doo, expr);
+        LizpArray *newList = LizpArrayMake(2);
+        LizpArrayAppend(newList, valCreateSymbolStr("do"));
+        LizpArrayAppend(newList, expr);
+        expr = valCreateList(newList);
     }
 
     // expr is always a value that should be free'd at this point
@@ -98,15 +89,6 @@ void REPL(LizpVal *env) {
         int len = strlen(buffer);
         if (len <= 0) {
             break;
-        }
-        else if (0 == strcmp(buffer, "?defs\n")) {
-            // shortcut to Print out environment variables
-            LizpVal *p = env->list->first;
-            while (p) {
-                valWriteToFile(stdout, p->list->first->list->first, 1);
-                printf(" ");
-                p = p->list->rest;
-            }
         }
         else {
             rep(buffer, len, env, true);
@@ -195,12 +177,13 @@ void loadFile(const char *fileName, LizpVal *env) {
 
 int main (int argc, char **argv) {
     // init environment
-    LizpVal *env = valCreateList(NULL, NULL);
+    LizpVal *env = valCreateList(LizpArrayMake(10));
+    LizpArrayAppend(env->list, NULL);
     lizpRegisterCore(env);
     EnvSetFunc(env, "print", print_func);
-    EnvSetMacro(env, "defglobal", defglobal_func);
     EnvSetSym(env, "#f", valCreateFalse());
     EnvSetSym(env, "#t", valCreateTrue());
+    print_func(env);
     // load each file given on the command line
     const char *programName = argv[0];
     {
