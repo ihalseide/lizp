@@ -1,4 +1,4 @@
-CFLAGS = -g -Wall -Wextra -std=c99 -Wfatal-errors
+CFLAGS = -ggdb -Wall -Wextra -std=c99 -Wfatal-errors
 #CFLAGS = -std=c99 -Wfatal-errors
 
 repl: src/lizp.h src/repl.c
